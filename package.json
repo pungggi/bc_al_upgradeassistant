@@ -1,0 +1,12 @@
+{
+  "name": "bc_al_upgradeassistant",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "A. Pungitore <alessandro.pungitore@gmail.com>",
+  "license": "UNLICENSED"
+}
