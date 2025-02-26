@@ -18,10 +18,6 @@
       {
         "command": "bc_al_upgradeassistant.showMessage",
         "title": "Show Selected Text"
-      },
-      {
-        "command": "bc_al_upgradeassistant.startDragDrop",
-        "title": "Start Drag & Drop Example"
       }
     ],
     "menus": {
