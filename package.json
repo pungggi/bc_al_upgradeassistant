@@ -1,12 +1,42 @@
 {
-  "name": "bc_al_upgradeassistant",
-  "version": "0.1.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
+  "name": "bc-al-upgradeassistant",
+  "displayName": "BC/AL Upgrade Assistant",
+  "description": "Assists you in transforming old C/AL and more",
+  "version": "0.0.3",
+  "publisher": "ngSoftware",
   "author": "A. Pungitore <alessandro.pungitore@gmail.com>",
-  "license": "UNLICENSED"
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "bc_al_upgradeassistant.showMessage",
+        "title": "Show Selected Text"
+      },
+      {
+        "command": "bc_al_upgradeassistant.startDragDrop",
+        "title": "Start Drag & Drop Example"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "bc_al_upgradeassistant.showMessage",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0"
+  }
 }

@@ -1,0 +1,24 @@
+# Node.js dependencies
+node_modules/
+
+# VS Code extension output directory
+out/
+
+# Local development files
+.vscode/
+*.vsix
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# Environment-specific files
+.env
+.env.local
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# TypeScript (if you decide to use it in the future)
+*.tsbuildinfo
