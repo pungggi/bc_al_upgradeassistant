@@ -1,19 +1,49 @@
 const vscode = require("vscode");
 
-// This method is called when your extension is activated
-function activate(context) {
-  // Command registration
-  let disposable = vscode.commands.registerCommand(
-    "bc_al_upgradeassistant.showMessage",
-    function () {
-      vscode.window.showInformationMessage("Hello ppl!");
+const {
+  isEventSubscriberTemplate,
+  modifyEventSubscriberTemplate,
+} = require("./ALCode");
+const { registerCommands } = require("./registerCommands");
+
+// Function to monitor and modify the clipboard
+async function monitorClipboard() {
+  let lastClipboardContent = "";
+
+  setInterval(async () => {
+    try {
+      const clipboardContent = await vscode.env.clipboard.readText();
+
+      // Check if the clipboard has changed and matches any AL code pattern
+      if (
+        clipboardContent !== lastClipboardContent &&
+        isEventSubscriberTemplate(clipboardContent)
+      ) {
+        vscode.window.showInformationMessage(clipboardContent);
+        lastClipboardContent = clipboardContent;
+
+        // Modify AL code
+        const modifiedContent = modifyEventSubscriberTemplate(clipboardContent);
+        vscode.window.showInformationMessage(modifiedContent);
+
+        // Write back to clipboard
+        await vscode.env.clipboard.writeText(modifiedContent);
+      }
+    } catch (error) {
+      vscode.window.showErrorMessage(
+        `Error monitoring clipboard: ${error.message}`
+      );
     }
-  );
+  }, 1300);
+}
+
+function activate(context) {
+  let disposable = registerCommands();
+  monitorClipboard();
 
   context.subscriptions.push(disposable);
 }
 
-// This method is called when your extension is deactivated
 function deactivate() {}
 
 module.exports = {
