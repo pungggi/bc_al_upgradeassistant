@@ -1,9 +1,16 @@
 const vscode = require("vscode");
+const {
+  initializeCache,
+  updateCacheForFile,
+  removeFromCache,
+} = require("./cache/objectCache");
+const { provideExtensionHover } = require("./providers/hoverProvider");
 
 const {
   isEventSubscriberTemplate,
   modifyEventSubscriberTemplate,
 } = require("./ALCode");
+
 const { registerCommands } = require("./registerCommands");
 
 // Function to monitor and modify the clipboard
@@ -39,9 +46,39 @@ async function monitorClipboard() {
 
 function activate(context) {
   let disposable = registerCommands();
+
+  // Initialize the cache when the extension activates
+  initializeCache();
+
+  // monitore clipboard for eventsubscribtions
   monitorClipboard();
 
-  context.subscriptions.push(disposable);
+  // Register the hover provider
+  const hoverProviderDisposable = vscode.languages.registerHoverProvider("al", {
+    provideHover(document, position, token) {
+      return provideExtensionHover(document, position, token);
+    },
+  });
+
+  // Register a command to refresh the extension info cache
+  const refreshCacheDisposable = vscode.commands.registerCommand(
+    "bc_al_upgradeassistant.refreshExtensionInfoCache",
+    () => {
+      initializeCache(true);
+    }
+  );
+
+  // Register file system watcher to update the cache when AL files change
+  const fileWatcher = vscode.workspace.createFileSystemWatcher("**/*.al");
+  fileWatcher.onDidChange((uri) => updateCacheForFile(uri));
+  fileWatcher.onDidCreate((uri) => updateCacheForFile(uri));
+  fileWatcher.onDidDelete((uri) => removeFromCache(uri));
+
+  context.subscriptions.push(
+    refreshCacheDisposable,
+    fileWatcher,
+    hoverProviderDisposable
+  );
 }
 
 function deactivate() {}

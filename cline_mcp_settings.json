@@ -1,0 +1,24 @@
+{
+    "mcpServers": {
+        "github.com/pashpashpash/google-calendar-mcp": {
+            "command": "node",
+            "args": [
+                "google-calendar-mcp/build/index.js"
+            ],
+            "disabled": false,
+            "autoApprove": []
+        },
+        "github.com/modelcontextprotocol/servers/tree/main/src/git": {
+            "command": "python",
+            "args": [
+                "-m",
+                "mcp_server_git",
+                "--repository",
+                "c:/Users/Alessandro/source/bc_al_upgradeassistant"
+            ],
+            "env": {},
+            "disabled": false,
+            "autoApprove": []
+        }
+    }
+}
