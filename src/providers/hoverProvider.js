@@ -5,6 +5,7 @@ const {
   isInitialized,
   isInitializing,
   initializeCache,
+  getCacheStats,
 } = require("../cache/objectCache");
 
 /**
@@ -18,9 +19,16 @@ async function provideExtensionHover(document, position, token) {
   // Ensure the cache is initialized
   if (!isInitialized()) {
     if (!isInitializing()) {
-      await initializeCache();
+      console.log("Cache not initialized. Initializing now...");
+      try {
+        await initializeCache();
+        console.log("Cache initialization complete");
+      } catch (error) {
+        console.error("Cache initialization failed:", error);
+        return new vscode.Hover("Error initializing cache: " + error.message);
+      }
     } else {
-      // If cache is currently initializing, show a message
+      console.log("Cache is currently initializing");
       return new vscode.Hover(
         "Cache is being initialized. Please try again in a moment."
       );
@@ -86,15 +94,24 @@ async function provideExtensionHover(document, position, token) {
   // Determine the base object type from the extension type
   const baseObjectType = extensionType.toLowerCase().replace("extension", "");
 
+  console.log(
+    `Looking for ${baseObjectType} with name "${extendedObjectName}"`
+  );
+
   // Get information about the extended object from the cache
   const baseObjectInfo = getObjectInfo(baseObjectType, extendedObjectName);
   if (!baseObjectInfo) {
+    const stats = getCacheStats();
+    console.log(`Cache miss for "${extendedObjectName}". Cache stats:`, stats);
+
     return new vscode.Hover(
-      `No cached information available for "${extendedObjectName}" (${baseObjectType})`,
+      `No cached information available for "${extendedObjectName}" (${baseObjectType}).\n` +
+        `Try running the "Refresh AL Object Cache" command.`,
       hoverRange
     );
   }
 
+  console.log(`Found cache info for "${extendedObjectName}"`);
   return createHoverContent(baseObjectInfo, extensionName, hoverRange);
 }
 
@@ -163,4 +180,5 @@ function createHoverContent(baseObjectInfo, currentExtensionName, hoverRange) {
 
 module.exports = {
   provideExtensionHover,
+  refreshHoverCache: initializeCache,
 };

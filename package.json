@@ -29,6 +29,11 @@
       {
         "command": "bc_al_upgradeassistant.refreshExtensionInfoCache",
         "title": "AL: Refresh Extension Info Cache"
+      },
+      {
+        "command": "bc-al-upgradeassistant.refreshObjectCache",
+        "title": "Refresh AL Object Cache",
+        "category": "AL Upgrade Assistant"
       }
     ],
     "menus": {

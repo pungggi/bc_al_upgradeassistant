@@ -3,6 +3,8 @@ const {
   initializeCache,
   updateCacheForFile,
   removeFromCache,
+  getCacheStats,
+  isInitialized,
 } = require("./cache/objectCache");
 const { provideExtensionHover } = require("./providers/hoverProvider");
 
@@ -79,6 +81,50 @@ function activate(context) {
     fileWatcher,
     hoverProviderDisposable
   );
+
+  // Register command to refresh the object cache
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "bc-al-upgradeassistant.refreshObjectCache",
+      async () => {
+        vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "Refreshing AL object cache...",
+            cancellable: false,
+          },
+          async (progress) => {
+            try {
+              progress.report({ message: "Scanning workspace files..." });
+              await initializeCache();
+              const stats = getCacheStats();
+
+              let message = "AL object cache refreshed successfully.";
+              if (stats.objectTypes) {
+                const counts = Object.entries(stats.objectTypes)
+                  .map(([type, count]) => `${type}: ${count}`)
+                  .join(", ");
+                message += ` Found ${counts}`;
+              }
+
+              vscode.window.showInformationMessage(message);
+            } catch (error) {
+              vscode.window.showErrorMessage(
+                `Failed to refresh AL object cache: ${error.message}`
+              );
+            }
+          }
+        );
+      }
+    )
+  );
+
+  // Initialize cache on extension activation
+  if (!isInitialized()) {
+    initializeCache().catch((error) => {
+      console.error("Failed to initialize cache on activation:", error);
+    });
+  }
 }
 
 function deactivate() {}

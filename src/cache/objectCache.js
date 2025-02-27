@@ -10,6 +10,10 @@ const { parseExtensionObject } = require("../parsers/alExtensionParser");
 let objectInfoCache = new Map(); // Key: type:name (lowercase)
 let cacheInitialized = false;
 let cacheInitializing = false;
+let objectCache = {};
+let initialized = false;
+let initializing = false;
+let lastInitTime = null;
 
 /**
  * Initialize the cache with all extension objects in the workspace
@@ -205,6 +209,216 @@ function getObjectInfo(type, name) {
   return objectInfoCache.get(getCacheKey(type, name));
 }
 
+/**
+ * Check if the cache is initialized
+ * @returns {boolean} True if the cache is initialized
+ */
+function isInitialized() {
+  return initialized;
+}
+
+/**
+ * Check if the cache is currently initializing
+ * @returns {boolean} True if the cache is initializing
+ */
+function isInitializing() {
+  return initializing;
+}
+
+/**
+ * Get statistics about the cache
+ * @returns {Object} Cache statistics
+ */
+function getCacheStats() {
+  const stats = {
+    initialized,
+    initializing,
+    lastInitTime,
+    objectTypes: {},
+  };
+
+  if (objectCache) {
+    Object.keys(objectCache).forEach((type) => {
+      stats.objectTypes[type] = Object.keys(objectCache[type]).length;
+    });
+  }
+
+  return stats;
+}
+
+/**
+ * Initialize the object cache with AL objects from the workspace
+ * @returns {Promise<void>}
+ */
+async function initializeCache() {
+  if (initializing) {
+    console.log("Cache initialization already in progress");
+    return;
+  }
+
+  try {
+    initializing = true;
+    objectCache = {}; // Reset the cache
+
+    const vscode = require("vscode");
+    console.log("Starting cache initialization");
+
+    // Find all AL files in the workspace
+    const files = await vscode.workspace.findFiles(
+      "**/*.al",
+      "**/node_modules/**"
+    );
+    console.log(`Found ${files.length} AL files in workspace`);
+
+    for (const file of files) {
+      try {
+        const document = await vscode.workspace.openTextDocument(file);
+        const content = document.getText();
+
+        // Process tables
+        processObjects(content, file.fsPath, "table");
+
+        // Process pages
+        processObjects(content, file.fsPath, "page");
+
+        // Process reports
+        processObjects(content, file.fsPath, "report");
+
+        // Process codeunits
+        processObjects(content, file.fsPath, "codeunit");
+
+        // Process other object types as needed
+      } catch (err) {
+        console.error(`Error processing file ${file.fsPath}:`, err);
+      }
+    }
+
+    initialized = true;
+    lastInitTime = new Date();
+    console.log("Cache initialization complete:", getCacheStats());
+  } catch (err) {
+    console.error("Failed to initialize cache:", err);
+    throw err;
+  } finally {
+    initializing = false;
+  }
+}
+
+/**
+ * Process AL objects in a file
+ * @param {string} content File content
+ * @param {string} filePath File path
+ * @param {string} objectType Object type to process
+ */
+function processObjects(content, filePath, objectType) {
+  const regex = new RegExp(`${objectType}\\s+(\\d+)\\s+"([^"]+)"`, "gi");
+  let match;
+
+  while ((match = regex.exec(content)) !== null) {
+    const id = match[1];
+    const name = match[2];
+
+    // Create object type cache if it doesn't exist
+    if (!objectCache[objectType]) {
+      objectCache[objectType] = {};
+    }
+
+    const uri = { scheme: "file", path: filePath };
+
+    // Basic object info
+    const objectInfo = {
+      type: objectType,
+      id: id,
+      name: name,
+      fileName: filePath,
+      uri: uri,
+    };
+
+    // Add type-specific processing
+    if (objectType === "table") {
+      // Extract fields for tables
+      objectInfo.fields = extractTableFields(content);
+    } else if (objectType === "page") {
+      // Count controls for pages
+      objectInfo.controlsCount = countPageControls(content);
+    }
+
+    // Track extensions to this object
+    objectInfo.extensions = findExtensions(objectType, name);
+
+    // Store in cache by name (case insensitive)
+    objectCache[objectType][name.toLowerCase()] = objectInfo;
+  }
+}
+
+/**
+ * Extract fields from table definition
+ * @param {string} content Table AL content
+ * @returns {Array} Array of field objects
+ */
+function extractTableFields(content) {
+  const fields = [];
+  const fieldRegex = /field\((\d+);\s*"([^"]+)"/gi;
+  let match;
+
+  while ((match = fieldRegex.exec(content)) !== null) {
+    fields.push({
+      id: match[1],
+      name: match[2],
+    });
+  }
+
+  return fields;
+}
+
+/**
+ * Count controls in a page
+ * @param {string} content Page AL content
+ * @returns {number} Number of controls
+ */
+function countPageControls(content) {
+  // Simple count of control patterns
+  const matches = content.match(/field\s*\(/gi);
+  return matches ? matches.length : 0;
+}
+
+/**
+ * Find extensions for a specific object
+ * @param {string} objectType Base object type
+ * @param {string} objectName Base object name
+ * @returns {Array} Array of extension objects
+ */
+function findExtensions(objectType, objectName) {
+  // This would normally scan for extensions, but for now return empty array
+  return [];
+}
+
+/**
+ * Get the cache key for an object
+ * @param {string} objectType Object type
+ * @param {string} objectName Object name
+ * @returns {string} Cache key
+ */
+function getCacheKey(objectType, objectName) {
+  return objectName.toLowerCase();
+}
+
+/**
+ * Get information about an object from the cache
+ * @param {string} objectType Object type
+ * @param {string} objectName Object name
+ * @returns {Object|null} Object information or null if not found
+ */
+function getObjectInfo(objectType, objectName) {
+  if (!objectCache[objectType]) {
+    console.log(`No objects of type ${objectType} in cache`);
+    return null;
+  }
+
+  const key = getCacheKey(objectType, objectName);
+  return objectCache[objectType][key] || null;
+}
+
 module.exports = {
   initializeCache,
   refreshCache,
@@ -212,6 +426,7 @@ module.exports = {
   removeFromCache,
   getCacheKey,
   getObjectInfo,
-  isInitialized: () => cacheInitialized,
-  isInitializing: () => cacheInitializing,
+  isInitialized,
+  isInitializing,
+  getCacheStats,
 };
