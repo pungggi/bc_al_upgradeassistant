@@ -1,8 +1,8 @@
 {
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
-  "description": "Assists you in transforming old C/AL and more",
-  "version": "0.0.5",
+  "description": "Provides hover information about extended objects in AL code, including symbols from .alpackages",
+  "version": "1.1.0",
   "publisher": "ngSoftware",
   "icon": "media/icon.png",
   "repository": {

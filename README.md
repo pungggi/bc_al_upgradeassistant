@@ -8,6 +8,7 @@ This extension provides hover information about extended objects in AL code.
 - View fields, controls, and other extensions
 - Jump to the base object with a single click
 - Automatically caches object information for fast lookups
+- Supports symbols from `.alpackages` folder for complete reference information
 
 ## Usage
 
