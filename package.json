@@ -26,6 +26,11 @@
 				"command": "bc-al-upgradeassistant.refreshSymbolCache",
 				"title": "Refresh Symbol Cache",
 				"category": "BC AL Upgrade Assistant"
+			},
+			{
+				"command": "bc-al-upgradeassistant.extractCalObjects",
+				"title": "Extract C/AL Objects from File",
+				"category": "BC AL Upgrade Assistant"
 			}
 		],
 		"menus": {

@@ -49,21 +49,8 @@ async function monitorClipboard() {
 async function activate(context) {
   console.log("BC/AL Upgrade Assistant is now active!");
 
-  // Register the show message command
-  let disposable = vscode.commands.registerCommand(
-    "bc_al_upgradeassistant.showMessage",
-    function () {
-      const editor = vscode.window.activeTextEditor;
-      if (editor) {
-        const document = editor.document;
-        const selection = editor.selection;
-        const text = document.getText(selection);
-        vscode.window.showInformationMessage("Selected text: " + text);
-      }
-    }
-  );
-
-  context.subscriptions.push(disposable);
+  // Register all commands
+  registerCommands(context);
 
   // Register the extended object hover provider
   const extendedObjectHoverProvider = new ExtendedObjectHoverProvider();
@@ -79,16 +66,7 @@ async function activate(context) {
   // Find app files to process
   await initializeSymbolCache(context);
 
-  // Register command to refresh symbol cache
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "bc-al-upgradeassistant.refreshSymbolCache",
-      async () => {
-        await initializeSymbolCache(context, true);
-        vscode.window.showInformationMessage("Symbol cache refreshed");
-      }
-    )
-  );
+  // NOTE: Command registration is now handled in registerCommands.js
 }
 
 async function initializeSymbolCache(context, forceRefresh = false) {
@@ -179,4 +157,5 @@ function deactivate() {}
 module.exports = {
   activate,
   deactivate,
+  initializeSymbolCache, // Export for use in registerCommands.js
 };
