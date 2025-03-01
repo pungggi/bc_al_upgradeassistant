@@ -19,10 +19,6 @@
 	"contributes": {
 		"commands": [
 			{
-				"command": "bc_al_upgradeassistant.showMessage",
-				"title": "Show Selected Text"
-			},
-			{
 				"command": "bc-al-upgradeassistant.refreshSymbolCache",
 				"title": "Refresh Symbol Cache",
 				"category": "BC AL Upgrade Assistant"
@@ -34,12 +30,7 @@
 			}
 		],
 		"menus": {
-			"editor/context": [
-				{
-					"command": "bc_al_upgradeassistant.showMessage",
-					"group": "navigation"
-				}
-			]
+			"editor/context": []
 		},
 		"capabilities": {
 			"hoverProvider": true

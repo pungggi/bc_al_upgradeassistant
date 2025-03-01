@@ -43,7 +43,7 @@ async function monitorClipboard() {
         `Error monitoring clipboard: ${error.message}`
       );
     }
-  }, 1800);
+  }, 3300);
 }
 
 async function activate(context) {

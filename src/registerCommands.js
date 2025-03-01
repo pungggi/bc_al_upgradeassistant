@@ -3,23 +3,11 @@ const { extractObjectsWithDialog } = require("./utils/objectExtractor");
 const path = require("path");
 
 function registerCommands(context) {
-  // Register existing commands
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "bc_al_upgradeassistant.showMessage",
-      function () {
-        const editor = vscode.window.activeTextEditor;
-        if (editor) {
-          const document = editor.document;
-          const selection = editor.selection;
-          const text = document.getText(selection);
-          vscode.window.showInformationMessage("Selected text: " + text);
-        }
-      }
-    )
-  );
+  registerRefreshSymbolCacheCommand(context);
+  registerSplitCalObjectsCommand(context);
+}
 
-  // Register command to refresh symbol cache
+function registerRefreshSymbolCacheCommand(context) {
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "bc-al-upgradeassistant.refreshSymbolCache",
@@ -38,16 +26,15 @@ function registerCommands(context) {
       }
     )
   );
+}
 
-  // Register command to extract C/AL objects from text file
+function registerSplitCalObjectsCommand(context) {
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "bc-al-upgradeassistant.splitCalObjects",
       extractObjectsWithDialog
     )
   );
-
-  // Add more commands as needed
 }
 
 module.exports = {
