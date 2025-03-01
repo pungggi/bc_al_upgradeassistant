@@ -1,54 +1,55 @@
 {
-  "name": "bc-al-upgradeassistant",
-  "displayName": "BC/AL Upgrade Assistant",
-  "description": "Provides hover information about extended objects in AL code, including symbols from .alpackages",
-  "version": "1.1.0",
-  "publisher": "ngSoftware",
-  "icon": "media/icon.png",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/pungggi/bc_al_upgradeassistant"
-  },
-  "author": "A. Pungitore <alessandro.pungitore@gmail.com>",
-  "engines": {
-    "vscode": "^1.80.0"
-  },
-  "categories": [
-    "Other"
-  ],
-  "activationEvents": [
-    "onLanguage:al"
-  ],
-  "main": "./src/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "bc_al_upgradeassistant.showMessage",
-        "title": "Show Selected Text"
-      },
-      {
-        "command": "bc_al_upgradeassistant.refreshExtensionInfoCache",
-        "title": "AL: Refresh Extension Info Cache"
-      },
-      {
-        "command": "bc-al-upgradeassistant.refreshObjectCache",
-        "title": "Refresh AL Object Cache",
-        "category": "AL Upgrade Assistant"
-      }
-    ],
-    "menus": {
-      "editor/context": [
-        {
-          "command": "bc_al_upgradeassistant.showMessage",
-          "group": "navigation"
-        }
-      ]
-    }
-  },
-  "scripts": {
-    "package": "vsce package"
-  },
-  "devDependencies": {
-    "@types/vscode": "^1.80.0"
-  }
+	"name": "bc-al-upgradeassistant",
+	"displayName": "BC/AL Upgrade Assistant",
+	"description": "Assists you in transforming old C/AL and more",
+	"version": "0.0.7",
+	"icon": "media/icon.png",
+	"publisher": "ngSoftware",
+	"author": "A. Pungitore <alessandro.pungitore@gmail.com>",
+	"engines": {
+		"vscode": "^1.80.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"activationEvents": [
+		"onStartupFinished"
+	],
+	"main": "./src/extension.js",
+	"contributes": {
+		"commands": [
+			{
+				"command": "bc_al_upgradeassistant.showMessage",
+				"title": "Show Selected Text"
+			},
+			{
+				"command": "bc-al-upgradeassistant.refreshSymbolCache",
+				"title": "Refresh Symbol Cache",
+				"category": "BC AL Upgrade Assistant"
+			}
+		],
+		"menus": {
+			"editor/context": [
+				{
+					"command": "bc_al_upgradeassistant.showMessage",
+					"group": "navigation"
+				}
+			]
+		},
+		"capabilities": {
+			"hoverProvider": true
+		}
+	},
+	"scripts": {
+		"package": "vsce package --allow-missing-repository",
+		"publish": "vsce publish --allow-missing-repository"
+	},
+	"devDependencies": {
+		"@types/vscode": "^1.80.0"
+	},
+	"dependencies": {
+		"glob": "^7.2.3",
+		"node-7z": "^3.0.0",
+		"7zip-bin": "^5.2.0"
+	}
 }
