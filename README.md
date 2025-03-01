@@ -24,4 +24,4 @@ This extension provides hover information about extended objects in AL code and 
 ## Commands
 
 - **AL: Refresh Extension Info Cache** - Manually refresh the extension info cache
-- **AL: Split CAL Objects** (`bc-al-upgradeassistant.extractCalObjects`) - Split CAL objects from older BC versions for reference or migration
+- **AL: Split CAL Objects** (`bc-al-upgradeassistant.splitCalObjects`) - Split CAL objects from older BC versions for reference or migration

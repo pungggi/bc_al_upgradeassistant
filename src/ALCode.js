@@ -13,7 +13,7 @@ function modifyEventSubscriberTemplate(content) {
 
   const eventSubscriberText = eventSubscriberMatch[0];
 
-  // Step 2: Extract the object type, object name, and event name
+  // Step 2: Split the object type, object name, and event name
   const objectTypeMatch = eventSubscriberText.match(/ObjectType::(\w+)/);
   const objectNameRegex =
     /(?:Database|Codeunit|Page|Report|Table)::["']([^"']+)["']/;

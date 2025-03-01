@@ -65,8 +65,6 @@ async function activate(context) {
 
   // Find app files to process
   await initializeSymbolCache(context);
-
-  // NOTE: Command registration is now handled in registerCommands.js
 }
 
 async function initializeSymbolCache(context, forceRefresh = false) {

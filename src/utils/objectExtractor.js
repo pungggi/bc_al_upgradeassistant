@@ -238,11 +238,11 @@ async function extractObjectsWithDialog() {
 
     const shouldOrganize = organizeByType.label === "Yes";
 
-    // Show progress while extracting
+    // Show progress while splitting
     const extraction = await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: "Extracting C/AL objects",
+        title: "Splitting C/AL objects",
         cancellable: false,
       },
       async (progress) => {
@@ -254,7 +254,7 @@ async function extractObjectsWithDialog() {
         );
         progress.report({
           increment: 100,
-          message: `Extracted ${result.files.length} objects`,
+          message: `Splitted ${result.files.length} objects`,
         });
         return result;
       }
@@ -265,7 +265,7 @@ async function extractObjectsWithDialog() {
 
     vscode.window
       .showInformationMessage(
-        `Successfully extracted ${extraction.files.length} objects to "${outputFolderPath}"`,
+        `Successfully splitted ${extraction.files.length} objects to "${outputFolderPath}"`,
         {
           modal: false,
           detail: "Click 'View Summary' to see extraction details",
@@ -280,9 +280,7 @@ async function extractObjectsWithDialog() {
         }
       });
   } catch (error) {
-    vscode.window.showErrorMessage(
-      `Error extracting objects: ${error.message}`
-    );
+    vscode.window.showErrorMessage(`Error splitting objects: ${error.message}`);
   }
 }
 

@@ -28,8 +28,8 @@
 				"category": "BC AL Upgrade Assistant"
 			},
 			{
-				"command": "bc-al-upgradeassistant.extractCalObjects",
-				"title": "Extract C/AL Objects from File",
+				"command": "bc-al-upgradeassistant.splitCalObjects",
+				"title": "Split C/AL Objects from File",
 				"category": "BC AL Upgrade Assistant"
 			}
 		],

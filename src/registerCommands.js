@@ -1,11 +1,7 @@
 const vscode = require("vscode");
 const { extractObjectsWithDialog } = require("./utils/objectExtractor");
-const { initializeSymbolCache } = require("./extension");
+const path = require("path");
 
-/**
- * Register all commands used by the extension
- * @param {vscode.ExtensionContext} context
- */
 function registerCommands(context) {
   // Register existing commands
   context.subscriptions.push(
@@ -28,8 +24,17 @@ function registerCommands(context) {
     vscode.commands.registerCommand(
       "bc-al-upgradeassistant.refreshSymbolCache",
       async () => {
-        await initializeSymbolCache(context, true);
-        vscode.window.showInformationMessage("Symbol cache refreshed");
+        try {
+          const extension = require("./extension");
+          await extension.initializeSymbolCache(context, true);
+          vscode.window.showInformationMessage(
+            "Symbol cache refreshed successfully."
+          );
+        } catch (error) {
+          vscode.window.showErrorMessage(
+            `Error refreshing symbol cache: ${error.message}`
+          );
+        }
       }
     )
   );
@@ -37,7 +42,7 @@ function registerCommands(context) {
   // Register command to extract C/AL objects from text file
   context.subscriptions.push(
     vscode.commands.registerCommand(
-      "bc-al-upgradeassistant.extractCalObjects",
+      "bc-al-upgradeassistant.splitCalObjects",
       extractObjectsWithDialog
     )
   );
