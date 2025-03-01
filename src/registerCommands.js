@@ -14,9 +14,12 @@ function registerRefreshSymbolCacheCommand(context) {
       async () => {
         try {
           const extension = require("./extension");
-          await extension.initializeSymbolCache(context, true);
+          const processed = await extension.initializeSymbolCache(
+            context,
+            true
+          );
           vscode.window.showInformationMessage(
-            "Symbol cache refreshed successfully."
+            `Symbol cache refreshed successfully. Processed ${processed} app files for symbols.`
           );
         } catch (error) {
           vscode.window.showErrorMessage(

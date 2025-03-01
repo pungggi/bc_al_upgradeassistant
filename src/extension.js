@@ -136,17 +136,23 @@ async function initializeSymbolCache(context, forceRefresh = false) {
     await symbolCache.initialize(appPaths);
 
     // If forcing refresh or cache is empty, process the app files
+    let processed = 0;
     if (forceRefresh || Object.keys(symbolCache.symbols).length === 0) {
-      const processed = await symbolCache.processAppFiles();
-      vscode.window.showInformationMessage(
-        `Processed ${processed} app files for symbols`
-      );
+      processed = await symbolCache.processAppFiles();
+      if (!forceRefresh) {
+        vscode.window.showInformationMessage(
+          `Processed ${processed} app files for symbols`
+        );
+      }
     }
+
+    return processed;
   } catch (error) {
     console.error("Error initializing symbol cache:", error);
     vscode.window.showErrorMessage(
       `Failed to initialize symbol cache: ${error.message}`
     );
+    throw error;
   }
 }
 
