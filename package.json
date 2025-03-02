@@ -34,6 +34,65 @@
 		},
 		"capabilities": {
 			"hoverProvider": true
+		},
+		"configuration": {
+			"title": "BC/AL Upgrade Assistant",
+			"properties": {
+				"bc-al-upgradeassistant.claude.apiKey": {
+					"type": "string",
+					"default": "your-claude-api-key",
+					"description": "API Key for accessing Claude API",
+					"scope": "machine"
+				},
+				"bc-al-upgradeassistant.claude.defaultSystemPrompt": {
+					"type": "string",
+					"default": "You are an expert AL and C/AL programming assistant for Microsoft Dynamics 365 Business Central. Provide accurate, concise, and helpful responses focused on best practices.",
+					"description": "Default system prompt to use with Claude API when a prompt definition doesn't include one"
+				},
+				"bc-al-upgradeassistant.claude.prompts": {
+					"type": "array",
+					"default": [
+						{
+							"commandName": "convertCALToAL",
+							"systemPrompt": "You are an expert AL and C/AL programming assistant. You help developers convert legacy C/AL code to modern AL code for Business Central.",
+							"userPrompt": "Please convert the following C/AL code to AL:\n\n{{code}}",
+							"example": "OnOpenPage()\nBEGIN\n  CurrForm.UPDATE;\nEND;"
+						},
+						{
+							"commandName": "reviewALCode",
+							"systemPrompt": "You are an AL code reviewer specializing in Business Central best practices.",
+							"userPrompt": "Review the following AL code and suggest improvements for performance and readability:\n\n{{code}}",
+							"example": ""
+						}
+					],
+					"description": "Collection of prompts for Claude API",
+					"items": {
+						"type": "object",
+						"required": [
+							"commandName",
+							"userPrompt"
+						],
+						"properties": {
+							"commandName": {
+								"type": "string",
+								"description": "Unique command name for this prompt (no spaces)"
+							},
+							"systemPrompt": {
+								"type": "string",
+								"description": "System prompt for Claude API"
+							},
+							"userPrompt": {
+								"type": "string",
+								"description": "User prompt template for Claude API"
+							},
+							"example": {
+								"type": "string",
+								"description": "Example for the prompt (optional)"
+							}
+						}
+					}
+				}
+			}
 		}
 	},
 	"scripts": {
