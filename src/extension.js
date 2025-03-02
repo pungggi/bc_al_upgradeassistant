@@ -15,6 +15,7 @@ const {
 } = require("./ALCode");
 const { registerCommands } = require("./registerCommands");
 const claude = require("./claude");
+const { registerModelCommands } = require("./modelHelper");
 
 // Function to monitor and modify the clipboard
 async function monitorClipboard() {
@@ -52,6 +53,9 @@ async function activate(context) {
 
   // Register all commands
   registerCommands(context);
+
+  // Register model switching commands
+  registerModelCommands(context);
 
   // Register the extended object hover provider
   const extendedObjectHoverProvider = new ExtendedObjectHoverProvider();
@@ -103,7 +107,22 @@ async function activate(context) {
           },
           async (progress) => {
             try {
-              const response = await claude.executePrompt(selectedPrompt, code);
+              // Create progress callback
+              const progressCallback = (update) => {
+                if (update.increment) {
+                  progress.report({
+                    increment: update.increment,
+                    message: update.message || "",
+                  });
+                }
+              };
+
+              // Call the API with progress updates
+              const response = await claude.executePrompt(
+                selectedPrompt,
+                code,
+                progressCallback
+              );
 
               // Create a new document with the response
               const document = await vscode.workspace.openTextDocument({
