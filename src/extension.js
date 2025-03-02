@@ -14,6 +14,7 @@ const {
   modifyEventSubscriberTemplate,
 } = require("./ALCode");
 const { registerCommands } = require("./registerCommands");
+const claude = require("./claude");
 
 // Function to monitor and modify the clipboard
 async function monitorClipboard() {
@@ -62,6 +63,69 @@ async function activate(context) {
   );
 
   monitorClipboard();
+
+  // Register the Claude prompt selection command
+  let promptSelectionCommand = vscode.commands.registerCommand(
+    "bc-al-upgradeassistant.selectClaudePrompt",
+    async () => {
+      try {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+          vscode.window.showInformationMessage("No active editor found");
+          return;
+        }
+
+        // Get selected text or entire document
+        const selection = editor.selection;
+        const code = selection.isEmpty
+          ? editor.document.getText()
+          : editor.document.getText(selection);
+
+        if (!code || code.trim() === "") {
+          vscode.window.showInformationMessage(
+            "No code selected or document is empty"
+          );
+          return;
+        }
+
+        // Show prompt selection dialog
+        const selectedPrompt = await claude.showPromptSelectionDialog();
+        if (!selectedPrompt) {
+          return; // User canceled the selection
+        }
+
+        // Show progress while executing the prompt
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: `Running ${selectedPrompt.commandName}...`,
+            cancellable: false,
+          },
+          async (progress) => {
+            try {
+              const response = await claude.executePrompt(selectedPrompt, code);
+
+              // Create a new document with the response
+              const document = await vscode.workspace.openTextDocument({
+                content: response,
+                language: "markdown",
+              });
+
+              await vscode.window.showTextDocument(document);
+            } catch (error) {
+              vscode.window.showErrorMessage(
+                `Error executing prompt: ${error.message}`
+              );
+            }
+          }
+        );
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error: ${error.message}`);
+      }
+    }
+  );
+
+  context.subscriptions.push(promptSelectionCommand);
 
   // Find app files to process
   await initializeSymbolCache(context);

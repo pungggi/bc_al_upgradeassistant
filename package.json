@@ -27,6 +27,11 @@
 				"command": "bc-al-upgradeassistant.splitCalObjects",
 				"title": "Split C/AL Objects from File",
 				"category": "BC AL Upgrade Assistant"
+			},
+			{
+				"command": "bc-al-upgradeassistant.selectClaudePrompt",
+				"title": "Run Claude AI Prompt",
+				"category": "BC AL Upgrade Assistant"
 			}
 		],
 		"menus": {
@@ -54,12 +59,14 @@
 					"default": [
 						{
 							"commandName": "convertCALToAL",
+							"commandDescription": "Convert C/AL code to modern AL syntax",
 							"systemPrompt": "You are an expert AL and C/AL programming assistant. You help developers convert legacy C/AL code to modern AL code for Business Central.",
 							"userPrompt": "Please convert the following C/AL code to AL:\n\n{{code}}",
 							"example": "OnOpenPage()\nBEGIN\n  CurrForm.UPDATE;\nEND;"
 						},
 						{
 							"commandName": "reviewALCode",
+							"commandDescription": "Review AL code for best practices",
 							"systemPrompt": "You are an AL code reviewer specializing in Business Central best practices.",
 							"userPrompt": "Review the following AL code and suggest improvements for performance and readability:\n\n{{code}}",
 							"example": ""
@@ -76,6 +83,10 @@
 							"commandName": {
 								"type": "string",
 								"description": "Unique command name for this prompt (no spaces)"
+							},
+							"commandDescription": {
+								"type": "string",
+								"description": "Description of what the command does (shown in the selection dialog)"
 							},
 							"systemPrompt": {
 								"type": "string",
