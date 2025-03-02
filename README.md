@@ -1,84 +1,43 @@
-# AL Extension Info
+# BC/AL Upgrade Assistant
 
-This extension provides hover information about extended objects in AL code and tools to assist with AL upgrades.
+A Visual Studio Code extension to assist in transforming old C/AL code to modern AL syntax and provide AI-powered assistance for Microsoft Dynamics 365 Business Central development.
 
 ## Features
 
-- Hover over `extends` object to see details about the base object
-- Supports symbols from `.alpackages` folder for complete reference information
-- Split CAL objects from older Business Central versions
-- AI-powered code assistance with Claude API integration
+- Split C/AL objects from text files
+- Convert C/AL code to AL syntax
+- AI-powered code review and suggestions using Claude models
+- Code formatting and documentation help
 
-## Usage
+![Prompt Dialog](media/prompt-dialog.png)
 
-### Extension Info Hover
+## Requirements
 
-1. Open an AL file containing extension objects
-2. Hover over the `extends` object to see information about the extended object
+- Visual Studio Code 1.80.0 or higher
+- Claude API key for AI-powered features
 
-### Split CAL Objects
+## Extension Settings
 
-1. Open the command palette (Ctrl+Shift+P / Cmd+Shift+P)
-2. Run the command "AL: Split CAL Objects"
-3. Follow the prompts to select source files and splitting options
+This extension contributes the following settings:
+
+- `bc-al-upgradeassistant.claude.apiKey`: API Key for accessing Claude API
+- `bc-al-upgradeassistant.claude.model`: Claude model to use for API requests
+- `bc-al-upgradeassistant.claude.defaultSystemPrompt`: Default system prompt to use with Claude API
+- `bc-al-upgradeassistant.claude.prompts`: Collection of prompts for Claude API
 
 ## Commands
 
-- **AL: Refresh Extension Info Cache** - Manually refresh the extension info cache
-- **AL: Split CAL Objects** (`bc-al-upgradeassistant.splitCalObjects`) - Split CAL objects from older BC versions for reference or migration
-- **Run Claude AI Prompt** (`bc-al-upgradeassistant.selectClaudePrompt`) - Execute AI prompts on selected code
+- `BC AL Upgrade Assistant: Refresh Symbol Cache`: Refreshes the symbol cache
+- `BC AL Upgrade Assistant: Split C/AL Objects from File`: Splits C/AL objects from a text file
+- `BC AL Upgrade Assistant: Run Claude AI Prompt`: Select and run a Claude AI prompt
+- `BC AL Upgrade Assistant: Set Default Model to Claude `: Changes the default model
 
-## Claude AI Integration
+## Getting Started
 
-The BC/AL Upgrade Assistant includes AI-powered assistance via Claude API. To use this feature:
-
-### Setup
-
-1. Obtain a Claude API key from [Anthropic](https://console.anthropic.com/)
-2. Add your API key in VS Code settings:
-   - Go to Settings > Extensions > BC/AL Upgrade Assistant
-   - Enter your API key in the "Claude API Key" field
-   - Optionally, select your preferred Claude model (default is Claude 3.5 Sonnet)
-
-### Using the Prompt Selection Dialog
-
-1. Select some code in your editor (or the current file will be used if no selection)
-2. Open the command palette (Ctrl+Shift+P / Cmd+Shift+P)
-3. Run the command "BC AL Upgrade Assistant: Run Claude AI Prompt"
-4. A dialog will appear showing available AI prompts with their descriptions:
-
-   ![Prompt Selection Dialog](media/prompt-dialog.png)
-
-5. Select the prompt you want to execute
-6. The extension will process your code with Claude API and display the results in a new editor tab
-
-### Model Selection
-
-The extension supports multiple Claude models:
-
-- **Claude 3.7 Sonnet**: Most intelligent model, best for complex reasoning
-- **Claude 3.5 Sonnet**: Good balance between performance and cost
-- **Claude 3.5 Haiku** (default): Fast and efficient for daily tasks
-- **Claude 3 Opus**: Most capable original model, but higher cost
-- **Claude 3 Haiku**: Original Haiku model
-
-You can change the default model in three ways:
-
-1. Through Settings > Extensions > BC/AL Upgrade Assistant > Claude Model
-2. Using the quick commands:
-   - `BC AL Upgrade Assistant: Set Default Model to Claude 3.7 Sonnet`
-   - `BC AL Upgrade Assistant: Set Default Model to Claude 3.5 Sonnet`
-   - `BC AL Upgrade Assistant: Set Default Model to Claude 3.5 Haiku`
-   - `BC AL Upgrade Assistant: Set Default Model to Claude 3 Opus`
-   - `BC AL Upgrade Assistant: Set Default Model to Claude 3 Haiku`
-3. Specifying a model for individual prompts in your settings (see examples below)
-
-### Available Commands
-
-The extension comes with pre-configured prompts:
-
-- **convertCALToAL** - Converts C/AL code to modern AL syntax
-- **reviewALCode** - Provides code review and suggestions for AL code
+1. Install the extension
+2. Set your Claude API key in the extension settings
+3. Open a C/AL or AL file
+4. Use the commands from the command palette (Ctrl+Shift+P)
 
 ### Configuring Custom Prompts
 
@@ -122,13 +81,6 @@ You can customize the AI prompts through the settings:
     "model": "claude-3-7-sonnet-20250219",
     "systemPrompt": "You are an AI expert with deep understanding of complex algorithms. Explain concepts clearly.",
     "userPrompt": "Explain the following algorithm as if explaining to another developer:\n\n{{code}}"
-  },
-  {
-    "commandName": "quickReview",
-    "commandDescription": "Quick code review using Claude 3.5 Haiku",
-    "model": "claude-3-5-haiku-20241022",
-    "systemPrompt": "You are a quick code reviewer. Focus only on major issues.",
-    "userPrompt": "Do a quick review of this code, focusing only on major issues:\n\n{{code}}"
   }
 ]
 ```
