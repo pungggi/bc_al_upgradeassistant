@@ -9,7 +9,7 @@ A Visual Studio Code extension to assist in transforming old C/AL code to modern
 - AI-powered code review and suggestions using Claude models
 - Code formatting and documentation help
 
-![Prompt Dialog](media/prompt-dialog.png)
+![Prompt Dialog](https://imgur.com/Fdwiq2K.png)
 
 ## Requirements
 
