@@ -4,19 +4,8 @@ const modelHelper = require("./modelHelper");
 const path = require("path");
 const fs = require("fs");
 const glob = require("glob").sync;
-
-// Add symbolCache reference
-const symbolCache = {
-  symbols: {},
-  initialize: async function (paths) {
-    console.log(`Initializing symbol cache with ${paths.length} app paths`);
-    return true;
-  },
-  processAppFiles: async function () {
-    console.log("Processing app files for symbols");
-    return 0;
-  },
-};
+const symbolCache = require("./symbolCache");
+const { readJsonFile } = require("./jsonUtils");
 
 /**
  * Extension activation handler
@@ -69,7 +58,7 @@ async function initializeSymbolCache(context, force = false) {
             "settings.json"
           );
           if (fs.existsSync(settingsPath)) {
-            const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+            const settings = readJsonFile(settingsPath);
             if (settings && settings["al.packageCachePath"]) {
               let packagePath = settings["al.packageCachePath"];
               // Handle relative paths
