@@ -29,11 +29,10 @@ async function activate(context) {
     // Register all commands at once
     registerCommands(context);
 
-    // Register model-related commands
-    modelHelper.registerModelCommands(context);
-
     // Initialize symbol cache
     await initializeSymbolCache(context, false);
+
+    modelHelper.initializeModels();
 
     console.log("BC/AL Upgrade Assistant extension activated successfully");
   } catch (error) {
@@ -52,8 +51,6 @@ async function activate(context) {
  */
 async function initializeSymbolCache(context, force = false) {
   try {
-    // Get paths from settings
-    const config = vscode.workspace.getConfiguration("bc-al-upgradeassistant");
     let appPaths = [];
 
     // Common locations for .app files

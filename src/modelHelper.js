@@ -1,53 +1,73 @@
 const vscode = require("vscode");
 const configManager = require("./utils/configManager");
+const { getModelDataFromPackage } = require("./utils/packageReader");
 
 /**
- * Available AI models
+ * Get available AI models from package.json configuration
+ * @returns {Array} List of available models
  */
-const availableModels = [
-  {
-    id: "claude-3-opus-20240229",
-    name: "Claude 3 Opus",
-    description: "Most powerful for complex tasks",
-    apiName: "claude-3-opus-20240229",
-  },
-  {
-    id: "claude-3-sonnet-20240229",
-    name: "Claude 3 Sonnet",
-    description: "Balance of intelligence and speed",
-    apiName: "claude-3-sonnet-20240229",
-  },
-  {
-    id: "claude-3-haiku-20240307",
-    name: "Claude 3 Haiku",
-    description: "Fastest and most compact model",
-    apiName: "claude-3-haiku-20240307",
-  },
-  {
-    id: "claude-2.0",
-    name: "Claude 2",
-    description: "Previous generation model",
-    apiName: "claude-2.0",
-  },
-  {
-    id: "claude-instant-1.2",
-    name: "Claude Instant",
-    description: "Low-latency model for simple tasks",
-    apiName: "claude-instant-1.2",
-  },
-];
+function getAvailableModels() {
+  try {
+    // Get models directly from package.json
+    const models = getModelDataFromPackage();
+
+    if (models.length === 0) {
+      console.warn("No models found in package.json");
+      return [];
+    }
+
+    return models.map((model) => {
+      const { id, name, description, apiName } = model;
+      return {
+        id,
+        name,
+        description: description || "Claude model",
+        apiName,
+      };
+    });
+  } catch (error) {
+    console.error("Error parsing model configuration:", error);
+    return [];
+  }
+}
+
+// Initialize with empty array to prevent errors if accessed before vscode is ready
+let availableModels = [];
+
+/**
+ * Initialize available models
+ * This should be called early in the extension activation
+ */
+function initializeModels() {
+  availableModels = getAvailableModels();
+  console.log(`Initialized ${availableModels.length} AI models`);
+  return availableModels;
+}
 
 /**
  * Get the default model configuration
  * @returns {Object} The default model configuration
  */
 function getDefaultModel() {
-  return {
-    id: "claude-3-sonnet-20240229",
-    name: "Claude 3 Sonnet",
-    description: "Balance of intelligence and speed",
-    apiName: "claude-3-sonnet-20240229",
-  };
+  const defaultModelId = vscode.workspace
+    .getConfiguration("bc-al-upgradeassistant")
+    .get("claude.model");
+
+  const model = availableModels.find((m) => m.id === defaultModelId);
+
+  if (model) {
+    return model;
+  }
+
+  // Return first available model if default isn't found
+  return availableModels.length > 0
+    ? availableModels[0]
+    : {
+        id: "claude-3-5-sonnet-20241022",
+        name: "Claude 3.5 Sonnet",
+        description: "Default fallback model",
+        apiName: "claude-3-5-sonnet-20241022",
+      };
 }
 
 /**
@@ -55,7 +75,7 @@ function getDefaultModel() {
  * @returns {Object} The currently selected model
  */
 function getCurrentModel() {
-  const savedModelId = configManager.getConfigValue("selectedModel");
+  const savedModelId = configManager.getConfigValue("claude.model");
   if (savedModelId) {
     const model = availableModels.find((m) => m.id === savedModelId);
     if (model) {
@@ -74,7 +94,7 @@ async function setCurrentModel(modelId) {
   try {
     const model = availableModels.find((m) => m.id === modelId);
     if (model) {
-      await configManager.updateConfig("selectedModel", modelId);
+      await configManager.updateConfig("claude.model", modelId, true);
       return true;
     }
     return false;
@@ -113,6 +133,8 @@ async function selectModel() {
 
 module.exports = {
   availableModels,
+  getAvailableModels,
+  initializeModels,
   getDefaultModel,
   getCurrentModel,
   setCurrentModel,

@@ -1,5 +1,4 @@
 const vscode = require("vscode");
-const path = require("path");
 const modelHelper = require("./modelHelper");
 const configManager = require("./utils/configManager");
 const alFileSaver = require("./utils/alFileSaver");
@@ -217,87 +216,9 @@ async function extractAndSaveAlCodeBlocks(content) {
   return savedFiles;
 }
 
-/**
- * Save AL code extracted from Claude response
- */
-async function saveAlCodeFromResponse() {
-  try {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor) {
-      throw new Error("No active editor found");
-    }
-
-    // Get the content
-    const content = editor.document.getText();
-
-    // Extract and save all AL code blocks
-    const savedFiles = await extractAndSaveAlCodeBlocks(content);
-
-    if (savedFiles.length === 0) {
-      vscode.window.showInformationMessage("No files were saved");
-      return;
-    }
-
-    if (savedFiles.length === 1) {
-      vscode.window.showInformationMessage(
-        `AL code saved to: ${savedFiles[0]}`
-      );
-
-      // Open the saved file
-      const document = await vscode.workspace.openTextDocument(savedFiles[0]);
-      await vscode.window.showTextDocument(document);
-    } else {
-      vscode.window.showInformationMessage(
-        `${savedFiles.length} AL code files saved successfully`
-      );
-
-      // Ask if user wants to open any of the saved files
-      const openFile = await vscode.window.showQuickPick(
-        [
-          { label: "Yes", description: "Open the saved files" },
-          { label: "No", description: "Don't open any files" },
-        ],
-        { placeHolder: "Do you want to open the saved files?" }
-      );
-
-      if (openFile && openFile.label === "Yes") {
-        // If multiple files, let user choose which one to open
-        if (savedFiles.length > 1) {
-          const fileItems = savedFiles.map((file) => ({
-            label: path.basename(file),
-            description: file,
-            filePath: file,
-          }));
-
-          const selectedFile = await vscode.window.showQuickPick(fileItems, {
-            placeHolder: "Select file to open",
-            canPickMany: false,
-          });
-
-          if (selectedFile) {
-            const document = await vscode.workspace.openTextDocument(
-              selectedFile.filePath
-            );
-            await vscode.window.showTextDocument(document);
-          }
-        } else {
-          // Open the single file
-          const document = await vscode.workspace.openTextDocument(
-            savedFiles[0]
-          );
-          await vscode.window.showTextDocument(document);
-        }
-      }
-    }
-  } catch (error) {
-    vscode.window.showErrorMessage(`Error saving AL code: ${error.message}`);
-  }
-}
-
 module.exports = {
   getAvailablePrompts,
   showPromptSelectionDialog,
   executePrompt,
-  saveAlCodeFromResponse,
   extractAndSaveAlCodeBlocks,
 };

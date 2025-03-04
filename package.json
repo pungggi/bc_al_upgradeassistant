@@ -2,7 +2,7 @@
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
   "description": "Assists you in transforming old C/AL and more",
-  "version": "0.0.28",
+  "version": "0.0.29",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
@@ -27,15 +27,11 @@
       },
       {
         "command": "bc-al-upgradeassistant.selectClaudePrompt",
-        "title": "BC/AL: Analyze Code with Claude"
+        "title": "BC/AL: Prompt Claude"
       },
       {
         "command": "bc-al-upgradeassistant.selectModel",
-        "title": "BC/AL: Select AI Model"
-      },
-      {
-        "command": "bc-al-upgradeassistant.saveAlCodeFromResponse",
-        "title": "BC/AL: Save AL Code From Response"
+        "title": "BC/AL: Select Claude Model"
       }
     ],
     "menus": {
@@ -62,14 +58,18 @@
             "claude-3-5-sonnet-20241022",
             "claude-3-5-haiku-20241022",
             "claude-3-opus-20240229",
-            "claude-3-haiku-20240307"
+            "claude-3-haiku-20240307",
+            "claude-2.0",
+            "claude-instant-1.2"
           ],
           "enumDescriptions": [
             "Claude 3.7 Sonnet - Most intelligent model",
             "Claude 3.5 Sonnet - Good balance of performance and cost",
             "Claude 3.5 Haiku - Fast and efficient for daily tasks",
             "Claude 3 Opus - Most capable model, highest cost",
-            "Claude 3 Haiku - Original Haiku model"
+            "Claude 3 Haiku - Original Haiku model",
+            "Claude 2.0 - Legacy model",
+            "Claude Instant - Low-latency model for simple tasks"
           ]
         },
         "bc-al-upgradeassistant.claude.defaultSystemPrompt": {
@@ -207,33 +207,21 @@
           "additionalProperties": {
             "type": "string"
           }
-        },
-        "bc-al-upgradeassistant.selectedModel": {
-          "type": "string",
-          "default": "claude-3-sonnet-20240229",
-          "description": "Selected AI model for code generation and analysis"
         }
       }
     }
   },
   "scripts": {
-    "lint": "eslint .",
-    "pretest": "npm run lint",
-    "test": "node ./test/runTest.js",
+    "lint": "eslint . --ext .js ",
     "pre-publish": "node ./scripts/prepublish.js",
     "after-publish": "node ./scripts/afterpublish.js",
     "publish": "npm run pre-publish && webpack --mode=production && vsce publish --allow-missing-repository && npm run after-publish"
   },
   "devDependencies": {
-    "@types/glob": "^7.1.3",
-    "@types/mocha": "^8.0.4",
-    "@types/node": "^12.11.7",
-    "@types/vscode": "^1.60.0",
-    "eslint": "^7.19.0",
+    "@eslint/js": "^9.21.0",
+    "eslint": "^9.21.0",
     "glob": "^7.1.6",
-    "mocha": "^8.2.1",
-    "typescript": "^4.1.3",
-    "vscode-test": "^1.5.0",
+    "globals": "^16.0.0",
     "javascript-obfuscator": "^4.1.1",
     "webpack": "^5.98.0",
     "webpack-cli": "^6.0.1",

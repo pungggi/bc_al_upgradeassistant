@@ -5,19 +5,10 @@ const claude = require("./claude");
 const configManager = require("./utils/configManager");
 const { registerCommandOnce } = require("./utils/commandHelper");
 
-/**
- * Track registered commands to prevent duplicates
- * @type {Set<string>}
- */
-const registeredCommands = new Set();
-
 function registerCommands(context) {
   registerRefreshSymbolCacheCommand(context);
   registerSplitCalObjectsCommand(context);
-  registerSaveAlCodeCommand(context);
-  registerClaudeCommand(context);
-
-  // Register model commands here instead of in modelHelper
+  registerPromptClaudeCommand(context);
   registerModelCommands(context);
 }
 
@@ -49,15 +40,7 @@ function registerSplitCalObjectsCommand(context) {
   );
 }
 
-function registerSaveAlCodeCommand(context) {
-  registerCommandOnce(
-    context,
-    "bc-al-upgradeassistant.saveAlCodeFromResponse",
-    claude.saveAlCodeFromResponse
-  );
-}
-
-function registerClaudeCommand(context) {
+function registerPromptClaudeCommand(context) {
   registerCommandOnce(
     context,
     "bc-al-upgradeassistant.selectClaudePrompt",
@@ -97,7 +80,6 @@ function registerClaudeCommand(context) {
 
         // If auto-save is enabled, don't create an editor for the response
         let document = null;
-        let responseEditor = null;
 
         if (!autoSave) {
           // Create and show a new editor for the response
@@ -106,7 +88,7 @@ function registerClaudeCommand(context) {
             language: "markdown",
           });
 
-          responseEditor = await vscode.window.showTextDocument(document, {
+          await vscode.window.showTextDocument(document, {
             viewColumn: vscode.ViewColumn.Beside,
           });
         }
@@ -203,12 +185,9 @@ function registerClaudeCommand(context) {
                       language: "markdown",
                     });
 
-                    responseEditor = await vscode.window.showTextDocument(
-                      document,
-                      {
-                        viewColumn: vscode.ViewColumn.Beside,
-                      }
-                    );
+                    await vscode.window.showTextDocument(document, {
+                      viewColumn: vscode.ViewColumn.Beside,
+                    });
                   }
                 } catch (saveError) {
                   // If auto-save fails, show the response in an editor
@@ -217,12 +196,9 @@ function registerClaudeCommand(context) {
                     language: "markdown",
                   });
 
-                  responseEditor = await vscode.window.showTextDocument(
-                    document,
-                    {
-                      viewColumn: vscode.ViewColumn.Beside,
-                    }
-                  );
+                  await vscode.window.showTextDocument(document, {
+                    viewColumn: vscode.ViewColumn.Beside,
+                  });
 
                   vscode.window.showErrorMessage(
                     `Error auto-saving AL code: ${saveError.message}`

@@ -108,8 +108,6 @@ class SymbolCache {
 
         // Read the symbol file with improved error handling
         try {
-          // First try to read as UTF-8
-          const fileContent = await readFile(symbolFilePath, "utf8");
           let symbolData;
 
           try {
