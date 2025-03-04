@@ -7,7 +7,7 @@ const fs = require("fs");
 const path = require("path");
 const util = require("util");
 const os = require("os");
-const glob = util.promisify(require("glob"));
+const glob = require("fast-glob");
 
 const {
   isEventSubscriberTemplate,
