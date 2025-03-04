@@ -119,15 +119,12 @@ async function executePrompt(prompt, code, progressCallback = null) {
     });
 
     if (progressCallback) {
-      progressCallback({ increment: 60, message: "Processing response..." });
+      // Don't show "Completed" message, just increment progress to 100%
+      progressCallback({ increment: 70, message: "Processing response..." });
     }
 
     // Extract the content from the response
     const content = extractContentFromResponse(response);
-
-    if (progressCallback) {
-      progressCallback({ increment: 10, message: "Completed" });
-    }
 
     return content;
   } catch (error) {

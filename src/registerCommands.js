@@ -149,7 +149,7 @@ function registerClaudeCommand(context) {
                   );
 
                   if (savedFiles.length > 0) {
-                    // Offer to open the first file
+                    // Only show UI for opening files, no additional completion notification
                     if (savedFiles.length === 1) {
                       const openFile =
                         await vscode.window.showInformationMessage(
@@ -208,10 +208,6 @@ function registerClaudeCommand(context) {
                       {
                         viewColumn: vscode.ViewColumn.Beside,
                       }
-                    );
-
-                    vscode.window.showInformationMessage(
-                      "No AL code blocks found to auto-save. Displaying response instead."
                     );
                   }
                 } catch (saveError) {
