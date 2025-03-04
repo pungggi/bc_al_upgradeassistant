@@ -2,7 +2,7 @@
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
   "description": "Assists you in transforming old C/AL and more",
-  "version": "0.0.18",
+  "version": "0.0.19",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
@@ -188,7 +188,7 @@
   "dependencies": {
     "7zip-bin": "^5.2.0",
     "axios": "^1.6.0",
-    "fast-glob": "^3.3.3",
+    "glob": "^7.2.3",
     "node-7z": "^3.0.0"
   }
 }
