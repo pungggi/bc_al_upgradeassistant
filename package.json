@@ -2,7 +2,7 @@
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
   "description": "Assists you in transforming old C/AL and more",
-  "version": "0.0.23",
+  "version": "0.0.28",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
@@ -174,9 +174,9 @@
     }
   },
   "scripts": {
-    "prepublish": "node ./scripts/prepublish.js",
-    "revert-main": "node ./scripts/revert-main.js",
-    "publish": "npm run prepublish && webpack --mode=production && vsce publish --allow-missing-repository && npm run revert-main"
+    "pre-publish": "node ./scripts/prepublish.js",
+    "after-publish": "node ./scripts/revert-main.js",
+    "publish": "npm run pre-publish && webpack --mode=production && vsce publish --allow-missing-repository && npm run after-publish"
   },
   "devDependencies": {
     "@types/vscode": "^1.80.0",
