@@ -1,83 +1,85 @@
 const vscode = require("vscode");
 
-/**
- * Supported Claude models
- */
-const CLAUDE_MODELS = {
-  SONNET_37: "claude-3-7-sonnet-20250219", // Claude 3.7 Sonnet - Most intelligent
-  SONNET_35: "claude-3-5-sonnet-20241022", // Claude 3.5 Sonnet
-  HAIKU_35: "claude-3-5-haiku-20241022", // Claude 3.5 Haiku - Fast, efficient default
-  OPUS: "claude-3-opus-20240229", // Claude 3 Opus - Powerful but expensive
-  HAIKU: "claude-3-haiku-20240307", // Original Claude 3 Haiku
-};
+// Define available models with display names
+const CLAUDE_MODELS = [
+  {
+    id: "claude-3-7-sonnet-20250219",
+    label: "Claude 3.7 Sonnet - Most intelligent model",
+  },
+  {
+    id: "claude-3-5-sonnet-20241022",
+    label: "Claude 3.5 Sonnet - Good balance of performance and cost",
+  },
+  {
+    id: "claude-3-5-haiku-20241022",
+    label: "Claude 3.5 Haiku - Fast and efficient for daily tasks",
+  },
+  {
+    id: "claude-3-opus-20240229",
+    label: "Claude 3 Opus - Most capable model, highest cost",
+  },
+  {
+    id: "claude-3-haiku-20240307",
+    label: "Claude 3 Haiku - Original Haiku model",
+  },
+];
 
 /**
- * Get a user-friendly name for a Claude model
- * @param {string} modelId The model identifier
- * @returns {string} A user-friendly name for the model
+ * Set the default Claude model in settings
+ * @param {string} modelId - The model ID to set
  */
-function getModelFriendlyName(modelId) {
-  switch (modelId) {
-    case CLAUDE_MODELS.SONNET_37:
-      return "Claude 3.7 Sonnet";
-    case CLAUDE_MODELS.SONNET_35:
-      return "Claude 3.5 Sonnet";
-    case CLAUDE_MODELS.HAIKU_35:
-      return "Claude 3.5 Haiku";
-    case CLAUDE_MODELS.OPUS:
-      return "Claude 3 Opus";
-    case CLAUDE_MODELS.HAIKU:
-      return "Claude 3 Haiku";
-    default:
-      return `Unknown Model (${modelId})`;
+async function setDefaultModel(modelId) {
+  try {
+    // Get the configuration
+    const config = vscode.workspace.getConfiguration("bc-al-upgradeassistant");
+
+    // Update the model setting
+    await config.update(
+      "claude.model",
+      modelId,
+      vscode.ConfigurationTarget.Global
+    );
+
+    vscode.window.showInformationMessage(`Default model set to: ${modelId}`);
+  } catch (error) {
+    vscode.window.showErrorMessage(
+      `Failed to set default model: ${error.message}`
+    );
   }
 }
 
 /**
- * Check if a model ID is valid
- * @param {string} modelId The model identifier to validate
- * @returns {boolean} True if valid
- */
-function isValidModel(modelId) {
-  return Object.values(CLAUDE_MODELS).includes(modelId);
-}
-
-/**
- * Get the default Claude model from settings
- * @returns {string} The model ID
- */
-function getDefaultModel() {
-  const config = vscode.workspace.getConfiguration("bc-al-upgradeassistant");
-  return config.get("claude.model") || CLAUDE_MODELS.HAIKU_35; // Default is now Claude 3.5 Haiku
-}
-
-/**
- * Register commands to quickly change models
+ * Register model-related commands
  * @param {vscode.ExtensionContext} context
  */
 function registerModelCommands(context) {
-  // Register a command for each model
-  for (const [key, modelId] of Object.entries(CLAUDE_MODELS)) {
-    const command = vscode.commands.registerCommand(
-      `bc-al-upgradeassistant.setModel${key}`,
-      async () => {
-        const config = vscode.workspace.getConfiguration(
-          "bc-al-upgradeassistant"
-        );
-        await config.update("claude.model", modelId, true);
-        vscode.window.showInformationMessage(
-          `Default Claude model set to ${getModelFriendlyName(modelId)}`
-        );
+  // Register a single command for setting the default model
+  const setModelCommand = vscode.commands.registerCommand(
+    "bc-al-upgradeassistant.setDefaultModel",
+    async () => {
+      // Show quick pick with model options
+      const selectedModel = await vscode.window.showQuickPick(
+        CLAUDE_MODELS.map((model) => ({
+          label: model.label,
+          description: model.id,
+          model: model,
+        })),
+        {
+          placeHolder: "Select the default Claude model",
+          title: "Set Default Claude Model",
+        }
+      );
+
+      if (selectedModel) {
+        await setDefaultModel(selectedModel.model.id);
       }
-    );
-    context.subscriptions.push(command);
-  }
+    }
+  );
+
+  context.subscriptions.push(setModelCommand);
 }
 
 module.exports = {
-  CLAUDE_MODELS,
-  getModelFriendlyName,
-  isValidModel,
-  getDefaultModel,
   registerModelCommands,
+  CLAUDE_MODELS,
 };

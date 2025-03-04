@@ -30,7 +30,7 @@ This extension contributes the following settings:
 - `BC AL Upgrade Assistant: Refresh Symbol Cache`: Refreshes the symbol cache
 - `BC AL Upgrade Assistant: Split C/AL Objects from File`: Splits C/AL objects from a text file
 - `BC AL Upgrade Assistant: Run Claude AI Prompt`: Select and run a Claude AI prompt
-- `BC AL Upgrade Assistant: Set Default Model to Claude `: Changes the default model
+- `BC AL Upgrade Assistant: Set Default Claude Model`: Change the default Claude model with a dropdown menu
 
 ## Getting Started
 

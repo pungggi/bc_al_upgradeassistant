@@ -1,194 +1,184 @@
 {
-	"name": "bc-al-upgradeassistant",
-	"displayName": "BC/AL Upgrade Assistant",
-	"description": "Assists you in transforming old C/AL and more",
-	"version": "0.0.16",
-	"icon": "media/icon.png",
-	"publisher": "ngSoftware",
-	"engines": {
-		"vscode": "^1.80.0"
-	},
-	"categories": [
-		"Other"
-	],
-	"activationEvents": [
-		"onStartupFinished"
-	],
-	"main": "./dist/extension.js",
-	"contributes": {
-		"commands": [
-			{
-				"command": "bc-al-upgradeassistant.refreshSymbolCache",
-				"title": "Refresh Symbol Cache",
-				"category": "BC AL Upgrade Assistant"
-			},
-			{
-				"command": "bc-al-upgradeassistant.splitCalObjects",
-				"title": "Split C/AL Objects from File",
-				"category": "BC AL Upgrade Assistant"
-			},
-			{
-				"command": "bc-al-upgradeassistant.selectClaudePrompt",
-				"title": "Run Claude AI Prompt",
-				"category": "BC AL Upgrade Assistant"
-			},
-			{
-				"command": "bc-al-upgradeassistant.setModelSONNET",
-				"title": "Set Default Model to Claude 3.5 Sonnet",
-				"category": "BC AL Upgrade Assistant"
-			},
-			{
-				"command": "bc-al-upgradeassistant.setModelOPUS",
-				"title": "Set Default Model to Claude 3 Opus",
-				"category": "BC AL Upgrade Assistant"
-			},
-			{
-				"command": "bc-al-upgradeassistant.setModelHAIKU",
-				"title": "Set Default Model to Claude 3 Haiku",
-				"category": "BC AL Upgrade Assistant"
-			}
-		],
-		"menus": {
-			"editor/context": []
-		},
-		"capabilities": {
-			"hoverProvider": true
-		},
-		"configuration": {
-			"title": "BC/AL Upgrade Assistant",
-			"properties": {
-				"bc-al-upgradeassistant.claude.apiKey": {
-					"type": "string",
-					"default": "your-claude-api-key",
-					"description": "API Key for accessing Claude API",
-					"scope": "machine"
-				},
-				"bc-al-upgradeassistant.claude.model": {
-					"type": "string",
-					"default": "claude-3-5-haiku-20241022",
-					"description": "Claude model to use for API requests",
-					"enum": [
-						"claude-3-7-sonnet-20250219",
-						"claude-3-5-sonnet-20241022",
-						"claude-3-5-haiku-20241022",
-						"claude-3-opus-20240229",
-						"claude-3-haiku-20240307"
-					],
-					"enumDescriptions": [
-						"Claude 3.7 Sonnet - Most intelligent model",
-						"Claude 3.5 Sonnet - Good balance of performance and cost",
-						"Claude 3.5 Haiku - Fast and efficient for daily tasks",
-						"Claude 3 Opus - Most capable model, highest cost",
-						"Claude 3 Haiku - Original Haiku model"
-					]
-				},
-				"bc-al-upgradeassistant.claude.defaultSystemPrompt": {
-					"type": "string",
-					"default": "You are an expert AL and C/AL programming assistant for Microsoft Dynamics 365 Business Central. Provide accurate, concise, and helpful responses focused on best practices.",
-					"description": "Default system prompt to use with Claude API when a prompt definition doesn't include one"
-				},
-				"bc-al-upgradeassistant.claude.prompts": {
-					"type": "array",
-					"default": [
-						{
-							"commandName": "convertCALToAL",
-							"commandDescription": "Convert C/AL code to modern AL syntax",
-							"systemPrompt": "You are an expert AL and C/AL programming assistant. You help developers convert legacy C/AL code to modern AL code for Business Central.",
-							"userPrompt": "Please convert the following C/AL code to AL:\n\n{{code}}",
-							"example": "OnOpenPage()\nBEGIN\n  CurrForm.UPDATE;\nEND;"
-						},
-						{
-							"commandName": "reviewALCode",
-							"commandDescription": "Review AL code for best practices",
-							"systemPrompt": "You are an AL code reviewer specializing in Business Central best practices.",
-							"userPrompt": "Review the following AL code and suggest improvements for performance and readability:\n\n{{code}}",
-							"example": ""
-						},
-						{
-							"commandName": "explainComplexLogic",
-							"commandDescription": "Explain complex logic using Opus model",
-							"model": "claude-3-opus-20240229",
-							"systemPrompt": "You are an expert AL code explainer for Microsoft Dynamics 365 Business Central.",
-							"userPrompt": "Explain in detail how the following complex algorithm works:\n\n{{code}}",
-							"example": ""
-						},
-						{
-							"commandName": "quickFormat",
-							"commandDescription": "Quick code formatting using Haiku model",
-							"model": "claude-3-haiku-20240307",
-							"systemPrompt": "You are a code formatter that improves readability without changing functionality.",
-							"userPrompt": "Format and improve the indentation of this code without changing its functionality:\n\n{{code}}",
-							"example": ""
-						}
-					],
-					"description": "Collection of prompts for Claude API",
-					"items": {
-						"type": "object",
-						"required": [
-							"commandName",
-							"userPrompt"
-						],
-						"properties": {
-							"commandName": {
-								"type": "string",
-								"description": "Unique command name for this prompt (no spaces)"
-							},
-							"commandDescription": {
-								"type": "string",
-								"description": "Description of what the command does (shown in the selection dialog)"
-							},
-							"model": {
-								"type": "string",
-								"description": "Specific Claude model to use for this prompt",
-								"enum": [
-									"claude-3-7-sonnet-20250219",
-									"claude-3-5-sonnet-20241022",
-									"claude-3-5-haiku-20241022",
-									"claude-3-opus-20240229",
-									"claude-3-haiku-20240307"
-								],
-								"enumDescriptions": [
-									"Claude 3.7 Sonnet - Most intelligent model",
-									"Claude 3.5 Sonnet - Good balance of performance and cost",
-									"Claude 3.5 Haiku - Fast and efficient for daily tasks",
-									"Claude 3 Opus - Most capable model, highest cost",
-									"Claude 3 Haiku - Original Haiku model"
-								]
-							},
-							"systemPrompt": {
-								"type": "string",
-								"description": "System prompt for Claude API"
-							},
-							"userPrompt": {
-								"type": "string",
-								"description": "User prompt template for Claude API"
-							},
-							"example": {
-								"type": "string",
-								"description": "Example for the prompt (optional)"
-							}
-						}
-					}
-				}
-			}
-		}
-	},
-	"scripts": {
-		"dev": "webpack --mode=development --devtool=source-map",
-		"publish": "webpack --mode=production && vsce publish --allow-missing-repository"
-	},
-	"devDependencies": {
-		"@types/vscode": "^1.80.0",
-		"javascript-obfuscator": "^4.1.1",
-		"ts-loader": "^9.5.2",
-		"webpack": "^5.98.0",
-		"webpack-cli": "^6.0.1",
-		"webpack-obfuscator": "^3.5.1"
-	},
-	"dependencies": {
-		"7zip-bin": "^5.2.0",
-		"axios": "^1.6.0",
-		"glob": "^7.2.3",
-		"node-7z": "^3.0.0"
-	}
+  "name": "bc-al-upgradeassistant",
+  "displayName": "BC/AL Upgrade Assistant",
+  "description": "Assists you in transforming old C/AL and more",
+  "version": "0.0.16",
+  "icon": "media/icon.png",
+  "publisher": "ngSoftware",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "bc-al-upgradeassistant.refreshSymbolCache",
+        "title": "Refresh Symbol Cache",
+        "category": "BC AL Upgrade Assistant"
+      },
+      {
+        "command": "bc-al-upgradeassistant.splitCalObjects",
+        "title": "Split C/AL Objects from File",
+        "category": "BC AL Upgrade Assistant"
+      },
+      {
+        "command": "bc-al-upgradeassistant.selectClaudePrompt",
+        "title": "Run Claude AI Prompt",
+        "category": "BC AL Upgrade Assistant"
+      },
+      {
+        "command": "bc-al-upgradeassistant.setDefaultModel",
+        "title": "Set Default Claude Model",
+        "category": "BC AL Upgrade Assistant"
+      }
+    ],
+    "menus": {
+      "editor/context": []
+    },
+    "capabilities": {
+      "hoverProvider": true
+    },
+    "configuration": {
+      "title": "BC/AL Upgrade Assistant",
+      "properties": {
+        "bc-al-upgradeassistant.claude.apiKey": {
+          "type": "string",
+          "default": "your-claude-api-key",
+          "description": "API Key for accessing Claude API",
+          "scope": "machine"
+        },
+        "bc-al-upgradeassistant.claude.model": {
+          "type": "string",
+          "default": "claude-3-5-haiku-20241022",
+          "description": "Claude model to use for API requests",
+          "enum": [
+            "claude-3-7-sonnet-20250219",
+            "claude-3-5-sonnet-20241022",
+            "claude-3-5-haiku-20241022",
+            "claude-3-opus-20240229",
+            "claude-3-haiku-20240307"
+          ],
+          "enumDescriptions": [
+            "Claude 3.7 Sonnet - Most intelligent model",
+            "Claude 3.5 Sonnet - Good balance of performance and cost",
+            "Claude 3.5 Haiku - Fast and efficient for daily tasks",
+            "Claude 3 Opus - Most capable model, highest cost",
+            "Claude 3 Haiku - Original Haiku model"
+          ]
+        },
+        "bc-al-upgradeassistant.claude.defaultSystemPrompt": {
+          "type": "string",
+          "default": "You are an expert AL and C/AL programming assistant for Microsoft Dynamics 365 Business Central. Provide accurate, concise, and helpful responses focused on best practices.",
+          "description": "Default system prompt to use with Claude API when a prompt definition doesn't include one"
+        },
+        "bc-al-upgradeassistant.claude.prompts": {
+          "type": "array",
+          "default": [
+            {
+              "commandName": "convertCALToAL",
+              "commandDescription": "Convert C/AL code to modern AL syntax",
+              "systemPrompt": "You are an expert AL and C/AL programming assistant. You help developers convert legacy C/AL code to modern AL code for Business Central.",
+              "userPrompt": "Please convert the following C/AL code to AL:\n\n{{code}}",
+              "example": "OnOpenPage()\nBEGIN\n  CurrForm.UPDATE;\nEND;"
+            },
+            {
+              "commandName": "reviewALCode",
+              "commandDescription": "Review AL code for best practices",
+              "systemPrompt": "You are an AL code reviewer specializing in Business Central best practices.",
+              "userPrompt": "Review the following AL code and suggest improvements for performance and readability:\n\n{{code}}",
+              "example": ""
+            },
+            {
+              "commandName": "explainComplexLogic",
+              "commandDescription": "Explain complex logic using Opus model",
+              "model": "claude-3-opus-20240229",
+              "systemPrompt": "You are an expert AL code explainer for Microsoft Dynamics 365 Business Central.",
+              "userPrompt": "Explain in detail how the following complex algorithm works:\n\n{{code}}",
+              "example": ""
+            },
+            {
+              "commandName": "quickFormat",
+              "commandDescription": "Quick code formatting using Haiku model",
+              "model": "claude-3-haiku-20240307",
+              "systemPrompt": "You are a code formatter that improves readability without changing functionality.",
+              "userPrompt": "Format and improve the indentation of this code without changing its functionality:\n\n{{code}}",
+              "example": ""
+            }
+          ],
+          "description": "Collection of prompts for Claude API",
+          "items": {
+            "type": "object",
+            "required": [
+              "commandName",
+              "userPrompt"
+            ],
+            "properties": {
+              "commandName": {
+                "type": "string",
+                "description": "Unique command name for this prompt (no spaces)"
+              },
+              "commandDescription": {
+                "type": "string",
+                "description": "Description of what the command does (shown in the selection dialog)"
+              },
+              "model": {
+                "type": "string",
+                "description": "Specific Claude model to use for this prompt",
+                "enum": [
+                  "claude-3-7-sonnet-20250219",
+                  "claude-3-5-sonnet-20241022",
+                  "claude-3-5-haiku-20241022",
+                  "claude-3-opus-20240229",
+                  "claude-3-haiku-20240307"
+                ],
+                "enumDescriptions": [
+                  "Claude 3.7 Sonnet - Most intelligent model",
+                  "Claude 3.5 Sonnet - Good balance of performance and cost",
+                  "Claude 3.5 Haiku - Fast and efficient for daily tasks",
+                  "Claude 3 Opus - Most capable model, highest cost",
+                  "Claude 3 Haiku - Original Haiku model"
+                ]
+              },
+              "systemPrompt": {
+                "type": "string",
+                "description": "System prompt for Claude API"
+              },
+              "userPrompt": {
+                "type": "string",
+                "description": "User prompt template for Claude API"
+              },
+              "example": {
+                "type": "string",
+                "description": "Example for the prompt (optional)"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "dev": "webpack --mode=development --devtool=source-map",
+    "publish": "webpack --mode=production && vsce publish --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "javascript-obfuscator": "^4.1.1",
+    "ts-loader": "^9.5.2",
+    "webpack": "^5.98.0",
+    "webpack-cli": "^6.0.1",
+    "webpack-obfuscator": "^3.5.1"
+  },
+  "dependencies": {
+    "7zip-bin": "^5.2.0",
+    "axios": "^1.6.0",
+    "glob": "^7.2.3",
+    "node-7z": "^3.0.0"
+  }
 }
