@@ -23,6 +23,7 @@ This extension contributes the following settings:
 - `bc-al-upgradeassistant.claude.apiKey`: API Key for accessing Claude API
 - `bc-al-upgradeassistant.claude.model`: Claude model to use for API requests
 - `bc-al-upgradeassistant.claude.defaultSystemPrompt`: Default system prompt to use with Claude API
+- `bc-al-upgradeassistant.claude.defaultLanguage`: Default language code (e.g., "de-DE") to use in prompts as the translation language
 - `bc-al-upgradeassistant.claude.prompts`: Collection of prompts for Claude API
 
 ## Commands

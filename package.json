@@ -2,7 +2,7 @@
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
   "description": "Assists you in transforming old C/AL and more",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
@@ -76,6 +76,11 @@
           "type": "string",
           "default": "You are an expert AL and C/AL programming assistant for Microsoft Dynamics 365 Business Central. Provide accurate, concise, and helpful responses focused on best practices.",
           "description": "Default system prompt to use with Claude API when a prompt definition doesn't include one"
+        },
+        "bc-al-upgradeassistant.claude.defaultLanguage": {
+          "type": "string",
+          "default": "de-DE",
+          "description": "Default language code to use in prompts with {{language}} placeholder"
         },
         "bc-al-upgradeassistant.claude.prompts": {
           "type": "array",

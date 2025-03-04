@@ -70,6 +70,7 @@ async function executePrompt(prompt, code, progressCallback) {
   const config = vscode.workspace.getConfiguration("bc-al-upgradeassistant");
   const apiKey = config.get("claude.apiKey");
   const defaultSystemPrompt = config.get("claude.defaultSystemPrompt");
+  const defaultLanguage = config.get("claude.defaultLanguage");
 
   // Get the model - use prompt-specific model if available, otherwise use the default
   const defaultModel = getDefaultModel();
@@ -92,8 +93,9 @@ async function executePrompt(prompt, code, progressCallback) {
     );
   }
 
-  // Replace token in the prompt with actual code
-  const userPrompt = prompt.userPrompt.replace("{{code}}", code);
+  // Replace tokens in the prompt with actual code and language
+  let userPrompt = prompt.userPrompt.replace("{{code}}", code);
+  userPrompt = userPrompt.replace(/{{language}}/g, defaultLanguage);
 
   // Use the provided system prompt or fall back to the default
   const systemPrompt = prompt.systemPrompt || defaultSystemPrompt;
