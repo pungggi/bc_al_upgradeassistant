@@ -175,6 +175,7 @@
 		}
 	},
 	"scripts": {
+		"dev": "webpack --mode=development --devtool=source-map",
 		"publish": "webpack --mode=production && vsce publish --allow-missing-repository"
 	},
 	"devDependencies": {
