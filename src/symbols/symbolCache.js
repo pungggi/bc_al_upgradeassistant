@@ -4,6 +4,7 @@ const util = require("util");
 const os = require("os");
 const Seven = require("node-7z");
 const sevenBin = require("7zip-bin");
+const vscode = require("vscode");
 
 const readFile = util.promisify(fs.readFile);
 const writeFile = util.promisify(fs.writeFile);
@@ -25,6 +26,8 @@ class SymbolCache {
     );
     this.symbols = {};
     this.appPaths = [];
+    this._objectIdMap = new Map();
+    this.initialize();
   }
 
   async initialize(appPaths = []) {
@@ -41,6 +44,11 @@ class SymbolCache {
     }
 
     await this.loadCache();
+    try {
+      await this.refreshCache();
+    } catch (error) {
+      console.error("Error initializing symbol cache:", error);
+    }
   }
 
   async loadCache() {
@@ -228,13 +236,49 @@ class SymbolCache {
     return processed;
   }
 
+  async refreshCache() {
+    // Clear existing cache
+    this._objectIdMap.clear();
+
+    // Get all AL files in the workspace
+    const alFiles = await vscode.workspace.findFiles("**/*.al");
+
+    for (const file of alFiles) {
+      try {
+        const document = await vscode.workspace.openTextDocument(file);
+        this.processDocument(document);
+      } catch (error) {
+        console.error(`Error processing file ${file.fsPath}:`, error);
+      }
+    }
+  }
+
+  processDocument(document) {
+    const text = document.getText();
+
+    // Match object definitions (table, page, report, etc.)
+    const objectRegex = /(\w+)\s+(\d+)\s+"([^"]+)"/g;
+    let match;
+
+    while ((match = objectRegex.exec(text)) !== null) {
+      const [, , objectId, objectName] = match;
+      this._objectIdMap.set(objectName, objectId);
+      console.log(`Added to symbol cache: ${objectName} = ${objectId}`);
+    }
+  }
+
   getObjectInfo(objectName) {
     return this.symbols[objectName] || null;
   }
 
   getObjectId(objectName) {
-    const obj = this.getObjectInfo(objectName);
-    return obj ? obj.Id : null;
+    console.log(`Looking up: ${objectName} in cache`);
+    console.log(
+      `Cache contents: ${[...this._objectIdMap.entries()]
+        .map(([k, v]) => `${k}=${v}`)
+        .join(", ")}`
+    );
+    return this._objectIdMap.get(objectName);
   }
 }
 

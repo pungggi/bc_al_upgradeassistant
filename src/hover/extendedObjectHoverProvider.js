@@ -3,8 +3,11 @@ const symbolCache = require("../symbols/symbolCache");
 
 class ExtendedObjectHoverProvider {
   async provideHover(document, position) {
+    console.log("Hover provider triggered at position:", position);
+
     // Get the current line text
     const lineText = document.lineAt(position.line).text;
+    console.log("Line text:", lineText);
 
     // Regular expressions to match various extension types
     const extensionRegexes = [
@@ -15,6 +18,8 @@ class ExtendedObjectHoverProvider {
     for (const regex of extensionRegexes) {
       const match = lineText.match(regex);
       if (!match) continue;
+
+      console.log("Found match:", match);
 
       // Get the position of the extended object name
       const extendedNameStart = lineText.indexOf(
@@ -35,11 +40,13 @@ class ExtendedObjectHoverProvider {
 
         // Get the extended object name and look up its ID
         const objectName = match[2];
+        console.log("Looking up object ID for:", objectName);
         const objectId = symbolCache.getObjectId(objectName);
+        console.log("Found object ID:", objectId);
 
         const hoverContent = [
           `**${objectName}**`,
-          `Sweden${objectId ? ` (ID: ${objectId})` : ""}`,
+          `${objectId ? `ID ${objectId}` : ""}`,
         ];
 
         return new vscode.Hover(hoverContent, range);

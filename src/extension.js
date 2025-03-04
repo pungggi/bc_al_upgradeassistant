@@ -6,6 +6,9 @@ const fs = require("fs");
 const glob = require("glob").sync;
 const symbolCache = require("./symbolCache");
 const { readJsonFile } = require("./jsonUtils");
+const {
+  ExtendedObjectHoverProvider,
+} = require("./hover/extendedObjectHoverProvider");
 
 /**
  * Extension activation handler
@@ -22,6 +25,16 @@ async function activate(context) {
     await initializeSymbolCache(context, false);
 
     modelHelper.initializeModels();
+
+    // Register the hover provider for AL files
+    context.subscriptions.push(
+      vscode.languages.registerHoverProvider(
+        { scheme: "file", language: "al" },
+        new ExtendedObjectHoverProvider()
+      )
+    );
+
+    console.log("AL Extended Object Hover Provider registered");
 
     console.log("BC/AL Upgrade Assistant extension activated successfully");
   } catch (error) {
