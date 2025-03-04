@@ -90,9 +90,10 @@ Each prompt has the following properties:
 - `commandName`: A unique identifier for the prompt (no spaces)
 - `commandDescription`: A brief description of what the command does (shown in the selection dialog)
 - `model`: (Optional) Specific Claude model to use for this prompt (dropdown selection in settings UI)
-- `systemPrompt`: Instructions for the AI about its role (optional, falls back to default)
+- `systemPrompt`: (Optional) Instructions for the AI about its role
 - `userPrompt`: The actual prompt template. Use `{{code}}` where you want the selected code to be inserted
-- `example`: An optional example (not shown in the dialog but helps users understand the prompt)
+- `example`: (Optional) An example (not shown in the dialog but helps users understand the prompt)
+- `disabled`: (Optional) A boolean to disable the prompt without removing it from the settings
 
 **Note:** The extension will validate model names and fall back to your default model if an invalid model is specified.
 

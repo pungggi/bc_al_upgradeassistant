@@ -145,6 +145,11 @@
                   "Claude 3 Haiku - Original Haiku model"
                 ]
               },
+              "disabled": {
+                "type": "boolean",
+                "description": "Whether this prompt is disabled and should not appear in the selection dialog",
+                "default": false
+              },
               "systemPrompt": {
                 "type": "string",
                 "description": "System prompt for Claude API"

@@ -30,8 +30,18 @@ async function showPromptSelectionDialog() {
     return null;
   }
 
+  // Filter out disabled prompts
+  const enabledPrompts = prompts.filter((prompt) => prompt.disabled !== true);
+
+  if (enabledPrompts.length === 0) {
+    vscode.window.showInformationMessage(
+      "All configured prompts are disabled. Please enable at least one prompt in the settings."
+    );
+    return null;
+  }
+
   // Create QuickPick items from the available prompts
-  const promptItems = prompts.map((prompt) => ({
+  const promptItems = enabledPrompts.map((prompt) => ({
     label: prompt.commandName,
     description: prompt.commandDescription || prompt.userPrompt.split("\n")[0], // Use commandDescription if available, otherwise fall back to first line of userPrompt
     detail: "", // No longer showing example in the dialog
