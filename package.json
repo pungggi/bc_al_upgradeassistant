@@ -2,14 +2,10 @@
 	"name": "bc-al-upgradeassistant",
 	"displayName": "BC/AL Upgrade Assistant",
 	"description": "Assists you in transforming old C/AL and more",
-	"version": "0.0.8",
+	"version": "0.0.9",
 	"icon": "media/icon.png",
 	"publisher": "ngSoftware",
 	"author": "A. Pungitore <alessandro.pungitore@gmail.com>",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/pungggi/bc_al_upgradeassistant.git"
-	},
 	"engines": {
 		"vscode": "^1.80.0"
 	},
