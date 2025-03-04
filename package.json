@@ -175,7 +175,7 @@
   },
   "scripts": {
     "pre-publish": "node ./scripts/prepublish.js",
-    "after-publish": "node ./scripts/revert-main.js",
+    "after-publish": "node ./scripts/afterpublish.js",
     "publish": "npm run pre-publish && webpack --mode=production && vsce publish --allow-missing-repository && npm run after-publish"
   },
   "devDependencies": {
