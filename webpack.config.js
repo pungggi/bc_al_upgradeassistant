@@ -1,4 +1,5 @@
 const path = require("path");
+const JavaScriptObfuscator = require("webpack-obfuscator");
 
 module.exports = {
   entry: "./src/extension.js",
@@ -15,4 +16,14 @@ module.exports = {
   resolve: {
     extensions: [".js"],
   },
+  plugins: [
+    new JavaScriptObfuscator({
+      rotateStringArray: true,
+      stringArray: true,
+      stringArrayEncoding: ["base64"],
+      identifierNamesGenerator: "hexadecimal",
+      renameGlobals: false,
+      selfDefending: true,
+    }),
+  ],
 };
