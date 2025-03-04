@@ -2,6 +2,7 @@ const vscode = require("vscode");
 const modelHelper = require("./modelHelper");
 const configManager = require("./utils/configManager");
 const alFileSaver = require("./utils/alFileSaver");
+const { filterToIdRanges } = require("./utils/alCodeFilter");
 const {
   callClaudeApi,
   extractContentFromResponse,
@@ -77,8 +78,27 @@ async function executePrompt(prompt, code, progressCallback = null) {
       "You are an expert AL and C/AL programming assistant for Microsoft Dynamics 365 Business Central."
     );
 
+  // Apply ID range filtering if specified in the prompt
+  let processedCode = code;
+  if (prompt.idRangesOnly === true) {
+    if (progressCallback) {
+      progressCallback({
+        increment: 5,
+        message: "Filtering code to include only fields within ID ranges...",
+      });
+    }
+    processedCode = filterToIdRanges(code);
+
+    // If code was actually filtered, add a note about it
+    if (processedCode !== code) {
+      processedCode =
+        "// NOTE: This code has been filtered to include only fields within ID ranges specified in app.json\n" +
+        processedCode;
+    }
+  }
+
   // Replace placeholders in user prompt
-  let userPrompt = prompt.userPrompt.replace("{{code}}", code);
+  let userPrompt = prompt.userPrompt.replace("{{code}}", processedCode);
 
   // Replace language placeholder if present
   const defaultLanguage = configManager.getConfigValue(

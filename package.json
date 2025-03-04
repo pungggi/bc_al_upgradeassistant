@@ -2,7 +2,7 @@
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
   "description": "Assists you in transforming old C/AL and more",
-  "version": "0.0.31",
+  "version": "0.0.32",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
@@ -162,6 +162,11 @@
               "userPrompt": {
                 "type": "string",
                 "description": "User prompt template for Claude API"
+              },
+              "idRangesOnly": {
+                "type": "boolean",
+                "description": "Whether to filter table/page fields to include only those within app.json ID ranges",
+                "default": false
               },
               "example": {
                 "type": "string",
