@@ -2,7 +2,7 @@
 node_modules/
 
 # VS Code extension output directory
-out/
+dist/
 
 # Local development files
 .vscode/
@@ -19,6 +19,3 @@ out/
 # OS-specific files
 .DS_Store
 Thumbs.db
-
-# TypeScript (if you decide to use it in the future)
-*.tsbuildinfo
