@@ -17,3 +17,4 @@ media/**/*.ai
 .prettierrc
 .python-version
 cline_mcp_settings.json
+package.json
