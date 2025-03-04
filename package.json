@@ -169,6 +169,11 @@
               }
             }
           }
+        },
+        "bc-al-upgradeassistant.objectLocations": {
+          "type": "object",
+          "default": null,
+          "description": "Locations of different object types after extraction"
         }
       }
     }

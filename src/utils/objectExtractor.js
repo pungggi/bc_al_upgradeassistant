@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const vscode = require("vscode");
+const configManager = require("./configManager");
 
 /**
  * Extract individual C/AL objects from a text file containing multiple objects
@@ -36,6 +37,8 @@ async function extractObjects(
 
   // Keep track of object counts by type
   const objectCountsByType = {};
+  // Keep track of object locations by type
+  const objectLocationsByType = {};
 
   try {
     const content = fs.readFileSync(sourceFilePath, "utf8");
@@ -60,6 +63,9 @@ async function extractObjects(
             if (!fs.existsSync(targetFolder)) {
               fs.mkdirSync(targetFolder, { recursive: true });
             }
+
+            // Store location for this object type
+            objectLocationsByType[currentObjectType] = targetFolder;
 
             // Count objects by type
             if (!objectCountsByType[currentObjectType]) {
@@ -110,6 +116,9 @@ async function extractObjects(
           fs.mkdirSync(targetFolder, { recursive: true });
         }
 
+        // Store location for this object type
+        objectLocationsByType[currentObjectType] = targetFolder;
+
         // Count objects by type
         if (!objectCountsByType[currentObjectType]) {
           objectCountsByType[currentObjectType] = 1;
@@ -123,6 +132,28 @@ async function extractObjects(
       extractedFiles.push(filePath);
     }
 
+    // Save the object locations to configuration if organized by type
+    if (organizeByType && Object.keys(objectLocationsByType).length > 0) {
+      const locationData = {
+        basePath: outputFolderPath,
+        typeLocations: objectLocationsByType,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      try {
+        await configManager.updateConfig(
+          "objectLocations",
+          locationData.typeLocations
+        );
+        console.log(
+          "Object locations saved to VSCode settings:",
+          JSON.stringify(locationData, null, 2)
+        );
+      } catch (error) {
+        console.error("Error saving object locations to settings:", error);
+      }
+    }
+
     // Create a summary file with statistics
     const summaryFilePath = path.join(
       outputFolderPath,
@@ -133,6 +164,10 @@ async function extractObjects(
     summaryContent += `Source file: ${path.basename(sourceFilePath)}\n`;
     summaryContent += `Extraction date: ${new Date().toLocaleString()}\n\n`;
     summaryContent += `Total objects extracted: ${extractedFiles.length}\n\n`;
+
+    // Add base path information
+    summaryContent += `Base extraction path: ${outputFolderPath}\n\n`;
+
     summaryContent += `Objects by type:\n`;
 
     for (const type in objectCountsByType) {
@@ -144,6 +179,7 @@ async function extractObjects(
     return {
       files: extractedFiles,
       summaryFile: summaryFilePath,
+      objectLocations: objectLocationsByType,
     };
   } catch (error) {
     console.error("Error extracting objects:", error);
@@ -162,6 +198,31 @@ function getFileName(objectType, objectId, objectName) {
   // Clean object name for safe filename
   const cleanName = objectName.replace(/[<>:"/\\|?*]/g, "_").trim();
   return `${objectType}${objectId}_${cleanName}.txt`;
+}
+
+/**
+ * Get the locations of extracted objects by type
+ * @returns {Object|null} Object with location information or null if not available
+ */
+function getObjectLocationsByType() {
+  return configManager.getConfigValue("objectLocations", null);
+}
+
+/**
+ * Get the location for a specific object type
+ * @param {string} objectType - The object type to get location for (e.g., "Table", "Page")
+ * @returns {string|null} The path where objects of this type are stored, or null if not found
+ */
+function getLocationForObjectType(objectType) {
+  const locations = getObjectLocationsByType();
+  if (
+    locations &&
+    locations.typeLocations &&
+    locations.typeLocations[objectType]
+  ) {
+    return locations.typeLocations[objectType];
+  }
+  return null;
 }
 
 /**
@@ -287,4 +348,6 @@ async function extractObjectsWithDialog() {
 module.exports = {
   extractObjects,
   extractObjectsWithDialog,
+  getObjectLocationsByType,
+  getLocationForObjectType,
 };
