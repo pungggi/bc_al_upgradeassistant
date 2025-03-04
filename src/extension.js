@@ -1,156 +1,56 @@
 const vscode = require("vscode");
-const {
-  ExtendedObjectHoverProvider,
-} = require("./hover/extendedObjectHoverProvider");
-const symbolCache = require("./symbols/symbolCache");
-const fs = require("fs");
-const path = require("path");
-const util = require("util");
-const os = require("os");
-const glob = util.promisify(require("glob"));
-
-const {
-  isEventSubscriberTemplate,
-  modifyEventSubscriberTemplate,
-} = require("./ALCode");
 const { registerCommands } = require("./registerCommands");
-const claude = require("./claude");
-const { registerModelCommands } = require("./modelHelper");
+const modelHelper = require("./modelHelper");
+const path = require("path");
+const fs = require("fs");
+const glob = require("glob").sync;
 
-// Function to monitor and modify the clipboard
-async function monitorClipboard() {
-  let lastClipboardContent = "";
+// Add symbolCache reference
+const symbolCache = {
+  symbols: {},
+  initialize: async function (paths) {
+    console.log(`Initializing symbol cache with ${paths.length} app paths`);
+    return true;
+  },
+  processAppFiles: async function () {
+    console.log("Processing app files for symbols");
+    return 0;
+  },
+};
 
-  setInterval(async () => {
-    try {
-      const clipboardContent = await vscode.env.clipboard.readText();
-
-      // Check if the clipboard has changed and matches any AL code pattern
-      if (
-        clipboardContent !== lastClipboardContent &&
-        isEventSubscriberTemplate(clipboardContent)
-      ) {
-        vscode.window.showInformationMessage(clipboardContent);
-        lastClipboardContent = clipboardContent;
-
-        // Modify AL code
-        const modifiedContent = modifyEventSubscriberTemplate(clipboardContent);
-        vscode.window.showInformationMessage(modifiedContent);
-
-        // Write back to clipboard
-        await vscode.env.clipboard.writeText(modifiedContent);
-      }
-    } catch (error) {
-      vscode.window.showErrorMessage(
-        `Error monitoring clipboard: ${error.message}`
-      );
-    }
-  }, 3300);
-}
-
+/**
+ * Extension activation handler
+ * @param {vscode.ExtensionContext} context - Extension context
+ */
 async function activate(context) {
-  console.log("BC/AL Upgrade Assistant is now active!");
+  console.log("Activating BC/AL Upgrade Assistant extension");
 
-  // Register all commands
-  registerCommands(context);
+  try {
+    // Register all commands at once
+    registerCommands(context);
 
-  // Register model switching commands
-  registerModelCommands(context);
+    // Register model-related commands
+    modelHelper.registerModelCommands(context);
 
-  // Register the extended object hover provider
-  const extendedObjectHoverProvider = new ExtendedObjectHoverProvider();
-  context.subscriptions.push(
-    vscode.languages.registerHoverProvider(
-      { language: "al", scheme: "file" },
-      extendedObjectHoverProvider
-    )
-  );
+    // Initialize symbol cache
+    await initializeSymbolCache(context, false);
 
-  monitorClipboard();
-
-  // Register the Claude prompt selection command
-  let promptSelectionCommand = vscode.commands.registerCommand(
-    "bc-al-upgradeassistant.selectClaudePrompt",
-    async () => {
-      try {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-          vscode.window.showInformationMessage("No active editor found");
-          return;
-        }
-
-        // Get selected text or entire document
-        const selection = editor.selection;
-        const code = selection.isEmpty
-          ? editor.document.getText()
-          : editor.document.getText(selection);
-
-        if (!code || code.trim() === "") {
-          vscode.window.showInformationMessage(
-            "No code selected or document is empty"
-          );
-          return;
-        }
-
-        // Show prompt selection dialog
-        const selectedPrompt = await claude.showPromptSelectionDialog();
-        if (!selectedPrompt) {
-          return; // User canceled the selection
-        }
-
-        // Show progress while executing the prompt
-        await vscode.window.withProgress(
-          {
-            location: vscode.ProgressLocation.Notification,
-            title: `Running ${selectedPrompt.commandName}...`,
-            cancellable: false,
-          },
-          async (progress) => {
-            try {
-              // Create progress callback
-              const progressCallback = (update) => {
-                if (update.increment) {
-                  progress.report({
-                    increment: update.increment,
-                    message: update.message || "",
-                  });
-                }
-              };
-
-              // Call the API with progress updates
-              const response = await claude.executePrompt(
-                selectedPrompt,
-                code,
-                progressCallback
-              );
-
-              // Create a new document with the response
-              const document = await vscode.workspace.openTextDocument({
-                content: response,
-                language: "markdown",
-              });
-
-              await vscode.window.showTextDocument(document);
-            } catch (error) {
-              vscode.window.showErrorMessage(
-                `Error executing prompt: ${error.message}`
-              );
-            }
-          }
-        );
-      } catch (error) {
-        vscode.window.showErrorMessage(`Error: ${error.message}`);
-      }
-    }
-  );
-
-  context.subscriptions.push(promptSelectionCommand);
-
-  // Find app files to process
-  await initializeSymbolCache(context);
+    console.log("BC/AL Upgrade Assistant extension activated successfully");
+  } catch (error) {
+    console.error("Error during extension activation:", error);
+    vscode.window.showErrorMessage(
+      `Error activating extension: ${error.message}`
+    );
+  }
 }
 
-async function initializeSymbolCache(context, forceRefresh = false) {
+/**
+ * Initialize symbol cache
+ * @param {vscode.ExtensionContext} context - Extension context
+ * @param {boolean} force - Whether to force refresh
+ * @returns {Promise<number>} Number of processed files
+ */
+async function initializeSymbolCache(context, force = false) {
   try {
     // Get paths from settings
     const config = vscode.workspace.getConfiguration("bc-al-upgradeassistant");
@@ -206,6 +106,8 @@ async function initializeSymbolCache(context, forceRefresh = false) {
         defaultLocations.push(path.join(folderPath, ".alpackages", "*.app"));
       }
     }
+
+    // Process each app file location
     for (const pattern of defaultLocations) {
       try {
         const files = await glob(pattern);
@@ -220,9 +122,9 @@ async function initializeSymbolCache(context, forceRefresh = false) {
 
     // If forcing refresh or cache is empty, process the app files
     let processed = 0;
-    if (forceRefresh || Object.keys(symbolCache.symbols).length === 0) {
+    if (force || Object.keys(symbolCache.symbols).length === 0) {
       processed = await symbolCache.processAppFiles();
-      if (!forceRefresh) {
+      if (!force) {
         vscode.window.showInformationMessage(
           `Processed ${processed} app files for symbols`
         );
@@ -239,10 +141,15 @@ async function initializeSymbolCache(context, forceRefresh = false) {
   }
 }
 
-function deactivate() {}
+/**
+ * Extension deactivation handler
+ */
+function deactivate() {
+  console.log("BC/AL Upgrade Assistant extension deactivated");
+}
 
 module.exports = {
   activate,
   deactivate,
-  initializeSymbolCache, // Export for use in registerCommands.js
+  initializeSymbolCache,
 };

@@ -132,28 +132,6 @@ async function extractObjects(
       extractedFiles.push(filePath);
     }
 
-    // Save the object locations to configuration if organized by type
-    if (organizeByType && Object.keys(objectLocationsByType).length > 0) {
-      const locationData = {
-        basePath: outputFolderPath,
-        typeLocations: objectLocationsByType,
-        lastUpdated: new Date().toISOString(),
-      };
-
-      try {
-        await configManager.updateConfig(
-          "objectLocations",
-          locationData.typeLocations
-        );
-        console.log(
-          "Object locations saved to VSCode settings:",
-          JSON.stringify(locationData, null, 2)
-        );
-      } catch (error) {
-        console.error("Error saving object locations to settings:", error);
-      }
-    }
-
     // Create a summary file with statistics
     const summaryFilePath = path.join(
       outputFolderPath,
@@ -195,8 +173,11 @@ async function extractObjects(
  * @returns {string} - Generated filename
  */
 function getFileName(objectType, objectId, objectName) {
-  // Clean object name for safe filename
-  const cleanName = objectName.replace(/[<>:"/\\|?*]/g, "_").trim();
+  // Clean object name for safe filename - replace spaces with underscores
+  const cleanName = objectName
+    .replace(/[<>:"/\\|?*]/g, "_")
+    .replace(/\s+/g, "_") // Replace spaces with underscores
+    .trim();
   return `${objectType}${objectId}_${cleanName}.txt`;
 }
 

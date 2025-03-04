@@ -1,227 +1,306 @@
 const vscode = require("vscode");
-const axios = require("axios");
+const path = require("path");
+const modelHelper = require("./modelHelper");
+const configManager = require("./utils/configManager");
+const alFileSaver = require("./utils/alFileSaver");
 const {
-  CLAUDE_MODELS,
-  isValidModel,
-  getDefaultModel,
-  getModelFriendlyName,
-} = require("./modelHelper");
+  callClaudeApi,
+  extractContentFromResponse,
+} = require("./utils/claudeApiHelper");
 
 /**
- * Get available Claude prompts from the extension configuration
- * @returns {Array} Array of prompt configurations
+ * Get available prompts from extension configuration
+ * @returns {Array} Array of prompt objects
  */
 function getAvailablePrompts() {
-  const config = vscode.workspace.getConfiguration("bc-al-upgradeassistant");
-  return config.get("claude.prompts") || [];
+  const configPrompts = configManager.getConfigValue("claude.prompts", []);
+
+  // Filter out disabled prompts
+  return configPrompts.filter((prompt) => !prompt.disabled);
 }
 
 /**
- * Show a quick pick dialog to select a prompt command
- * @returns {Promise<Object|null>} Selected prompt or null if canceled
+ * Display a prompt selection dialog
+ * @returns {Promise<Object|null>} Selected prompt or null if cancelled
  */
 async function showPromptSelectionDialog() {
   const prompts = getAvailablePrompts();
 
-  if (!prompts || prompts.length === 0) {
-    vscode.window.showInformationMessage(
-      "No prompts are configured. Please add prompts in the settings."
+  if (prompts.length === 0) {
+    vscode.window.showWarningMessage(
+      "No Claude prompts configured. Please check your extension settings."
     );
     return null;
   }
 
-  // Filter out disabled prompts
-  const enabledPrompts = prompts.filter((prompt) => prompt.disabled !== true);
-
-  if (enabledPrompts.length === 0) {
-    vscode.window.showInformationMessage(
-      "All configured prompts are disabled. Please enable at least one prompt in the settings."
-    );
-    return null;
-  }
-
-  // Create QuickPick items from the available prompts
-  const promptItems = enabledPrompts.map((prompt) => ({
+  const items = prompts.map((prompt) => ({
     label: prompt.commandName,
-    description: prompt.commandDescription || prompt.userPrompt.split("\n")[0], // Use commandDescription if available, otherwise fall back to first line of userPrompt
-    detail: "", // No longer showing example in the dialog
+    description: prompt.commandDescription || "",
     prompt: prompt,
   }));
 
-  // Show quick pick dialog
-  const selection = await vscode.window.showQuickPick(promptItems, {
-    placeHolder: "Select a Claude prompt to execute",
-    matchOnDescription: true,
-    matchOnDetail: false,
+  const selected = await vscode.window.showQuickPick(items, {
+    placeHolder: "Select an operation to perform on your code",
+    title: "Claude Assistance",
   });
 
-  return selection ? selection.prompt : null;
+  return selected ? selected.prompt : null;
 }
 
 /**
- * Execute the selected prompt with Claude API
- * @param {Object} prompt The selected prompt configuration
- * @param {string} code The code to process with the prompt
- * @param {Function} progressCallback Optional callback for progress updates
- * @returns {Promise<string>} The response from Claude
+ * Execute a prompt with the AI model
+ * @param {Object} prompt - The prompt to execute
+ * @param {string} code - The code to process
+ * @param {Function} progressCallback - Callback for progress updates
+ * @returns {Promise<string>} Response from the AI
  */
-async function executePrompt(prompt, code, progressCallback) {
-  // Get the API key and configuration
-  const config = vscode.workspace.getConfiguration("bc-al-upgradeassistant");
-  const apiKey = config.get("claude.apiKey");
-  const defaultSystemPrompt = config.get("claude.defaultSystemPrompt");
-  const defaultLanguage = config.get("claude.defaultLanguage");
-
-  // Get the model - use prompt-specific model if available, otherwise use the default
-  const defaultModel = getDefaultModel();
-  let useModel = prompt.model || defaultModel;
-
-  // Validate model name
-  if (!isValidModel(useModel)) {
-    console.warn(
-      `Unrecognized Claude model: "${useModel}", falling back to default model "${defaultModel}"`
-    );
-    vscode.window.showWarningMessage(
-      `Unrecognized Claude model: "${useModel}", falling back to default model.`
-    );
-    useModel = defaultModel;
-  }
+async function executePrompt(prompt, code, progressCallback = null) {
+  // Get API key from configuration
+  const apiKey = configManager.getConfigValue("claude.apiKey");
 
   if (!apiKey || apiKey === "your-claude-api-key") {
     throw new Error(
-      "Claude API key is not configured. Please set it in the extension settings."
+      "Claude API key not configured. Please update your settings."
     );
   }
 
-  // Replace tokens in the prompt with actual code and language
-  let userPrompt = prompt.userPrompt.replace("{{code}}", code);
-  userPrompt = userPrompt.replace(/{{language}}/g, defaultLanguage);
+  // Get the model to use (from prompt or default)
+  const modelId = prompt.model || configManager.getConfigValue("claude.model");
+  const model =
+    modelHelper.availableModels.find((m) => m.id === modelId) ||
+    modelHelper.getCurrentModel();
 
-  // Use the provided system prompt or fall back to the default
-  const systemPrompt = prompt.systemPrompt || defaultSystemPrompt;
+  // Get system prompt
+  const systemPrompt =
+    prompt.systemPrompt ||
+    configManager.getConfigValue(
+      "claude.defaultSystemPrompt",
+      "You are an expert AL and C/AL programming assistant for Microsoft Dynamics 365 Business Central."
+    );
+
+  // Replace placeholders in user prompt
+  let userPrompt = prompt.userPrompt.replace("{{code}}", code);
+
+  // Replace language placeholder if present
+  const defaultLanguage = configManager.getConfigValue(
+    "claude.defaultLanguage",
+    "en-US"
+  );
+  userPrompt = userPrompt.replace("{{language}}", defaultLanguage);
+
+  // Report initial progress
+  if (progressCallback) {
+    progressCallback({
+      increment: 10,
+      message: "Sending request to Claude API...",
+    });
+  }
 
   try {
+    // Get maximum tokens and temperature from config or use defaults
+    const maxTokens = configManager.getConfigValue("claude.maxTokens", 4096);
+    const temperature = configManager.getConfigValue("claude.temperature", 0.7);
+
     if (progressCallback) {
       progressCallback({
-        increment: 5,
-        message: `Using ${getModelFriendlyName(useModel)}...`,
+        increment: 20,
+        message: `Processing with ${model.name}...`,
       });
     }
 
-    // Prepare request to Claude API
-    const response = await callClaudeAPI(
+    // Make the API call to Claude
+    const response = await callClaudeApi({
       apiKey,
+      model: model.apiName,
       systemPrompt,
       userPrompt,
-      useModel,
-      progressCallback
-    );
-    return response;
-  } catch (error) {
-    console.error("Error calling Claude API:", error);
+      maxTokens,
+      temperature,
+    });
 
-    // Provide more helpful error messages
-    if (error.response) {
-      const status = error.response.status;
-      if (status === 401) {
-        throw new Error(
-          "Authentication failed. Please check your Claude API key."
-        );
-      } else if (status === 429) {
-        throw new Error("Rate limit exceeded. Please try again later.");
-      } else if (status === 500) {
-        throw new Error("Claude API server error. Please try again later.");
-      } else {
-        throw new Error(
-          `Claude API error (${status}): ${
-            error.response.data.error?.message || "Unknown error"
-          }`
-        );
-      }
+    if (progressCallback) {
+      progressCallback({ increment: 60, message: "Processing response..." });
     }
 
-    throw new Error(`Error: ${error.message || "Unknown error occurred"}`);
+    // Extract the content from the response
+    const content = extractContentFromResponse(response);
+
+    if (progressCallback) {
+      progressCallback({ increment: 10, message: "Completed" });
+    }
+
+    return content;
+  } catch (error) {
+    throw new Error(`Error calling Claude API: ${error.message}`);
   }
 }
 
 /**
- * Call the Claude API with the given prompts
- * @param {string} apiKey The Claude API key
- * @param {string} systemPrompt System instructions for Claude
- * @param {string} userPrompt The user's message
- * @param {string} model Claude model to use
- * @param {Function} progressCallback Optional callback for progress updates
- * @returns {Promise<string>} Claude's response
+ * Extract and save all AL code blocks from a response
+ * @param {string} content - The response content to extract code from
+ * @returns {Promise<string[]>} - Array of saved file paths
  */
-async function callClaudeAPI(
-  apiKey,
-  systemPrompt,
-  userPrompt,
-  model,
-  progressCallback
-) {
-  // Claude API endpoint
-  const apiUrl = "https://api.anthropic.com/v1/messages";
+async function extractAndSaveAlCodeBlocks(content) {
+  // Extract all AL code blocks
+  const alBlocks = alFileSaver.extractAlCodeFromMarkdown(content);
 
-  // Headers for Claude API
-  const headers = {
-    "Content-Type": "application/json",
-    "x-api-key": apiKey,
-    "anthropic-version": "2023-06-01",
-  };
+  if (alBlocks.length === 0) {
+    throw new Error("No AL code blocks found in the response");
+  }
 
-  // Request body
-  const requestBody = {
-    model: model, // Use the specified model
-    max_tokens: 4000,
-    messages: [
-      {
-        role: "user",
-        content: userPrompt,
-      },
-    ],
-    system: systemPrompt,
-  };
+  const savedFiles = [];
 
-  // If progress callback is provided, update the progress
-  if (progressCallback) {
-    progressCallback({
-      increment: 10,
-      message: `Sending request to Claude (${model})...`,
+  // If there's only one block, save it directly
+  if (alBlocks.length === 1) {
+    try {
+      const filePath = await alFileSaver.saveAlCodeToFile(alBlocks[0]);
+      if (filePath) {
+        savedFiles.push(filePath);
+      }
+    } catch (error) {
+      throw new Error(`Failed to save AL code: ${error.message}`);
+    }
+    return savedFiles;
+  }
+
+  // If there are multiple blocks, handle them based on settings
+  const saveMode = configManager.getConfigValue("claude.codeSaveMode", "ask");
+
+  if (saveMode === "saveAll") {
+    // Save all code blocks automatically
+    for (const block of alBlocks) {
+      try {
+        const filePath = await alFileSaver.saveAlCodeToFile(block);
+        if (filePath) {
+          savedFiles.push(filePath);
+        }
+      } catch (error) {
+        // Log the error but continue with other blocks
+        vscode.window.showWarningMessage(
+          `Failed to save one block: ${error.message}`
+        );
+      }
+    }
+  } else if (saveMode === "ask") {
+    // Let user select which blocks to save
+    const items = alBlocks.map((block, index) => {
+      const info = alFileSaver.identifyAlObjectInfo(block) || {
+        type: "Unknown",
+        name: `Block ${index + 1}`,
+      };
+      return {
+        label: `${info.type || "Object"} ${info.name || `#${index + 1}`}`,
+        description: `${block.split("\n")[0].substring(0, 50)}...`,
+        code: block,
+        picked: alBlocks.length === 1, // Pre-select if there's only one
+      };
     });
-  }
 
-  // Send the request to Claude API
-  const response = await axios.post(apiUrl, requestBody, { headers });
-
-  if (progressCallback) {
-    progressCallback({
-      increment: 90,
-      message: "Processing Claude's response...",
+    const selectedItems = await vscode.window.showQuickPick(items, {
+      placeHolder: "Select AL code blocks to save",
+      canPickMany: true,
     });
+
+    if (selectedItems && selectedItems.length > 0) {
+      for (const item of selectedItems) {
+        try {
+          const filePath = await alFileSaver.saveAlCodeToFile(item.code);
+          if (filePath) {
+            savedFiles.push(filePath);
+          }
+        } catch (error) {
+          vscode.window.showWarningMessage(
+            `Failed to save one block: ${error.message}`
+          );
+        }
+      }
+    }
   }
 
-  // Extract and format the response
-  if (
-    response.data &&
-    response.data.content &&
-    response.data.content.length > 0
-  ) {
-    // Process all content blocks and join them
-    const formattedResponse = response.data.content
-      .filter((block) => block.type === "text")
-      .map((block) => block.text)
-      .join("\n\n");
+  return savedFiles;
+}
 
-    return formattedResponse;
+/**
+ * Save AL code extracted from Claude response
+ */
+async function saveAlCodeFromResponse() {
+  try {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      throw new Error("No active editor found");
+    }
+
+    // Get the content
+    const content = editor.document.getText();
+
+    // Extract and save all AL code blocks
+    const savedFiles = await extractAndSaveAlCodeBlocks(content);
+
+    if (savedFiles.length === 0) {
+      vscode.window.showInformationMessage("No files were saved");
+      return;
+    }
+
+    if (savedFiles.length === 1) {
+      vscode.window.showInformationMessage(
+        `AL code saved to: ${savedFiles[0]}`
+      );
+
+      // Open the saved file
+      const document = await vscode.workspace.openTextDocument(savedFiles[0]);
+      await vscode.window.showTextDocument(document);
+    } else {
+      vscode.window.showInformationMessage(
+        `${savedFiles.length} AL code files saved successfully`
+      );
+
+      // Ask if user wants to open any of the saved files
+      const openFile = await vscode.window.showQuickPick(
+        [
+          { label: "Yes", description: "Open the saved files" },
+          { label: "No", description: "Don't open any files" },
+        ],
+        { placeHolder: "Do you want to open the saved files?" }
+      );
+
+      if (openFile && openFile.label === "Yes") {
+        // If multiple files, let user choose which one to open
+        if (savedFiles.length > 1) {
+          const fileItems = savedFiles.map((file) => ({
+            label: path.basename(file),
+            description: file,
+            filePath: file,
+          }));
+
+          const selectedFile = await vscode.window.showQuickPick(fileItems, {
+            placeHolder: "Select file to open",
+            canPickMany: false,
+          });
+
+          if (selectedFile) {
+            const document = await vscode.workspace.openTextDocument(
+              selectedFile.filePath
+            );
+            await vscode.window.showTextDocument(document);
+          }
+        } else {
+          // Open the single file
+          const document = await vscode.workspace.openTextDocument(
+            savedFiles[0]
+          );
+          await vscode.window.showTextDocument(document);
+        }
+      }
+    }
+  } catch (error) {
+    vscode.window.showErrorMessage(`Error saving AL code: ${error.message}`);
   }
-
-  return "No response content received from Claude.";
 }
 
 module.exports = {
   getAvailablePrompts,
   showPromptSelectionDialog,
   executePrompt,
-  callClaudeAPI,
+  saveAlCodeFromResponse,
+  extractAndSaveAlCodeBlocks,
 };

@@ -12,30 +12,30 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onLanguage:al"
   ],
   "main": "./src/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "bc-al-upgradeassistant.refreshSymbolCache",
-        "title": "Refresh Symbol Cache",
-        "category": "BC AL Upgrade Assistant"
+        "title": "BC/AL: Refresh Symbol Cache"
       },
       {
         "command": "bc-al-upgradeassistant.splitCalObjects",
-        "title": "Split C/AL Objects from File",
-        "category": "BC AL Upgrade Assistant"
+        "title": "BC/AL: Split C/AL Objects"
       },
       {
         "command": "bc-al-upgradeassistant.selectClaudePrompt",
-        "title": "Run Claude AI Prompt",
-        "category": "BC AL Upgrade Assistant"
+        "title": "BC/AL: Analyze Code with Claude"
       },
       {
-        "command": "bc-al-upgradeassistant.setDefaultModel",
-        "title": "Set Default Claude Model",
-        "category": "BC AL Upgrade Assistant"
+        "command": "bc-al-upgradeassistant.selectModel",
+        "title": "BC/AL: Select AI Model"
+      },
+      {
+        "command": "bc-al-upgradeassistant.saveAlCodeFromResponse",
+        "title": "BC/AL: Save AL Code From Response"
       }
     ],
     "menus": {
@@ -170,28 +170,77 @@
             }
           }
         },
+        "bc-al-upgradeassistant.claude.autoSaveAlCode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically save AL code blocks from Claude responses"
+        },
+        "bc-al-upgradeassistant.claude.codeSaveMode": {
+          "type": "string",
+          "default": "ask",
+          "enum": [
+            "ask",
+            "saveAll"
+          ],
+          "enumDescriptions": [
+            "Ask which code blocks to save",
+            "Save all code blocks automatically"
+          ],
+          "description": "How to handle multiple AL code blocks in the response"
+        },
         "bc-al-upgradeassistant.objectLocations": {
           "type": "object",
-          "default": null,
-          "description": "Locations of different object types after extraction"
+          "default": {
+            "table": "",
+            "page": "",
+            "codeunit": "",
+            "report": "",
+            "query": "",
+            "xmlport": "",
+            "enum": "",
+            "permissionset": "",
+            "tableextension": "",
+            "pageextension": "",
+            "default": ""
+          },
+          "description": "Locations where to save extracted AL objects by type",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "bc-al-upgradeassistant.selectedModel": {
+          "type": "string",
+          "default": "claude-3-sonnet-20240229",
+          "description": "Selected AI model for code generation and analysis"
         }
       }
     }
   },
   "scripts": {
+    "lint": "eslint .",
+    "pretest": "npm run lint",
+    "test": "node ./test/runTest.js",
     "pre-publish": "node ./scripts/prepublish.js",
     "after-publish": "node ./scripts/afterpublish.js",
     "publish": "npm run pre-publish && webpack --mode=production && vsce publish --allow-missing-repository && npm run after-publish"
   },
   "devDependencies": {
-    "@types/vscode": "^1.80.0",
+    "@types/glob": "^7.1.3",
+    "@types/mocha": "^8.0.4",
+    "@types/node": "^12.11.7",
+    "@types/vscode": "^1.60.0",
+    "eslint": "^7.19.0",
+    "glob": "^7.1.6",
+    "mocha": "^8.2.1",
+    "typescript": "^4.1.3",
+    "vscode-test": "^1.5.0",
     "javascript-obfuscator": "^4.1.1",
     "webpack": "^5.98.0",
     "webpack-cli": "^6.0.1",
     "webpack-obfuscator": "^3.5.1"
   },
   "dependencies": {
-    "7zip-bin": "^5.2.0",
+    "7zip-bin": "^5.1.1",
     "axios": "^1.6.0",
     "glob": "^7.2.3",
     "node-7z": "^3.0.0"
