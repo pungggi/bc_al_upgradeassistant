@@ -1,6 +1,7 @@
 const vscode = require("vscode");
 const configManager = require("./utils/configManager");
 const { getModelDataFromPackage } = require("./utils/packageReader");
+const { EXTENSION_ID } = require("./constants");
 
 /**
  * Get available AI models from package.json configuration
@@ -50,7 +51,7 @@ function initializeModels() {
  */
 function getDefaultModel() {
   const defaultModelId = vscode.workspace
-    .getConfiguration("bc-al-upgradeassistant")
+    .getConfiguration(`${EXTENSION_ID}`)
     .get("claude.model");
 
   const model = availableModels.find((m) => m.id === defaultModelId);

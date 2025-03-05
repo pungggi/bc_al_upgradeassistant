@@ -88,13 +88,6 @@ async function executePrompt(prompt, code, progressCallback = null) {
       });
     }
     processedCode = filterToIdRanges(code);
-
-    // If code was actually filtered, add a note about it
-    if (processedCode !== code) {
-      processedCode =
-        "// NOTE: This code has been filtered to include only fields within ID ranges specified in app.json\n" +
-        processedCode;
-    }
   }
 
   // Replace placeholders in user prompt
@@ -118,7 +111,7 @@ async function executePrompt(prompt, code, progressCallback = null) {
   try {
     // Get maximum tokens and temperature from config or use defaults
     const maxTokens = configManager.getConfigValue("claude.maxTokens", 4096);
-    const temperature = configManager.getConfigValue("claude.temperature", 0.7);
+    const temperature = configManager.getConfigValue("claude.temperature", 0.5);
 
     if (progressCallback) {
       progressCallback({

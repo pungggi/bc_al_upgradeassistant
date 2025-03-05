@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const vscode = require("vscode");
+const { EXTENSION_ID, PUBLISHER } = require("../constants");
 
 /**
  * Read the package.json file directly
@@ -10,7 +11,7 @@ function readPackageJson() {
   try {
     // Get the extension's directory path
     const extensionPath = vscode.extensions.getExtension(
-      "ngSoftware.bc-al-upgradeassistant"
+      `${PUBLISHER}.${EXTENSION_ID}`
     )?.extensionPath;
 
     if (!extensionPath) {
@@ -55,7 +56,7 @@ function getModelDataFromPackage() {
 
     const modelProperty =
       packageJson.contributes.configuration.properties[
-        "bc-al-upgradeassistant.claude.model"
+        `${EXTENSION_ID}.claude.model`
       ];
 
     if (

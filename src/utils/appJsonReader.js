@@ -3,6 +3,9 @@ const fs = require("fs");
 const path = require("path");
 const { readJsonFile } = require("../jsonUtils");
 
+// Default ID range to use when no ranges are defined
+const DEFAULT_ID_RANGE = [{ from: 50000, to: 59000 }];
+
 /**
  * Find app.json file in the workspace
  * @returns {string|null} Path to app.json or null if not found
@@ -50,15 +53,19 @@ function getIdRanges() {
     const appJsonPath = findAppJsonFile();
     if (!appJsonPath) {
       console.warn("No app.json file found in workspace");
-      return [];
+      return DEFAULT_ID_RANGE;
     }
 
     const appJson = readJsonFile(appJsonPath);
 
     // Extract idRanges from app.json
-    if (!appJson.idRanges || !Array.isArray(appJson.idRanges)) {
-      console.warn("No idRanges found in app.json");
-      return [];
+    if (
+      !appJson.idRanges ||
+      !Array.isArray(appJson.idRanges) ||
+      appJson.idRanges.length === 0
+    ) {
+      console.warn("No idRanges found in app.json, using default range.");
+      return DEFAULT_ID_RANGE;
     }
 
     // Validate and convert ranges
@@ -73,7 +80,7 @@ function getIdRanges() {
       );
   } catch (error) {
     console.error("Error reading ID ranges from app.json:", error);
-    return [];
+    return DEFAULT_ID_RANGE;
   }
 }
 

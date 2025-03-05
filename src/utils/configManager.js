@@ -1,4 +1,5 @@
 const vscode = require("vscode");
+const { EXTENSION_ID } = require("../constants");
 
 /**
  * Get a configuration value from VSCode settings
@@ -7,7 +8,7 @@ const vscode = require("vscode");
  * @returns {any} - The setting value or default
  */
 function getConfigValue(key, defaultValue = null) {
-  const config = vscode.workspace.getConfiguration("bc-al-upgradeassistant");
+  const config = vscode.workspace.getConfiguration(EXTENSION_ID);
   return config.get(key, defaultValue);
 }
 
@@ -19,7 +20,7 @@ function getConfigValue(key, defaultValue = null) {
  * @returns {Promise<void>}
  */
 async function updateConfig(key, value, global = false) {
-  const config = vscode.workspace.getConfiguration("bc-al-upgradeassistant");
+  const config = vscode.workspace.getConfiguration(EXTENSION_ID);
   const target = global
     ? vscode.ConfigurationTarget.Global
     : vscode.ConfigurationTarget.Workspace;

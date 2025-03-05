@@ -4,6 +4,7 @@ const path = require("path");
 const claude = require("./claude");
 const configManager = require("./utils/configManager");
 const { registerCommandOnce } = require("./utils/commandHelper");
+const { EXTENSION_ID } = require("./constants");
 
 function registerCommands(context) {
   registerRefreshSymbolCacheCommand(context);
@@ -15,7 +16,7 @@ function registerCommands(context) {
 function registerRefreshSymbolCacheCommand(context) {
   registerCommandOnce(
     context,
-    "bc-al-upgradeassistant.refreshSymbolCache",
+    `${EXTENSION_ID}.refreshSymbolCache`,
     async () => {
       try {
         const extension = require("./extension");
@@ -35,7 +36,7 @@ function registerRefreshSymbolCacheCommand(context) {
 function registerSplitCalObjectsCommand(context) {
   registerCommandOnce(
     context,
-    "bc-al-upgradeassistant.splitCalObjects",
+    `${EXTENSION_ID}.splitCalObjects`,
     extractObjectsWithDialog
   );
 }
@@ -43,7 +44,7 @@ function registerSplitCalObjectsCommand(context) {
 function registerPromptClaudeCommand(context) {
   registerCommandOnce(
     context,
-    "bc-al-upgradeassistant.selectClaudePrompt",
+    `${EXTENSION_ID}.selectClaudePrompt`,
     async () => {
       try {
         // Get the active editor
@@ -246,18 +247,14 @@ function registerModelCommands(context) {
   const modelHelper = require("./modelHelper");
 
   // Command to select model
-  registerCommandOnce(
-    context,
-    "bc-al-upgradeassistant.selectModel",
-    async () => {
-      const selectedModel = await modelHelper.selectModel();
-      if (selectedModel) {
-        vscode.window.showInformationMessage(
-          `Model set to ${selectedModel.name}`
-        );
-      }
+  registerCommandOnce(context, `${EXTENSION_ID}.selectModel`, async () => {
+    const selectedModel = await modelHelper.selectModel();
+    if (selectedModel) {
+      vscode.window.showInformationMessage(
+        `Model set to ${selectedModel.name}`
+      );
     }
-  );
+  });
 }
 
 module.exports = {

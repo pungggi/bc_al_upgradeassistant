@@ -9,13 +9,14 @@ const { readJsonFile } = require("./jsonUtils");
 const {
   ExtendedObjectHoverProvider,
 } = require("./hover/extendedObjectHoverProvider");
+const { EXTENSION_ID } = require("./constants");
 
 /**
  * Extension activation handler
  * @param {vscode.ExtensionContext} context - Extension context
  */
 async function activate(context) {
-  console.log("Activating BC/AL Upgrade Assistant extension");
+  console.log(`Activating ${EXTENSION_ID} extension`);
 
   try {
     // Register all commands at once
@@ -36,7 +37,7 @@ async function activate(context) {
 
     console.log("AL Extended Object Hover Provider registered");
 
-    console.log("BC/AL Upgrade Assistant extension activated successfully");
+    console.log(`${EXTENSION_ID} extension activated successfully`);
   } catch (error) {
     console.error("Error during extension activation:", error);
     vscode.window.showErrorMessage(
@@ -144,7 +145,7 @@ async function initializeSymbolCache(context, force = false) {
  * Extension deactivation handler
  */
 function deactivate() {
-  console.log("BC/AL Upgrade Assistant extension deactivated");
+  console.log(`${EXTENSION_ID} extension deactivated`);
 }
 
 module.exports = {
