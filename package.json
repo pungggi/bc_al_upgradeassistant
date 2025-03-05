@@ -72,6 +72,20 @@
             "Claude Instant - Low-latency model for simple tasks"
           ]
         },
+        "bc-al-upgradeassistant.claude.maxTokens": {
+          "type": "number",
+          "default": 4096,
+          "minimum": 1,
+          "maximum": 200000,
+          "description": "Maximum number of tokens Claude can generate in a response"
+        },
+        "bc-al-upgradeassistant.claude.temperature": {
+          "type": "number",
+          "default": 0.2,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Temperature parameter for Claude API (0-1). Lower values produce more deterministic outputs, higher values more creative ones."
+        },
         "bc-al-upgradeassistant.claude.defaultSystemPrompt": {
           "type": "string",
           "default": "You are an expert AL and C/AL programming assistant for Microsoft Dynamics 365 Business Central. Provide accurate, concise, and helpful responses focused on best practices.",
@@ -192,6 +206,11 @@
             "Save all code blocks automatically"
           ],
           "description": "How to handle multiple AL code blocks in the response"
+        },
+        "bc-al-upgradeassistant.claude.debugMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "When enabled, shows the prompt being sent to the Claude API in an editor window"
         },
         "bc-al-upgradeassistant.objectLocations": {
           "type": "object",

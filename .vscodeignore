@@ -3,6 +3,7 @@
 .gitignore
 test/**
 node_modules/**
+scripts/**
 src/**
 webpack.*.js
 *.vsix
@@ -13,7 +14,4 @@ media/**/*.ai
 **/*.map
 **/*.ts
 !dist/**
-.eslintrc.json
-.prettierrc
-.python-version
-cline_mcp_settings.json
+eslint.config.mjs

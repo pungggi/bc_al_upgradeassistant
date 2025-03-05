@@ -100,6 +100,45 @@ async function executePrompt(prompt, code, progressCallback = null) {
   );
   userPrompt = userPrompt.replace("{{language}}", defaultLanguage);
 
+  // Check if debug mode is enabled
+  const debugMode = configManager.getConfigValue("claude.debugMode", false);
+  if (debugMode) {
+    // Create debug content showing what will be sent to the API
+    const debugContent = `# Claude API Debug - ${prompt.commandName}
+    
+## Model
+${model.name} (${model.apiName})
+
+## System Prompt
+\`\`\`
+${systemPrompt}
+\`\`\`
+
+## User Prompt
+\`\`\`
+${userPrompt}
+\`\`\`
+
+## Configuration
+- Max Tokens: ${configManager.getConfigValue("claude.maxTokens", 4096)}
+- Temperature: ${configManager.getConfigValue("claude.temperature", 0.5)}
+- ID Ranges Only: ${prompt.idRangesOnly === true ? "Yes" : "No"}
+`;
+
+    // Show debug information in a new document
+    const document = await vscode.workspace.openTextDocument({
+      content: debugContent,
+      language: "markdown",
+    });
+
+    await vscode.window.showTextDocument(document, {
+      viewColumn: vscode.ViewColumn.Beside,
+      preserveFocus: true, // Keep focus on the original editor
+    });
+
+    // Removed the confirmation dialog - API call will proceed automatically
+  }
+
   // Report initial progress
   if (progressCallback) {
     progressCallback({

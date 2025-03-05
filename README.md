@@ -22,9 +22,15 @@ This extension contributes the following settings:
 
 - `bc-al-upgradeassistant.claude.apiKey`: API Key for accessing Claude API
 - `bc-al-upgradeassistant.claude.model`: Claude model to use for API requests
+- `bc-al-upgradeassistant.claude.maxTokens`: Maximum number of tokens Claude can generate (default: 4096)
+- `bc-al-upgradeassistant.claude.temperature`: Creativity control (0-1), lower values produce more deterministic outputs (default: 0.5)
 - `bc-al-upgradeassistant.claude.defaultSystemPrompt`: Default system prompt to use with Claude API
 - `bc-al-upgradeassistant.claude.defaultLanguage`: Default language code (e.g., "de-DE") to use in prompts as the translation language
 - `bc-al-upgradeassistant.claude.prompts`: Collection of prompts for Claude API
+- `bc-al-upgradeassistant.claude.autoSaveAlCode`: When enabled, automatically saves AL code blocks from Claude responses
+- `bc-al-upgradeassistant.claude.codeSaveMode`: How to handle multiple AL code blocks ("ask" or "saveAll")
+- `bc-al-upgradeassistant.claude.debugMode`: When enabled, shows the prompt being sent to Claude API in a document for review before sending
+- `bc-al-upgradeassistant.objectLocations`: Locations where to save extracted AL objects by type
 
 ## Commands
 
@@ -39,6 +45,15 @@ This extension contributes the following settings:
 2. Set your Claude API key in the extension settings
 3. Open a C/AL or AL file
 4. Use the commands from the command palette (Ctrl+Shift+P)
+
+### Debugging Claude Prompts
+
+When working with complex prompts, you can enable the debug mode to review exactly what is being sent to the Claude API:
+
+1. Set `bc-al-upgradeassistant.claude.debugMode` to `true` in your VS Code settings
+2. Run any Claude command
+3. A new document will open showing the system prompt, user prompt with your code inserted, and configuration details
+4. You'll be prompted to confirm before the API call is made
 
 ### Configuring Custom Prompts
 

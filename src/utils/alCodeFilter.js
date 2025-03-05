@@ -1,99 +1,100 @@
-const { getIdRanges, isIdInRanges } = require("./appJsonReader");
+const fs = require("fs");
+const path = require("path");
+const vscode = require("vscode");
+const calParser = require("./calParser");
 
 /**
- * Filter AL code to include only fields within ID ranges from app.json
- * @param {string} alCode - AL code to filter
- * @returns {string} Filtered AL code
+ * Extract ID ranges from app.json
+ * @returns {Array<{from: number, to: number}>} Array of ID range objects
  */
-function filterToIdRanges(alCode) {
-  const idRanges = getIdRanges();
+function getIdRangesFromAppJson() {
+  return calParser.getIdRangesFromAppJson();
+}
 
-  // If no ID ranges found, return original code
-  if (!idRanges || idRanges.length === 0) {
+/**
+ * Check if an ID is within any of the allowed ID ranges
+ * @param {number} id - The ID to check
+ * @param {Array<{from: number, to: number}>} idRanges - Array of ID range objects
+ * @returns {boolean} - Whether the ID is within any range
+ */
+function isIdInRanges(id, idRanges) {
+  return calParser.isIdInRanges(id, idRanges);
+}
+
+/**
+ * Filter AL code to include only fields and controls within ID ranges
+ * @param {string} code - The AL code to filter
+ * @returns {string} - Filtered AL code
+ */
+function filterToIdRanges(code) {
+  const idRanges = getIdRangesFromAppJson();
+
+  if (idRanges.length === 0) {
     console.log("No ID ranges found, returning original code");
-    return alCode;
+    return code;
   }
 
-  // Detect if this is a table or page
-  const objectMatch = alCode.match(
-    /\b(table|page|tableextension|pageextension)\b\s+(\d+)\s+["']([^"']+)["']/i
-  );
-  if (!objectMatch) {
-    console.log("Not a table or page object, returning original code");
-    return alCode; // Not a table or page, return as is
+  console.log(`Found ${idRanges.length} ID ranges in app.json:`, idRanges);
+
+  // Detect if the code is C/AL (contains OBJECT) or AL syntax
+  const isCAL = code.includes("OBJECT ") || code.includes("OBJECT-PROPERTIES");
+
+  if (isCAL) {
+    // Process C/AL code using our new parser
+    return calParser.filterCALToIdRanges(code);
+  } else {
+    // Process modern AL code
+    code = filterTableFields(code, idRanges);
+    code = filterPageControls(code, idRanges);
+    return code;
   }
+}
 
-  const objectType = objectMatch[1].toLowerCase();
+/**
+ * Filter table fields based on ID ranges
+ * @param {string} code - The AL code to filter
+ * @param {Array<{from: number, to: number}>} idRanges - Array of ID range objects
+ * @returns {string} - Filtered AL code
+ */
+function filterTableFields(code, idRanges) {
+  // Regular expression to match table field declarations
+  const fieldRegex =
+    /field\s*\(\s*(\d+)\s*;[^;{}]*\)\s*{[^{}]*(?:{[^{}]*}[^{}]*)*}/g;
 
-  // For tables and pages, filter fields based on their IDs
-  if (objectType.includes("table") || objectType.includes("page")) {
-    // Split code into lines for processing
-    const lines = alCode.split("\n");
-    const outputLines = [];
-
-    let inFieldsBlock = false;
-    let openBraces = 0;
-    let skipCurrentField = false;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const trimmedLine = line.trim();
-
-      // Track braces to understand block structure
-      const openBracesInLine = (trimmedLine.match(/{/g) || []).length;
-      const closeBracesInLine = (trimmedLine.match(/}/g) || []).length;
-      openBraces += openBracesInLine - closeBracesInLine;
-
-      // Detect entry into fields section
-      if (
-        !inFieldsBlock &&
-        /\bfields\b/i.test(trimmedLine) &&
-        trimmedLine.includes("{")
-      ) {
-        inFieldsBlock = true;
-      }
-
-      // If in fields block, check each field
-      if (inFieldsBlock) {
-        // Match field ID pattern: field(ID; Name)
-        const fieldMatch = trimmedLine.match(/\bfield\b\s*\((\d+)\s*;/i);
-
-        if (fieldMatch && !skipCurrentField) {
-          const fieldId = parseInt(fieldMatch[1], 10);
-
-          // Check if field ID is within ranges
-          if (!isIdInRanges(fieldId, idRanges)) {
-            skipCurrentField = true;
-            continue; // Skip this line
-          }
-        }
-
-        // If we're skipping a field and hit a semicolon at the end of a line,
-        // we're likely at the end of the field definition
-        if (skipCurrentField && /;\s*$/.test(trimmedLine)) {
-          skipCurrentField = false;
-          continue;
-        }
-      }
-
-      // Exit fields section
-      if (inFieldsBlock && openBraces === 0) {
-        inFieldsBlock = false;
-      }
-
-      // Add line to output if we're not skipping it
-      if (!skipCurrentField) {
-        outputLines.push(line);
-      }
+  // Replace fields outside of ID ranges with comments
+  return code.replace(fieldRegex, (match, id) => {
+    if (isIdInRanges(id, idRanges)) {
+      return match; // Keep fields within ranges
+    } else {
+      return `// Field with ID ${id} removed as it's outside app.json ID ranges\n`;
     }
+  });
+}
 
-    return outputLines.join("\n");
-  }
+/**
+ * Filter page controls based on ID ranges
+ * @param {string} code - The AL code to filter
+ * @param {Array<{from: number, to: number}>} idRanges - Array of ID range objects
+ * @returns {string} - Filtered AL code
+ */
+function filterPageControls(code, idRanges) {
+  // Regular expression to match page control declarations with IDs
+  // This handles different control types (field, part, group, etc.)
+  const controlRegex =
+    /(\s*)(field|part|group|systempart|chartpart|cuegroup)\s*\(\s*(\d+)\s*;[^;{}]*\)\s*{[^{}]*(?:{[^{}]*}[^{}]*)*}/g;
 
-  // For other object types, return original code
-  return alCode;
+  // Replace controls outside of ID ranges with comments
+  return code.replace(controlRegex, (match, indent, type, id) => {
+    if (isIdInRanges(id, idRanges)) {
+      return match; // Keep controls within ranges
+    } else {
+      return `${indent}// ${type} with ID ${id} removed as it's outside app.json ID ranges\n`;
+    }
+  });
 }
 
 module.exports = {
   filterToIdRanges,
+  getIdRangesFromAppJson,
+  isIdInRanges,
 };

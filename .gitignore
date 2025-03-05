@@ -11,6 +11,7 @@ dist/
 # Logs and temporary files
 *.log
 *.tmp
+examples/
 
 # Environment-specific files
 .env
