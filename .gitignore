@@ -6,6 +6,7 @@ dist/
 
 # Local development files
 .vscode/
+.github/
 *.vsix
 
 # Logs and temporary files
