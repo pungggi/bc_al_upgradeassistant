@@ -35,6 +35,11 @@ async function showPromptSelectionDialog() {
     return null;
   }
 
+  // If there's only one prompt, return it directly without showing the QuickPick
+  if (prompts.length === 1) {
+    return prompts[0];
+  }
+
   const items = prompts.map((prompt) => ({
     label: prompt.commandName,
     description: prompt.commandDescription || "",
