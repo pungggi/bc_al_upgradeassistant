@@ -1,6 +1,5 @@
 const vscode = require("vscode");
 const { registerCommands } = require("./registerCommands");
-const { monitorClipboard } = require("./clipboardMonitor");
 const modelHelper = require("./modelHelper");
 const path = require("path");
 const fs = require("fs");
@@ -27,7 +26,6 @@ async function activate(context) {
     await initializeSymbolCache(context, false);
 
     modelHelper.initializeModels();
-    monitorClipboard();
 
     // Register the hover provider for AL files
     context.subscriptions.push(

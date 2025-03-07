@@ -5,12 +5,14 @@ const claude = require("./claude");
 const configManager = require("./utils/configManager");
 const { registerCommandOnce } = require("./utils/commandHelper");
 const { EXTENSION_ID } = require("./constants");
+const { registerClipboardMonitor } = require("./clipboardMonitor");
 
 function registerCommands(context) {
   registerRefreshSymbolCacheCommand(context);
   registerSplitCalObjectsCommand(context);
   registerPromptClaudeCommand(context);
   registerModelCommands(context);
+  registerClipboardMonitor(context);
 }
 
 function registerRefreshSymbolCacheCommand(context) {
