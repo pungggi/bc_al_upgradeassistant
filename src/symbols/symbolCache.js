@@ -2,8 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const util = require("util");
 const os = require("os");
-const Seven = require("node-7z");
-const sevenBin = require("7zip-bin");
+const JSZip = require("jszip");
 const vscode = require("vscode");
 
 const readFile = util.promisify(fs.readFile);

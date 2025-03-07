@@ -2,8 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const util = require("util");
 const os = require("os");
-const Seven = require("node-7z");
-const sevenBin = require("7zip-bin");
+const JSZip = require("jszip");
 
 const readFile = util.promisify(fs.readFile);
 const writeFile = util.promisify(fs.writeFile);
@@ -81,20 +80,23 @@ class SymbolCache {
         // Make sure the extraction directory exists and is empty
         await mkdir(extractDir, { recursive: true });
 
-        // Get path to 7zip binary
-        const pathTo7zip = sevenBin.path7za;
-
-        // Create a stream to extract the app file
-        const extractStream = Seven.extractFull(appPath, extractDir, {
-          $bin: pathTo7zip,
-          $progress: true,
-        });
-
-        // Wait for extraction to complete
-        await new Promise((resolve, reject) => {
-          extractStream.on("end", () => resolve());
-          extractStream.on("error", (err) => reject(err));
-        });
+        // Read the zip file as buffer
+        const zipData = await readFile(appPath);
+        const zip = await JSZip.loadAsync(zipData);
+        // Extract files to extractDir
+        await Promise.all(
+          Object.keys(zip.files).map(async (filename) => {
+            const file = zip.files[filename];
+            const filePath = path.join(extractDir, filename);
+            if (file.dir) {
+              await mkdir(filePath, { recursive: true });
+            } else {
+              await mkdir(path.dirname(filePath), { recursive: true });
+              const content = await file.async("nodebuffer");
+              await writeFile(filePath, content);
+            }
+          })
+        );
 
         console.log(`Extracted ${appPath} to ${extractDir}`);
 
