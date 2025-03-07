@@ -60,10 +60,11 @@ function extractControlsSection(calCode) {
 /**
  * Extract PROPERTIES section for objects with better multi-line property handling
  * @param {string} calCode - The C/AL code
- * @returns {Object} Properties object
+ * @returns {Object} Properties and triggers objects
  */
 function extractPropertiesSection(calCode) {
   const properties = {};
+  const triggers = []; // Changed from object to array
 
   // Find the regular PROPERTIES section (not OBJECT-PROPERTIES)
   // Use a more specific regex that requires "PROPERTIES" to be at the beginning of a line
@@ -71,7 +72,7 @@ function extractPropertiesSection(calCode) {
   const propertiesMatch = calCode.match(/(?:^|\s)PROPERTIES\s*\{([\s\S]*?)\}/);
 
   if (!propertiesMatch || !propertiesMatch[1]) {
-    return properties;
+    return { properties, triggers };
   }
 
   const propertiesBlock = propertiesMatch[1];
@@ -93,8 +94,40 @@ function extractPropertiesSection(calCode) {
     // Skip empty lines
     if (!trimmedLine) continue;
 
-    // Skip triggers
-    if (trimmedLine.startsWith("On")) continue;
+    // Process triggers as separate properties
+    if (trimmedLine.startsWith("On")) {
+      const triggerMatch = trimmedLine.match(/^(On\w+)\s*=\s*(.+)/);
+      if (triggerMatch) {
+        const triggerName = triggerMatch[1].trim();
+        let triggerCode = triggerMatch[2].trim();
+
+        // Find multi-line trigger code between BEGIN and END
+        if (triggerCode.startsWith("BEGIN")) {
+          let triggerLines = [triggerCode];
+          let i = lines.indexOf(line) + 1;
+
+          // Collect all lines until we find END
+          while (i < lines.length && !lines[i].trim().includes("END;")) {
+            triggerLines.push(lines[i].trim());
+            i++;
+          }
+
+          // Add the END line if found
+          if (i < lines.length) {
+            triggerLines.push(lines[i].trim());
+          }
+
+          triggerCode = triggerLines.join("\n");
+        }
+
+        // Store as object in array instead of using the name as key
+        triggers.push({
+          name: triggerName,
+          code: triggerCode,
+        });
+      }
+      continue;
+    }
 
     // Check if this is the start of a multi-line value
     if (trimmedLine.includes("[")) {
@@ -130,7 +163,7 @@ function extractPropertiesSection(calCode) {
     }
   }
 
-  return properties;
+  return { properties, triggers };
 }
 
 /**
@@ -176,6 +209,7 @@ function parseCALToJSON(calCode) {
     name: "",
     objectProperties: {},
     properties: {},
+    triggers: [], // Changed from object to array
     fields: [],
     controls: [],
     actions: [],
@@ -197,7 +231,9 @@ function parseCALToJSON(calCode) {
   result.objectProperties = extractObjectPropertiesSection(calCode);
 
   // Extract PROPERTIES section with enhanced handling for multi-line properties
-  result.properties = extractPropertiesSection(calCode);
+  const { properties, triggers } = extractPropertiesSection(calCode);
+  result.properties = properties;
+  result.triggers = triggers; // Store extracted triggers
 
   // Extract FIELDS section for tables
   if (result.type.toLowerCase() === "table") {
@@ -420,14 +456,44 @@ function reconstructCALFromParsed(parsedObject) {
   // Construct the output with preserved parts and our filtered controls/fields
   let result = `OBJECT ${parsedObject.type} ${parsedObject.id} ${parsedObject.name}\n{\n`;
 
-  // OBJECT-PROPERTIES section (preserved)
-  if (objectPropertiesMatch) {
-    result += `  OBJECT-PROPERTIES\n  {\n${objectPropertiesMatch[1]}  }\n`;
+  // Store the original properties and object properties sections for reconstruction
+  let objectPropertiesText = "";
+  let propertiesText = "";
+
+  // Check if we have preserved section texts
+  if (parsedObject._objectPropertiesText) {
+    objectPropertiesText = parsedObject._objectPropertiesText;
   }
 
-  // PROPERTIES section (preserved)
-  if (propertiesMatch) {
-    result += `  PROPERTIES\n  {\n${propertiesMatch[1]}  }\n`;
+  if (parsedObject._propertiesText) {
+    propertiesText = parsedObject._propertiesText;
+  }
+
+  // OBJECT-PROPERTIES section
+  if (objectPropertiesText) {
+    result += `  OBJECT-PROPERTIES\n  {\n${objectPropertiesText}  }\n`;
+  }
+
+  // PROPERTIES section
+  if (propertiesText) {
+    result += `  PROPERTIES\n  {\n${propertiesText}  }\n`;
+  } else if (
+    Object.keys(parsedObject.properties).length > 0 ||
+    parsedObject.triggers.length > 0
+  ) {
+    result += "  PROPERTIES\n  {\n";
+
+    // Add regular properties
+    for (const [key, value] of Object.entries(parsedObject.properties)) {
+      result += `    ${key}=${value};\n`;
+    }
+
+    // Add triggers (as array)
+    for (const trigger of parsedObject.triggers) {
+      result += `    ${trigger.name}=${trigger.code}\n`;
+    }
+
+    result += "  }\n";
   }
 
   // Reconstruct FIELDS section for tables
@@ -562,6 +628,21 @@ function filterCALToIdRanges(calCode, returnDebugInfo = false) {
   try {
     // Parse CAL code to structured object
     const parsedObject = parseCALToJSON(calCode);
+
+    // Store original code sections for reconstruction before filtering
+    const objectPropertiesMatch = calCode.match(
+      /OBJECT-PROPERTIES\s*\{([\s\S]*?)\}/
+    );
+    if (objectPropertiesMatch) {
+      parsedObject._objectPropertiesText = objectPropertiesMatch[1];
+    }
+
+    const propertiesMatch = calCode.match(
+      /(?:^|\s)PROPERTIES\s*\{([\s\S]*?)\}/
+    );
+    if (propertiesMatch) {
+      parsedObject._propertiesText = propertiesMatch[1];
+    }
 
     // Filter parsed object by ID ranges
     const filteredObject = filterParsedObjectByIdRanges(parsedObject, idRanges);
