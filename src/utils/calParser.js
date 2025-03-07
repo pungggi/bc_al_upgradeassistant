@@ -513,14 +513,21 @@ function getIdRangesFromAppJson() {
 /**
  * Filter C/AL code to include only fields and controls within ID ranges
  * @param {string} calCode - The C/AL code to filter
- * @returns {string} - Filtered C/AL code
+ * @param {boolean} returnDebugInfo - Whether to return additional debug information
+ * @returns {Object|string} - Filtered C/AL code or object with debug info
  */
-function filterCALToIdRanges(calCode) {
+function filterCALToIdRanges(calCode, returnDebugInfo = false) {
   const idRanges = getIdRangesFromAppJson();
 
   if (idRanges.length === 0) {
     console.log("No ID ranges found, returning original code");
-    return calCode;
+    return returnDebugInfo
+      ? {
+          filteredCode: calCode,
+          originalParsed: null,
+          filteredParsed: null,
+        }
+      : calCode;
   }
 
   try {
@@ -531,10 +538,27 @@ function filterCALToIdRanges(calCode) {
     const filteredObject = filterParsedObjectByIdRanges(parsedObject, idRanges);
 
     // Reconstruct C/AL code from filtered object
-    return reconstructCALFromParsed(filteredObject);
+    const filteredCode = reconstructCALFromParsed(filteredObject);
+
+    if (returnDebugInfo) {
+      return {
+        filteredCode,
+        originalParsed: parsedObject,
+        filteredParsed: filteredObject,
+      };
+    }
+
+    return filteredCode;
   } catch (error) {
     console.error("Error filtering C/AL code:", error);
-    return calCode; // Return original code on error
+    return returnDebugInfo
+      ? {
+          filteredCode: calCode,
+          originalParsed: null,
+          filteredParsed: null,
+          error: error.message,
+        }
+      : calCode; // Return original code on error
   }
 }
 

@@ -24,14 +24,15 @@ function isIdInRanges(id, idRanges) {
 /**
  * Filter AL code to include only fields and controls within ID ranges
  * @param {string} code - The AL code to filter
- * @returns {string} - Filtered AL code
+ * @param {boolean} returnDebugInfo - Whether to return additional debug information
+ * @returns {Object|string} - Filtered AL code or object with debug info
  */
-function filterToIdRanges(code) {
+function filterToIdRanges(code, returnDebugInfo = false) {
   const idRanges = getIdRangesFromAppJson();
 
   if (idRanges.length === 0) {
     console.log("No ID ranges found, returning original code");
-    return code;
+    return returnDebugInfo ? { filteredCode: code } : code;
   }
 
   console.log(`Found ${idRanges.length} ID ranges in app.json:`, idRanges);
@@ -41,12 +42,12 @@ function filterToIdRanges(code) {
 
   if (isCAL) {
     // Process C/AL code using our new parser
-    return calParser.filterCALToIdRanges(code);
+    return calParser.filterCALToIdRanges(code, returnDebugInfo);
   } else {
     // Process modern AL code
-    code = filterTableFields(code, idRanges);
-    code = filterPageControls(code, idRanges);
-    return code;
+    const filteredCode = filterTableFields(code, idRanges);
+    const finalCode = filterPageControls(filteredCode, idRanges);
+    return returnDebugInfo ? { filteredCode: finalCode } : finalCode;
   }
 }
 

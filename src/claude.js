@@ -1,4 +1,6 @@
 const vscode = require("vscode");
+const path = require("path");
+const fs = require("fs");
 const modelHelper = require("./modelHelper");
 const configManager = require("./utils/configManager");
 const alFileSaver = require("./utils/alFileSaver");
@@ -78,8 +80,13 @@ async function executePrompt(prompt, code, progressCallback = null) {
       "You are an expert AL and C/AL programming assistant for Microsoft Dynamics 365 Business Central."
     );
 
+  // Check if debug mode is enabled
+  const debugMode = configManager.getConfigValue("claude.debugMode", false);
+
   // Apply ID range filtering if specified in the prompt
   let processedCode = code;
+  let debugInfo = null;
+
   if (prompt.idRangesOnly === true) {
     if (progressCallback) {
       progressCallback({
@@ -87,7 +94,15 @@ async function executePrompt(prompt, code, progressCallback = null) {
         message: "Filtering code to include only fields within ID ranges...",
       });
     }
-    processedCode = filterToIdRanges(code);
+
+    if (debugMode) {
+      // Get the filtered code and debug info
+      const result = filterToIdRanges(code, true);
+      processedCode = result.filteredCode;
+      debugInfo = result;
+    } else {
+      processedCode = filterToIdRanges(code);
+    }
   }
 
   // Replace placeholders in user prompt
@@ -100,8 +115,6 @@ async function executePrompt(prompt, code, progressCallback = null) {
   );
   userPrompt = userPrompt.replace("{{language}}", defaultLanguage);
 
-  // Check if debug mode is enabled
-  const debugMode = configManager.getConfigValue("claude.debugMode", false);
   if (debugMode) {
     // Create debug content showing what will be sent to the API
     const debugContent = `# Claude API Debug - ${prompt.commandName}
@@ -136,7 +149,31 @@ ${userPrompt}
       preserveFocus: true, // Keep focus on the original editor
     });
 
-    // Removed the confirmation dialog - API call will proceed automatically
+    // If we have CAL parsing debug info, save it to files
+    if (debugInfo && debugInfo.originalParsed) {
+      // Create debug folder if it doesn't exist
+      const folderPath = path.join(
+        vscode.workspace.workspaceFolders[0].uri.fsPath,
+        "debug"
+      );
+      if (!fs.existsSync(folderPath)) {
+        fs.mkdirSync(folderPath, { recursive: true });
+      }
+
+      // Save original parsed object
+      const originalParsedPath = path.join(folderPath, "original_parsed.json");
+      fs.writeFileSync(
+        originalParsedPath,
+        JSON.stringify(debugInfo.originalParsed, null, 2)
+      );
+
+      // Save filtered parsed object
+      const filteredParsedPath = path.join(folderPath, "filtered_parsed.json");
+      fs.writeFileSync(
+        filteredParsedPath,
+        JSON.stringify(debugInfo.filteredParsed, null, 2)
+      );
+    }
   }
 
   // Report initial progress
