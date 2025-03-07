@@ -1,5 +1,5 @@
 const vscode = require("vscode");
-const symbolCache = require("../symbols/symbolCache");
+const symbolCache = require("../symbolCache");
 
 class ExtendedObjectHoverProvider {
   provideCodeLenses(document) {
@@ -13,7 +13,6 @@ class ExtendedObjectHoverProvider {
         /(\w+\s+\d+\s+".+?"\s+extends\s+)"(.+?)"/, // For page, table extends format
       ];
 
-      let matchFound = false;
       for (const regex of extensionRegexes) {
         const match = lineText.match(regex);
         if (!match) continue;
@@ -41,7 +40,6 @@ class ExtendedObjectHoverProvider {
           codeLenses.push(codeLens);
 
           // Break after first match to prevent duplicates
-          matchFound = true;
           break;
         }
       }

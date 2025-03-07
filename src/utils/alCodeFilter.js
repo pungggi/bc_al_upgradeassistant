@@ -1,6 +1,3 @@
-const fs = require("fs");
-const path = require("path");
-const vscode = require("vscode");
 const calParser = require("./calParser");
 
 /**
