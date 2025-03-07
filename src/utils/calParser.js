@@ -180,7 +180,7 @@ function parseCALToJSON(calCode) {
     controls: [],
     actions: [],
     code: "",
-    originalCode: calCode,
+    documentation: "",
   };
 
   // Extract object type, ID, and name
@@ -263,10 +263,28 @@ function parseCALToJSON(calCode) {
     }
   }
 
-  // Extract CODE section
+  // Extract CODE section and documentation
   const codeMatch = calCode.match(/CODE\s*\{([\s\S]*?)\n\}\s*$/);
   if (codeMatch) {
-    result.code = codeMatch[1].trim();
+    const codeContent = codeMatch[1].trim();
+
+    // Improved regex that ignores whitespace between BEGIN, { and between }, END
+    // Will match: BEGIN { content } END. but also BEGIN   {content}   END
+    const docMatch = codeContent.match(/BEGIN\s*\{([\s\S]*?)\}\s*END\.?/i);
+
+    if (docMatch && docMatch[1]) {
+      // Extract documentation (content inside the braces)
+      result.documentation = docMatch[1].trim();
+
+      // Remove the documentation block from the code with similarly permissive pattern
+      const codeWithoutDoc = codeContent.replace(
+        /\s*BEGIN\s*\{[\s\S]*?\}\s*END\.?\s*/i,
+        "\n    END."
+      );
+      result.code = codeWithoutDoc.trim();
+    } else {
+      result.code = codeContent;
+    }
   }
 
   return result;
@@ -399,20 +417,6 @@ function rebuildControlsSection(controls) {
  * @returns {string} Reconstructed C/AL code
  */
 function reconstructCALFromParsed(parsedObject) {
-  // Capture the parts we want to preserve exactly as they were
-  const objectPropertiesMatch = parsedObject.originalCode.match(
-    /OBJECT-PROPERTIES\s*\{([\s\S]*?)\}/
-  );
-
-  const propertiesMatch = parsedObject.originalCode.match(
-    /(?:^|\s)PROPERTIES\s*\{([\s\S]*?)\}/
-  );
-
-  // Extract CODE section
-  const codeMatch = parsedObject.originalCode.match(
-    /CODE\s*\{([\s\S]*?)(?:\n\}\s*$)/
-  );
-
   // Construct the output with preserved parts and our filtered controls/fields
   let result = `OBJECT ${parsedObject.type} ${parsedObject.id} ${parsedObject.name}\n{\n`;
 
@@ -447,9 +451,34 @@ function reconstructCALFromParsed(parsedObject) {
   }
 
   // Reconstruct CODE section if it exists
-  if (codeMatch) {
+  if (parsedObject.code || parsedObject.documentation) {
     result += "  CODE\n  {\n";
-    result += parsedObject.code ? parsedObject.code : "";
+
+    // Add code content
+    if (parsedObject.code) {
+      result += parsedObject.code;
+
+      // Check if there's documentation to add back
+      if (parsedObject.documentation) {
+        // Make sure we're not ending with END. already
+        if (!parsedObject.code.trim().endsWith("END.")) {
+          result += "\n\n    BEGIN\n    {\n      ";
+          result += parsedObject.documentation.replace(/\n/g, "\n      ");
+          result += "\n    }\n    END.";
+        } else {
+          // Replace the last END. with documentation in the BEGIN-END block
+          const lastEndIndex = result.lastIndexOf("END.");
+          if (lastEndIndex !== -1) {
+            result =
+              result.substring(0, lastEndIndex) +
+              "BEGIN\n    {\n      " +
+              parsedObject.documentation.replace(/\n/g, "\n      ") +
+              "\n    }\n    END.";
+          }
+        }
+      }
+    }
+
     result += "\n  }\n";
   }
 
