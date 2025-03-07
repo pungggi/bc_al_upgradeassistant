@@ -6,9 +6,7 @@ const fs = require("fs");
 const glob = require("glob").sync;
 const symbolCache = require("./symbolCache");
 const { readJsonFile } = require("./jsonUtils");
-const {
-  ExtendedObjectHoverProvider,
-} = require("./hover/extendedObjectHoverProvider");
+const ExtendedObjectHoverProvider = require("./hover/extendedObjectHoverProvider");
 const { EXTENSION_ID } = require("./constants");
 
 /**
@@ -27,15 +25,13 @@ async function activate(context) {
 
     modelHelper.initializeModels();
 
-    // Register the hover provider for AL files
+    // Register the CodeLens provider for AL files
     context.subscriptions.push(
-      vscode.languages.registerHoverProvider(
+      vscode.languages.registerCodeLensProvider(
         { scheme: "file", language: "al" },
         new ExtendedObjectHoverProvider()
       )
     );
-
-    console.log("AL Extended Object Hover Provider registered");
 
     console.log(`${EXTENSION_ID} extension activated successfully`);
   } catch (error) {

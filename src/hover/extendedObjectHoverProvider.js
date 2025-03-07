@@ -2,61 +2,56 @@ const vscode = require("vscode");
 const symbolCache = require("../symbols/symbolCache");
 
 class ExtendedObjectHoverProvider {
-  async provideHover(document, position) {
-    console.log("Hover provider triggered at position:", position);
+  provideCodeLenses(document) {
+    const codeLenses = [];
+    for (let i = 0; i < document.lineCount; i++) {
+      const lineText = document.lineAt(i).text;
 
-    // Get the current line text
-    const lineText = document.lineAt(position.line).text;
-    console.log("Line text:", lineText);
+      // Regular expressions to match various extension types
+      const extensionRegexes = [
+        /(\w+extension\s+\d+\s+".+?"\s+extends\s+)"(.+?)"/, // For pageextension, tableextension, etc.
+        /(\w+\s+\d+\s+".+?"\s+extends\s+)"(.+?)"/, // For page, table extends format
+      ];
 
-    // Regular expressions to match various extension types
-    const extensionRegexes = [
-      /(\w+extension\s+\d+\s+".+?"\s+extends\s+)"(.+?)"/, // For pageextension, tableextension, etc.
-      /(\w+\s+\d+\s+".+?"\s+extends\s+)"(.+?)"/, // For page, table extends format
-    ];
+      let matchFound = false;
+      for (const regex of extensionRegexes) {
+        const match = lineText.match(regex);
+        if (!match) continue;
 
-    for (const regex of extensionRegexes) {
-      const match = lineText.match(regex);
-      if (!match) continue;
-
-      console.log("Found match:", match);
-
-      // Get the position of the extended object name
-      const extendedNameStart = lineText.indexOf(
-        match[2],
-        lineText.indexOf("extends")
-      );
-      const extendedNameEnd = extendedNameStart + match[2].length;
-
-      // Check if the hover position is within the extended name
-      if (
-        position.character >= extendedNameStart &&
-        position.character <= extendedNameEnd
-      ) {
+        // Get the position of the extended object name
+        const extendedNameStart = lineText.indexOf(
+          match[2],
+          lineText.indexOf("extends")
+        );
+        const extendedNameEnd = extendedNameStart + match[2].length;
         const range = new vscode.Range(
-          new vscode.Position(position.line, extendedNameStart),
-          new vscode.Position(position.line, extendedNameEnd)
+          new vscode.Position(i, extendedNameStart),
+          new vscode.Position(i, extendedNameEnd)
         );
 
-        // Get the extended object name and look up its ID
+        // Look up the object ID using the symbol cache
         const objectName = match[2];
-        console.log("Looking up object ID for:", objectName);
         const objectId = symbolCache.getObjectId(objectName);
-        console.log("Found object ID:", objectId);
+        if (objectId) {
+          // Create a CodeLens to annotate the extended object with its ID
+          const codeLens = new vscode.CodeLens(range, {
+            title: `ID ${objectId}`,
+            command: "",
+          });
+          codeLenses.push(codeLens);
 
-        const hoverContent = [
-          `**${objectName}**`,
-          `${objectId ? `ID ${objectId}` : ""}`,
-        ];
-
-        return new vscode.Hover(hoverContent, range);
+          // Break after first match to prevent duplicates
+          matchFound = true;
+          break;
+        }
       }
     }
+    return codeLenses;
+  }
 
-    return null;
+  resolveCodeLens(codeLens) {
+    return codeLens;
   }
 }
 
-module.exports = {
-  ExtendedObjectHoverProvider,
-};
+module.exports = ExtendedObjectHoverProvider;
