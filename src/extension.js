@@ -9,6 +9,7 @@ const symbolCache = require("./symbolCache");
 const { readJsonFile } = require("./jsonUtils");
 const ExtendedObjectHoverProvider = require("./hover/extendedObjectHoverProvider");
 const { EXTENSION_ID } = require("./constants");
+const { registerViews } = require("./views/registerViews");
 
 /**
  * Extension activation handler
@@ -21,6 +22,7 @@ async function activate(context) {
     // Register all commands and events at once
     registerCommands(context);
     registerEvents(context);
+    registerViews(context); // Register the custom views
 
     // Initialize symbol cache
     await initializeSymbolCache(context, false);

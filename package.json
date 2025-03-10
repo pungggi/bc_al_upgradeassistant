@@ -33,10 +33,32 @@
       {
         "command": "bc-al-upgradeassistant.selectModel",
         "title": "BC/AL: Select Claude Model"
+      },
+      {
+        "command": "bc-al-upgradeassistant.openReferencedObject",
+        "title": "Open Referenced Object",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.openMigrationFile",
+        "title": "Open Migration File",
+        "icon": "$(file)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.refreshReferenceView",
+        "title": "Refresh BC/AL References",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
-      "editor/context": []
+      "editor/context": [],
+      "view/title": [
+        {
+          "command": "bc-al-upgradeassistant.refreshReferenceView",
+          "when": "view == bc-al-references || view == bc-al-file-info",
+          "group": "navigation"
+        }
+      ]
     },
     "capabilities": {
       "hoverProvider": true
@@ -293,6 +315,30 @@
           }
         }
       }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "bc-al-relationship-explorer",
+          "title": "BC/AL Relationships",
+          "icon": "media/relationship-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "bc-al-relationship-explorer": [
+        {
+          "id": "bc-al-references",
+          "name": "File References",
+          "contextualTitle": "BC/AL References"
+        }
+      ],
+      "explorer": [
+        {
+          "id": "bc-al-file-info",
+          "name": "BC/AL File Info"
+        }
+      ]
     }
   },
   "scripts": {
