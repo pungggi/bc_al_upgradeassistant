@@ -96,6 +96,53 @@ function sanitizeFileName(fileName) {
 }
 
 /**
+ * Converts an absolute path to a relative path based on workspace roots
+ * @param {string} absolutePath - The absolute path to convert
+ * @returns {string} - Relative path or original path if no conversion possible
+ */
+function convertToRelativePath(absolutePath) {
+  if (!absolutePath) return absolutePath;
+
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (!workspaceFolders || workspaceFolders.length === 0) {
+    return absolutePath;
+  }
+
+  // Try to find a workspace root that contains this path
+  for (const folder of workspaceFolders) {
+    const folderPath = folder.uri.fsPath;
+    if (absolutePath.startsWith(folderPath)) {
+      // Convert to relative path
+      return absolutePath.substring(folderPath.length).replace(/^[\/\\]+/, ""); // Remove leading slashes
+    }
+  }
+
+  return absolutePath;
+}
+
+/**
+ * Converts a relative path to an absolute path based on workspace root
+ * @param {string} relativePath - The relative path to convert
+ * @returns {string} - Absolute path or original path if no conversion possible
+ */
+function convertToAbsolutePath(relativePath) {
+  if (!relativePath) return relativePath;
+
+  // If it's already an absolute path, return it as is
+  if (path.isAbsolute(relativePath)) {
+    return relativePath;
+  }
+
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (!workspaceFolders || workspaceFolders.length === 0) {
+    return relativePath;
+  }
+
+  // Use the first workspace folder as the base
+  return path.join(workspaceFolders[0].uri.fsPath, relativePath);
+}
+
+/**
  * Save AL code to a file based on configuration settings
  * @param {string} alCode - The AL code to save
  * @returns {Promise<string|null>} - Path to the saved file or null if cancelled
@@ -117,7 +164,7 @@ async function saveAlCodeToFile(alCode) {
 
     // First try exact match
     if (workingObjectFolders[objectType]) {
-      targetFolder = workingObjectFolders[objectType];
+      targetFolder = convertToAbsolutePath(workingObjectFolders[objectType]);
     } else {
       // Try to find a matching pattern (e.g. "tableextension" -> "table")
       for (const locationType in workingObjectFolders) {
@@ -125,7 +172,9 @@ async function saveAlCodeToFile(alCode) {
           objectType.includes(locationType) ||
           locationType.includes(objectType)
         ) {
-          targetFolder = workingObjectFolders[locationType];
+          targetFolder = convertToAbsolutePath(
+            workingObjectFolders[locationType]
+          );
           break;
         }
       }
@@ -133,7 +182,7 @@ async function saveAlCodeToFile(alCode) {
 
     // If still no match but we have a default location, use it
     if (!targetFolder && workingObjectFolders["default"]) {
-      targetFolder = workingObjectFolders["default"];
+      targetFolder = convertToAbsolutePath(workingObjectFolders["default"]);
     }
   }
 
@@ -186,7 +235,7 @@ async function saveAlCodeToFile(alCode) {
         );
         const updatedLocations = {
           ...currentLocations,
-          [objectInfo.type.toLowerCase()]: targetFolder,
+          [objectInfo.type.toLowerCase()]: convertToRelativePath(targetFolder),
         };
         await configManager.setConfigValue(
           "workingObjectFolders",
@@ -257,4 +306,6 @@ module.exports = {
   identifyAlObjectInfo,
   getAlFileName,
   saveAlCodeToFile,
+  convertToRelativePath,
+  convertToAbsolutePath,
 };
