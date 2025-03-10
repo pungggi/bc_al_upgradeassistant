@@ -212,6 +212,43 @@
           "default": false,
           "description": "When enabled, shows the prompt being sent to the Claude API in an editor window"
         },
+        "bc-al-upgradeassistant.documentationIds": {
+          "type": "array",
+          "default": [
+            {
+              "id": "BC0001",
+              "description": "Business Central Development Documentation",
+              "url": "https://learn.microsoft.com/en-us/dynamics365/business-central/dev-itpro/"
+            },
+            {
+              "id": "CUSTOM001",
+              "description": "My Company's BC Development Standards",
+              "url": "https://internal-wiki.example.com/bc-standards"
+            }
+          ],
+          "description": "Collection of documentation IDs for reference",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "description"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Unique identifier for the documentation"
+              },
+              "description": {
+                "type": "string",
+                "description": "Description of the documentation"
+              },
+              "url": {
+                "type": "string",
+                "description": "Optional URL to the documentation"
+              }
+            }
+          }
+        },
         "bc-al-upgradeassistant.objectLocations": {
           "type": "object",
           "default": {

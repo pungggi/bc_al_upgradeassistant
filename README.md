@@ -114,3 +114,41 @@ Each prompt has the following properties:
 **Note:** The extension will validate model names and fall back to your default model if an invalid model is specified.
 
 **Note:** After modifying prompts in settings, you'll need to reload the window for changes to take effect.
+
+## Documentation IDs
+
+The extension now supports a collection of documentation references through the `bc-al-upgradeassistant.documentationIds` setting. This allows you to maintain a curated list of documentation resources for Business Central and AL development.
+
+### Default Documentation IDs
+
+By default, the extension includes these documentation references:
+
+- **BC0001**: Business Central Development Documentation
+- **AL0001**: AL Language Reference
+
+### Customizing Documentation IDs
+
+You can modify these defaults or add your own documentation references in your settings:
+
+1. Open VS Code Settings (File > Preferences > Settings)
+2. Search for "BC/AL documentation"
+3. Click on "Edit in settings.json"
+4. Modify the `bc-al-upgradeassistant.documentationIds` array
+
+Example custom configuration:
+
+```json
+"bc-al-upgradeassistant.documentationIds": [
+  {
+    "id": "CUSTOM001",
+    "description": "My Company's BC Development Standards",
+    "url": "https://internal-wiki.example.com/bc-standards"
+  }
+]
+```
+
+Each documentation ID requires:
+
+- `id`: A unique identifier
+- `description`: A brief description of the documentation
+- `url`: (Optional) Link to the documentation resource
