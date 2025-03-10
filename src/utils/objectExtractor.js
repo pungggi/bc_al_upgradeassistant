@@ -257,28 +257,8 @@ async function extractObjectsWithDialog() {
       );
     }
 
-    // Ask user if they want to organize by type
-    const organizeByType = await vscode.window.showQuickPick(
-      [
-        {
-          label: "Yes",
-          description: "Create subfolders for each object type",
-          picked: true,
-        },
-        { label: "No", description: "Extract all objects to the same folder" },
-      ],
-      {
-        placeHolder: "Organize objects in subfolders by type?",
-        canPickMany: false,
-      }
-    );
-
-    // If user cancelled the quick pick
-    if (!organizeByType) {
-      return;
-    }
-
-    const shouldOrganize = organizeByType.label === "Yes";
+    // Always organize by type (removed user prompt)
+    const shouldOrganize = true;
 
     // Show progress while splitting
     const extraction = await vscode.window.withProgress(
