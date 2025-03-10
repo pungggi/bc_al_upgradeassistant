@@ -12,7 +12,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onLanguage:al"
+    "onLanguage:al",
+    "onLanguage:plaintext"
   ],
   "main": "./src/extension.js",
   "contributes": {

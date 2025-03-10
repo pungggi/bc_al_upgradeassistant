@@ -3,6 +3,10 @@ const fs = require("fs");
 const path = require("path");
 const configManager = require("./configManager");
 
+const fileEventsEmitter = new vscode.EventEmitter();
+// Create an event that can be subscribed to
+const fileEvents = fileEventsEmitter.event;
+
 /**
  * Extracts AL code blocks from Markdown text
  * @param {string} markdownText - The markdown text containing AL code blocks
@@ -294,6 +298,13 @@ async function saveAlCodeToFile(alCode) {
   // Write the file
   try {
     fs.writeFileSync(filePath, alCode, "utf8");
+
+    fileEventsEmitter.fire({
+      path: filePath,
+      fileName: path.basename(filePath),
+      objectInfo: objectInfo,
+      content: alCode,
+    });
   } catch (err) {
     throw new Error(`Failed to write file "${filePath}": ${err.message}`);
   }
@@ -308,4 +319,5 @@ module.exports = {
   saveAlCodeToFile,
   convertToRelativePath,
   convertToAbsolutePath,
+  fileEvents,
 };

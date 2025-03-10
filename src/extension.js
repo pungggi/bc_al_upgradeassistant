@@ -1,5 +1,6 @@
 const vscode = require("vscode");
 const { registerCommands } = require("./registerCommands");
+const { registerEvents } = require("./registerEvents");
 const modelHelper = require("./modelHelper");
 const path = require("path");
 const fs = require("fs");
@@ -17,8 +18,9 @@ async function activate(context) {
   console.log(`Activating ${EXTENSION_ID} extension`);
 
   try {
-    // Register all commands at once
+    // Register all commands and events at once
     registerCommands(context);
+    registerEvents(context);
 
     // Initialize symbol cache
     await initializeSymbolCache(context, false);
