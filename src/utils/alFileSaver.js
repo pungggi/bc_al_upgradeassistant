@@ -113,7 +113,7 @@ function convertToRelativePath(absolutePath) {
     const folderPath = folder.uri.fsPath;
     if (absolutePath.startsWith(folderPath)) {
       // Convert to relative path
-      return absolutePath.substring(folderPath.length).replace(/^[\/\\]+/, ""); // Remove leading slashes
+      return absolutePath.substring(folderPath.length).replace(/^[/\\]+/, ""); // Remove leading slashes
     }
   }
 

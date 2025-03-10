@@ -2,11 +2,6 @@ const fs = require("fs");
 const path = require("path");
 const vscode = require("vscode");
 const configManager = require("./configManager");
-// Add import for path conversion utilities
-const {
-  convertToRelativePath,
-  convertToAbsolutePath,
-} = require("./alFileSaver");
 
 /**
  * Extract individual C/AL objects from a text file containing multiple objects
