@@ -278,10 +278,6 @@
             "report": "",
             "query": "",
             "xmlport": "",
-            "enum": "",
-            "permissionset": "",
-            "tableextension": "",
-            "pageextension": "",
             "default": ""
           },
           "description": "Locations where to save upgraded AL objects by type",

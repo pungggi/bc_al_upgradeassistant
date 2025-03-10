@@ -154,6 +154,14 @@ async function extractObjects(
 
     fs.writeFileSync(summaryFilePath, summaryContent);
 
+    // Save the upgraded object folders to configuration
+    if (Object.keys(upgradedObjectFoldersByType).length > 0) {
+      await configManager.setConfigValue(
+        "upgradedObjectFolders",
+        upgradedObjectFoldersByType
+      );
+    }
+
     return {
       files: extractedFiles,
       summaryFile: summaryFilePath,
@@ -281,6 +289,20 @@ async function extractObjectsWithDialog() {
         return result;
       }
     );
+
+    // Save the extracted folder locations to configuration
+    if (
+      extraction.objectLocations &&
+      Object.keys(extraction.objectLocations).length > 0
+    ) {
+      await configManager.setConfigValue(
+        "upgradedObjectFolders",
+        extraction.objectLocations
+      );
+      vscode.window.showInformationMessage(
+        "Object folder locations have been saved to your settings."
+      );
+    }
 
     // Show success message with the output folder path and a link to view the summary
     const summaryUri = vscode.Uri.file(extraction.summaryFile);

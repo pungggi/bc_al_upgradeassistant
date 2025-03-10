@@ -188,7 +188,7 @@ async function saveAlCodeToFile(alCode) {
           ...currentLocations,
           [objectInfo.type.toLowerCase()]: targetFolder,
         };
-        await configManager.updateConfig(
+        await configManager.setConfigValue(
           "workingObjectFolders",
           updatedLocations
         );
