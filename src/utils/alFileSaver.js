@@ -106,31 +106,34 @@ async function saveAlCodeToFile(alCode) {
 
   let targetFolder = null;
 
-  // Check if we have objectLocations setting and try to use it
+  // Check if we have workingObjectFolders setting and try to use it
   if (objectInfo && objectInfo.type) {
     // Convert object type to lowercase for consistent lookup
     const objectType = objectInfo.type.toLowerCase();
-    const objectLocations = configManager.getConfigValue("objectLocations", {});
+    const workingObjectFolders = configManager.getConfigValue(
+      "workingObjectFolders",
+      {}
+    );
 
     // First try exact match
-    if (objectLocations[objectType]) {
-      targetFolder = objectLocations[objectType];
+    if (workingObjectFolders[objectType]) {
+      targetFolder = workingObjectFolders[objectType];
     } else {
       // Try to find a matching pattern (e.g. "tableextension" -> "table")
-      for (const locationType in objectLocations) {
+      for (const locationType in workingObjectFolders) {
         if (
           objectType.includes(locationType) ||
           locationType.includes(objectType)
         ) {
-          targetFolder = objectLocations[locationType];
+          targetFolder = workingObjectFolders[locationType];
           break;
         }
       }
     }
 
     // If still no match but we have a default location, use it
-    if (!targetFolder && objectLocations["default"]) {
-      targetFolder = objectLocations["default"];
+    if (!targetFolder && workingObjectFolders["default"]) {
+      targetFolder = workingObjectFolders["default"];
     }
   }
 
@@ -178,14 +181,17 @@ async function saveAlCodeToFile(alCode) {
       if (saveLocation && saveLocation.label === "Yes") {
         // Update the settings
         const currentLocations = configManager.getConfigValue(
-          "objectLocations",
+          "workingObjectFolders",
           {}
         );
         const updatedLocations = {
           ...currentLocations,
           [objectInfo.type.toLowerCase()]: targetFolder,
         };
-        await configManager.updateConfig("objectLocations", updatedLocations);
+        await configManager.updateConfig(
+          "workingObjectFolders",
+          updatedLocations
+        );
 
         vscode.window.showInformationMessage(
           `Location for ${objectInfo.type} objects saved to settings.`

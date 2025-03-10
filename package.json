@@ -249,6 +249,26 @@
             }
           }
         },
+        "bc-al-upgradeassistant.workingObjectFolders": {
+          "type": "object",
+          "default": {
+            "table": "",
+            "page": "",
+            "codeunit": "",
+            "report": "",
+            "query": "",
+            "xmlport": "",
+            "enum": "",
+            "permissionset": "",
+            "tableextension": "",
+            "pageextension": "",
+            "default": ""
+          },
+          "description": "Locations where the working AL objects are by type",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "bc-al-upgradeassistant.objectLocations": {
           "type": "object",
           "default": {
