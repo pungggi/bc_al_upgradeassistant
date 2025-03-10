@@ -269,7 +269,7 @@
             "type": "string"
           }
         },
-        "bc-al-upgradeassistant.objectLocations": {
+        "bc-al-upgradeassistant.upgradedObjectFolders": {
           "type": "object",
           "default": {
             "table": "",
@@ -284,7 +284,7 @@
             "pageextension": "",
             "default": ""
           },
-          "description": "Locations where to save extracted AL objects by type",
+          "description": "Locations where to save upgraded AL objects by type",
           "additionalProperties": {
             "type": "string"
           }

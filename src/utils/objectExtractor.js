@@ -37,8 +37,8 @@ async function extractObjects(
 
   // Keep track of object counts by type
   const objectCountsByType = {};
-  // Keep track of object locations by type
-  const objectLocationsByType = {};
+  // Keep track of upgraded object folders by type
+  const upgradedObjectFoldersByType = {};
 
   try {
     const content = fs.readFileSync(sourceFilePath, "utf8");
@@ -65,7 +65,7 @@ async function extractObjects(
             }
 
             // Store location for this object type
-            objectLocationsByType[currentObjectType] = targetFolder;
+            upgradedObjectFoldersByType[currentObjectType] = targetFolder;
 
             // Count objects by type
             if (!objectCountsByType[currentObjectType]) {
@@ -117,7 +117,7 @@ async function extractObjects(
         }
 
         // Store location for this object type
-        objectLocationsByType[currentObjectType] = targetFolder;
+        upgradedObjectFoldersByType[currentObjectType] = targetFolder;
 
         // Count objects by type
         if (!objectCountsByType[currentObjectType]) {
@@ -157,7 +157,7 @@ async function extractObjects(
     return {
       files: extractedFiles,
       summaryFile: summaryFilePath,
-      objectLocations: objectLocationsByType,
+      objectLocations: upgradedObjectFoldersByType,
     };
   } catch (error) {
     console.error("Error extracting objects:", error);
@@ -182,11 +182,11 @@ function getFileName(objectType, objectId, objectName) {
 }
 
 /**
- * Get the locations of extracted objects by type
+ * Get the locations of upgraded objects by type
  * @returns {Object|null} Object with location information or null if not available
  */
-function getObjectLocationsByType() {
-  return configManager.getConfigValue("objectLocations", null);
+function getUpgradedObjectFoldersByType() {
+  return configManager.getConfigValue("upgradedObjectFolders", null);
 }
 
 /**
@@ -195,7 +195,7 @@ function getObjectLocationsByType() {
  * @returns {string|null} The path where objects of this type are stored, or null if not found
  */
 function getLocationForObjectType(objectType) {
-  const locations = getObjectLocationsByType();
+  const locations = getUpgradedObjectFoldersByType();
   if (
     locations &&
     locations.typeLocations &&
@@ -309,6 +309,6 @@ async function extractObjectsWithDialog() {
 module.exports = {
   extractObjects,
   extractObjectsWithDialog,
-  getObjectLocationsByType,
+  getUpgradedObjectFoldersByType,
   getLocationForObjectType,
 };

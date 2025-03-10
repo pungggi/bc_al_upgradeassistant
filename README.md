@@ -30,7 +30,8 @@ This extension contributes the following settings:
 - `bc-al-upgradeassistant.claude.autoSaveAlCode`: When enabled, automatically saves AL code blocks from Claude responses
 - `bc-al-upgradeassistant.claude.codeSaveMode`: How to handle multiple AL code blocks ("ask" or "saveAll")
 - `bc-al-upgradeassistant.claude.debugMode`: When enabled, shows the prompt being sent to Claude API in a document for review before sending
-- `bc-al-upgradeassistant.objectLocations`: Locations where to save extracted AL objects by type
+- `bc-al-upgradeassistant.upgradedObjectFolders`: Locations where to save upgraded AL objects by type
+- `bc-al-upgradeassistant.workingObjectFolders`: Locations where working AL objects are located
 
 ## Commands
 
