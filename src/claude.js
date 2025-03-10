@@ -230,7 +230,7 @@ ${userPrompt}
  * @param {string} content - The response content to extract code from
  * @returns {Promise<string[]>} - Array of saved file paths
  */
-async function extractAndSaveAlCodeBlocks(content) {
+async function extractAndSaveAlCodeBlocks(content, orginFilePath) {
   // Extract all AL code blocks
   const alBlocks = alFileSaver.extractAlCodeFromMarkdown(content);
 
@@ -243,7 +243,10 @@ async function extractAndSaveAlCodeBlocks(content) {
   // If there's only one block, save it directly
   if (alBlocks.length === 1) {
     try {
-      const filePath = await alFileSaver.saveAlCodeToFile(alBlocks[0]);
+      const filePath = await alFileSaver.saveAlCodeToFile(
+        alBlocks[0],
+        orginFilePath
+      );
       if (filePath) {
         savedFiles.push(filePath);
       }
@@ -260,7 +263,10 @@ async function extractAndSaveAlCodeBlocks(content) {
     // Save all code blocks automatically
     for (const block of alBlocks) {
       try {
-        const filePath = await alFileSaver.saveAlCodeToFile(block);
+        const filePath = await alFileSaver.saveAlCodeToFile(
+          block,
+          orginFilePath
+        );
         if (filePath) {
           savedFiles.push(filePath);
         }
@@ -294,7 +300,10 @@ async function extractAndSaveAlCodeBlocks(content) {
     if (selectedItems && selectedItems.length > 0) {
       for (const item of selectedItems) {
         try {
-          const filePath = await alFileSaver.saveAlCodeToFile(item.code);
+          const filePath = await alFileSaver.saveAlCodeToFile(
+            item.code,
+            orginFilePath
+          );
           if (filePath) {
             savedFiles.push(filePath);
           }

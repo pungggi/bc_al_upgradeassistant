@@ -151,7 +151,7 @@ function convertToAbsolutePath(relativePath) {
  * @param {string} alCode - The AL code to save
  * @returns {Promise<string|null>} - Path to the saved file or null if cancelled
  */
-async function saveAlCodeToFile(alCode) {
+async function saveAlCodeToFile(alCode, orginFilePath) {
   // Get file name based on AL object info
   const { fileName, objectInfo } = getAlFileName(alCode);
 
@@ -302,8 +302,9 @@ async function saveAlCodeToFile(alCode) {
     fileEventsEmitter.fire({
       path: filePath,
       fileName: path.basename(filePath),
-      objectInfo: objectInfo,
+      objectInfo,
       content: alCode,
+      orginFilePath,
     });
   } catch (err) {
     throw new Error(`Failed to write file "${filePath}": ${err.message}`);

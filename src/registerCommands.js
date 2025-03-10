@@ -130,7 +130,8 @@ function registerPromptClaudeCommand(context) {
               if (autoSave) {
                 try {
                   const savedFiles = await claude.extractAndSaveAlCodeBlocks(
-                    response
+                    response,
+                    editor.document.uri.fsPath
                   );
 
                   if (savedFiles.length > 0) {
