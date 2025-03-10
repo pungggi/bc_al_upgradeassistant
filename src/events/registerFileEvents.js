@@ -27,7 +27,6 @@ function createIndexFolder() {
 /**
  * Updates the index for AL files by processing either a single file or scanning an entire directory
  * @param {Object} [fileInfo] - Information about the specific file to process
- * @param {string} [fileInfo.path] - The full path to the AL file to process
  * @returns {void}
  * @throws {Error} When file processing fails or configuration is invalid
  * @description
@@ -154,6 +153,72 @@ function processAlFile(filePath, indexPath, orginFilePath) {
     );
 
     console.log(`Indexed ${objectType} ${objectNumber} from ${filePath}`);
+
+    // Create migration object reference file
+    if (
+      orginFilePath &&
+      typeof orginFilePath === "string" &&
+      orginFilePath !== "orginFilePath"
+    ) {
+      const sourceFileName = path.basename(orginFilePath);
+
+      // Extract object type and number from file name (e.g., "Page5_Currencies.txt", "Table27_Item.txt")
+      const sourceFileNameMatch = sourceFileName.match(
+        /^([a-zA-Z]+)(\d+)_.+\.txt$/
+      );
+
+      if (sourceFileNameMatch) {
+        const sourceObjectType = sourceFileNameMatch[1];
+        const sourceObjectNumber = sourceFileNameMatch[2];
+
+        // Create JSON filename based on source file name (replacing .txt with .json)
+        const referenceFileName = sourceFileName.replace(/\.txt$/, ".json");
+        const referenceFilePath = path.join(indexPath, referenceFileName);
+
+        let referenceData = {
+          referencedWorkingObjects: [],
+        };
+
+        // If file exists, read current data
+        if (fs.existsSync(referenceFilePath)) {
+          try {
+            referenceData = JSON.parse(
+              fs.readFileSync(referenceFilePath, "utf8")
+            );
+          } catch (parseError) {
+            console.error(
+              `Error parsing existing reference file ${referenceFilePath}:`,
+              parseError
+            );
+          }
+        }
+
+        // Add current object reference if not already in the array
+        const objectReference = { type: objectType, number: objectNumber };
+        const exists = referenceData.referencedWorkingObjects.some(
+          (ref) => ref.type === objectType && ref.number === objectNumber
+        );
+
+        if (!exists) {
+          referenceData.referencedWorkingObjects.push(objectReference);
+
+          // Write back to file
+          fs.writeFileSync(
+            referenceFilePath,
+            JSON.stringify(referenceData, null, 2),
+            "utf8"
+          );
+
+          console.log(
+            `Updated migration reference in ${referenceFileName} for ${objectType} ${objectNumber}`
+          );
+        }
+      } else {
+        console.warn(
+          `Could not extract object type and number from migration filename: ${sourceFileName}`
+        );
+      }
+    }
   } catch (error) {
     console.error(`Error processing file ${filePath}:`, error);
   }
