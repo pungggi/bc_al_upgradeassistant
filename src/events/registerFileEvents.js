@@ -89,7 +89,7 @@ function walkDirectoryForAlFiles(currentPath, basePath, indexPath) {
         path.extname(entry.name).toLowerCase() === ".al"
       ) {
         // Process .al files
-        processAlFile(fullPath, indexPath, orginFilePath);
+        processAlFile(fullPath, indexPath, "orginFilePath");
       }
     }
   } catch (error) {
@@ -97,31 +97,31 @@ function walkDirectoryForAlFiles(currentPath, basePath, indexPath) {
   }
 }
 
-function findReferencingMigrationFiles(objectType, objectNumber) {
-  try {
-    const upgradedObjectFolders = configManager.getConfigValue(
-      "upgradedObjectFolders",
-      null
-    );
+// function findReferencingMigrationFiles(objectType, objectNumber) {
+//   try {
+//     const upgradedObjectFolders = configManager.getConfigValue(
+//       "upgradedObjectFolders",
+//       null
+//     );
 
-    if (!upgradedObjectFolders || !upgradedObjectFolders.basePath) {
-      console.warn("Base path not configured for upgraded objects");
-      return [];
-    }
+//     if (!upgradedObjectFolders || !upgradedObjectFolders.basePath) {
+//       console.warn("Base path not configured for upgraded objects");
+//       return [];
+//     }
 
-    // TODO Find all migration files that reference this object
+//     // TODO Find all migration files that reference this object
 
-    const referencingFiles = [];
+//     const referencingFiles = [];
 
-    return referencingFiles;
-  } catch (error) {
-    console.error(
-      `Error finding referencing migration files for ${objectType} ${objectNumber}:`,
-      error
-    );
-    return [];
-  }
-}
+//     return referencingFiles;
+//   } catch (error) {
+//     console.error(
+//       `Error finding referencing migration files for ${objectType} ${objectNumber}:`,
+//       error
+//     );
+//     return [];
+//   }
+// }
 
 /**
  * Processes an AL file by extracting object information and creating an index entry
@@ -161,12 +161,6 @@ function processAlFile(filePath, indexPath, orginFilePath) {
     if (!fs.existsSync(objectNumberFolder)) {
       fs.mkdirSync(objectNumberFolder, { recursive: true });
     }
-
-    // Find migration files that reference this object
-    const referencedMigrationFiles = findReferencingMigrationFiles(
-      objectType,
-      objectNumber
-    );
 
     // Create file information to store
     const fileInfo = {
