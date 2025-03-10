@@ -97,32 +97,6 @@ function walkDirectoryForAlFiles(currentPath, basePath, indexPath) {
   }
 }
 
-// function findReferencingMigrationFiles(objectType, objectNumber) {
-//   try {
-//     const upgradedObjectFolders = configManager.getConfigValue(
-//       "upgradedObjectFolders",
-//       null
-//     );
-
-//     if (!upgradedObjectFolders || !upgradedObjectFolders.basePath) {
-//       console.warn("Base path not configured for upgraded objects");
-//       return [];
-//     }
-
-//     // TODO Find all migration files that reference this object
-
-//     const referencingFiles = [];
-
-//     return referencingFiles;
-//   } catch (error) {
-//     console.error(
-//       `Error finding referencing migration files for ${objectType} ${objectNumber}:`,
-//       error
-//     );
-//     return [];
-//   }
-// }
-
 /**
  * Processes an AL file by extracting object information and creating an index entry
  * @param
