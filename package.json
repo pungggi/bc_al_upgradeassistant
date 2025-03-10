@@ -283,6 +283,12 @@
           "description": "Locations where to save upgraded AL objects by type",
           "additionalProperties": {
             "type": "string"
+          },
+          "properties": {
+            "basePath": {
+              "type": "string",
+              "description": "Base folder for upgraded AL objects when no specific type folder is defined"
+            }
           }
         }
       }

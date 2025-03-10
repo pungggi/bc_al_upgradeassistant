@@ -2,6 +2,11 @@ const fs = require("fs");
 const path = require("path");
 const vscode = require("vscode");
 const configManager = require("./configManager");
+// Add import for path conversion utilities
+const {
+  convertToRelativePath,
+  convertToAbsolutePath,
+} = require("./alFileSaver");
 
 /**
  * Extract individual C/AL objects from a text file containing multiple objects
@@ -64,8 +69,9 @@ async function extractObjects(
               fs.mkdirSync(targetFolder, { recursive: true });
             }
 
-            // Store location for this object type
-            upgradedObjectFoldersByType[currentObjectType] = targetFolder;
+            // Store location for this object type as RELATIVE path to basePath
+            upgradedObjectFoldersByType[currentObjectType] =
+              currentObjectType + "s";
 
             // Count objects by type
             if (!objectCountsByType[currentObjectType]) {
@@ -116,8 +122,9 @@ async function extractObjects(
           fs.mkdirSync(targetFolder, { recursive: true });
         }
 
-        // Store location for this object type
-        upgradedObjectFoldersByType[currentObjectType] = targetFolder;
+        // Store location for this object type as RELATIVE path to basePath
+        upgradedObjectFoldersByType[currentObjectType] =
+          currentObjectType + "s";
 
         // Count objects by type
         if (!objectCountsByType[currentObjectType]) {
@@ -156,6 +163,9 @@ async function extractObjects(
 
     // Save the upgraded object folders to configuration
     if (Object.keys(upgradedObjectFoldersByType).length > 0) {
+      // Store base path as absolute path in upgradedObjectFoldersByType
+      upgradedObjectFoldersByType["basePath"] = outputFolderPath;
+
       await configManager.setConfigValue(
         "upgradedObjectFolders",
         upgradedObjectFoldersByType
@@ -204,14 +214,28 @@ function getUpgradedObjectFoldersByType() {
  */
 function getLocationForObjectType(objectType) {
   const locations = getUpgradedObjectFoldersByType();
-  if (
-    locations &&
-    locations.typeLocations &&
-    locations.typeLocations[objectType]
-  ) {
-    return locations.typeLocations[objectType];
+  if (!locations) return null;
+
+  const basePath = locations["basePath"];
+  if (!basePath) return null;
+
+  // Check for exact match
+  if (locations[objectType]) {
+    return path.join(basePath, locations[objectType]);
   }
-  return null;
+
+  // Try to find a matching pattern (e.g. "tableextension" -> "table")
+  for (const locationType in locations) {
+    if (
+      locationType !== "basePath" &&
+      (objectType.includes(locationType) || locationType.includes(objectType))
+    ) {
+      return path.join(basePath, locations[locationType]);
+    }
+  }
+
+  // If no matching folder found, return basePath
+  return basePath;
 }
 
 /**
@@ -295,6 +319,7 @@ async function extractObjectsWithDialog() {
       extraction.objectLocations &&
       Object.keys(extraction.objectLocations).length > 0
     ) {
+      // Keep the locations as they are
       await configManager.setConfigValue(
         "upgradedObjectFolders",
         extraction.objectLocations
