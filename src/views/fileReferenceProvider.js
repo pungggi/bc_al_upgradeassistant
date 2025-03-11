@@ -271,15 +271,16 @@ class FileReferenceProvider {
         ];
       }
 
+      const result = [
+        new InfoItem("Object Type", objectInfo.type),
+        new InfoItem("Object ID", objectInfo.id),
+        new InfoItem("Object Name", objectInfo.name),
+      ];
+
       // Find the .index folder
       const indexFolder = this._findIndexFolder();
       if (!indexFolder) {
-        return [
-          new InfoItem(
-            "AL File",
-            objectInfo.type + " " + objectInfo.id + " " + objectInfo.name
-          ),
-        ];
+        return result;
       }
 
       // Look for info.json in the object's index folder
@@ -291,24 +292,11 @@ class FileReferenceProvider {
       const infoFilePath = path.join(objectFolder, "info.json");
 
       if (!fs.existsSync(infoFilePath)) {
-        // If no info.json, just show the object info
-        return [
-          new InfoItem(
-            "AL File",
-            objectInfo.type + " " + objectInfo.id + " " + objectInfo.name
-          ),
-        ];
+        return result;
       }
 
       // Read and parse the info file
       const infoData = JSON.parse(fs.readFileSync(infoFilePath, "utf8"));
-
-      // Create result array starting with object info
-      const result = [
-        new InfoItem("Object Type", objectInfo.type),
-        new InfoItem("Object ID", objectInfo.id),
-        new InfoItem("Object Name", objectInfo.name),
-      ];
 
       if (infoData.indexedAt) {
         result.push(
@@ -319,12 +307,34 @@ class FileReferenceProvider {
         );
       }
 
+      // Check for migration files
       if (
         infoData.referencedMigrationFiles &&
         infoData.referencedMigrationFiles.length > 0
       ) {
         // Add referenced migration files group
-        result.push(new MigrationFilesItem(infoData.referencedMigrationFiles));
+        const migrationFiles = infoData.referencedMigrationFiles;
+
+        // For each migration file, scan for documentation IDs
+        const migrationFileRefs = [];
+
+        for (const migFile of migrationFiles) {
+          if (fs.existsSync(migFile)) {
+            const content = fs.readFileSync(migFile, "utf8");
+            const docRefs = this._findDocumentationReferences(content, migFile);
+            if (docRefs.length > 0) {
+              migrationFileRefs.push({
+                file: migFile,
+                refs: docRefs,
+              });
+            }
+          }
+        }
+
+        // Create migration files node with documentation references
+        result.push(
+          new EnhancedMigrationFilesItem(migrationFiles, migrationFileRefs)
+        );
       }
 
       return result;
@@ -871,6 +881,74 @@ class DocumentationRefItem extends TreeItem {
     this.docId = docRef.id;
     this.lineNumber = docRef.lineNumber;
     this.docUrl = docRef.url || "";
+  }
+}
+
+// Add new class for enhanced migration files item
+class EnhancedMigrationFilesItem extends TreeItem {
+  constructor(files, migrationFileRefs) {
+    super(
+      "Referenced Migration Files",
+      vscode.TreeItemCollapsibleState.Collapsed
+    );
+    this.files = files;
+    this.migrationFileRefs = migrationFileRefs;
+    this.contextValue = "migrationFiles";
+    this.iconPath = new vscode.ThemeIcon("references");
+
+    // Use unique ID for state persistence that includes file info
+    const fileHashes = files.map((f) => path.basename(f)).join("-");
+    this.id = `enhancedMigFiles-${fileHashes}`;
+  }
+
+  getChildren() {
+    const items = [];
+
+    this.files.forEach((file) => {
+      const fileRefs = this.migrationFileRefs.find((r) => r.file === file);
+      const fileItem = new MigrationFileItem(file, fileRefs?.refs || []);
+      items.push(fileItem);
+    });
+
+    return items;
+  }
+}
+
+// Add new class for individual migration file items
+class MigrationFileItem extends TreeItem {
+  constructor(file, docRefs) {
+    super(
+      path.basename(file),
+      docRefs.length > 0
+        ? vscode.TreeItemCollapsibleState.Collapsed
+        : vscode.TreeItemCollapsibleState.None
+    );
+
+    this.filePath = file;
+    this.docRefs = docRefs;
+    this.contextValue = "migrationFile";
+    this.iconPath = new vscode.ThemeIcon("file");
+
+    // Command to open file
+    this.command = {
+      command: "bc-al-upgradeassistant.openMigrationFile",
+      title: "Open Migration File",
+      arguments: [file],
+    };
+
+    // Unique ID for state persistence that includes file path and refs count
+    if (docRefs.length > 0) {
+      this.id = `migFile-${path.basename(file)}-${docRefs.length}`;
+    }
+  }
+
+  getChildren() {
+    if (this.docRefs && this.docRefs.length > 0) {
+      return this.docRefs.map(
+        (ref) => new DocumentationRefItem(ref, this.filePath)
+      );
+    }
+    return [];
   }
 }
 
