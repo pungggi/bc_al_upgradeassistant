@@ -1,5 +1,7 @@
 const vscode = require("vscode");
 const { EXTENSION_ID } = require("../constants");
+const fs = require("fs");
+const path = require("path");
 
 /**
  * Get a configuration value from the VS Code settings
@@ -9,7 +11,20 @@ const { EXTENSION_ID } = require("../constants");
  */
 function getConfigValue(key, defaultValue = null) {
   const config = vscode.workspace.getConfiguration(EXTENSION_ID);
-  return config.get(key, defaultValue);
+
+  if (config.has(key)) {
+    return config.get(key);
+  }
+
+  // Try to get the value from local settings.json if the key is documentationIds
+  if (key === "documentationIds") {
+    const localDocIds = getLocalDocumentationIds();
+    if (localDocIds && localDocIds.length > 0) {
+      return localDocIds;
+    }
+  }
+
+  return defaultValue;
 }
 
 /**
@@ -23,7 +38,81 @@ async function setConfigValue(key, value) {
   await config.update(key, value, vscode.ConfigurationTarget.Workspace);
 }
 
+/**
+ * Get merged documentation IDs from workspace settings and local settings.json
+ * @returns {Array} Array of documentation ID objects
+ */
+function getMergedDocumentationIds() {
+  // Get IDs from workspace settings
+  const config = vscode.workspace.getConfiguration("bc-al-upgradeassistant");
+  const workspaceIds = config.get("documentationIds") || [];
+
+  console.log("Documentation IDs from workspace settings:", workspaceIds);
+
+  // Get IDs from local settings.json
+  const localIds = getLocalDocumentationIds() || [];
+  console.log("Documentation IDs from local settings:", localIds);
+
+  // Create a map to avoid duplicates (by ID)
+  const idMap = new Map();
+
+  // Add workspace IDs first
+  workspaceIds.forEach((item) => {
+    idMap.set(item.id, item);
+  });
+
+  // Add local IDs (will overwrite workspace IDs if they have the same ID)
+  localIds.forEach((item) => {
+    idMap.set(item.id, item);
+  });
+
+  // Convert back to array
+  const result = Array.from(idMap.values());
+  console.log("Final merged documentation IDs:", result);
+  return result;
+}
+
+/**
+ * Read documentation IDs from local settings.json file
+ * @returns {Array|null} Array of documentation ID objects or null if not found
+ */
+function getLocalDocumentationIds() {
+  try {
+    // Try to find local settings.json in workspace folders
+    if (
+      !vscode.workspace.workspaceFolders ||
+      vscode.workspace.workspaceFolders.length === 0
+    ) {
+      return null;
+    }
+
+    for (const folder of vscode.workspace.workspaceFolders) {
+      const settingsPath = path.join(
+        folder.uri.fsPath,
+        ".vscode",
+        "settings.json"
+      );
+
+      if (fs.existsSync(settingsPath)) {
+        const settingsContent = fs.readFileSync(settingsPath, "utf8");
+        const settings = JSON.parse(settingsContent);
+
+        // Check if settings has our documentation IDs
+        if (settings && settings["bc-al-upgradeassistant.documentationIds"]) {
+          return settings["bc-al-upgradeassistant.documentationIds"];
+        }
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Error reading local documentation IDs:", error);
+    return null;
+  }
+}
+
 module.exports = {
   getConfigValue,
   setConfigValue,
+  getMergedDocumentationIds,
 };

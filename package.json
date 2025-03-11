@@ -48,6 +48,21 @@
         "command": "bc-al-upgradeassistant.refreshReferenceView",
         "title": "Refresh BC/AL References",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.openDocumentationReference",
+        "title": "Open Documentation Reference Location",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.toggleDocumentationReferenceDone",
+        "title": "Toggle Documentation Reference as Done/Not Done",
+        "icon": "$(check)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.openDocumentationUrl",
+        "title": "Open Documentation URL",
+        "icon": "$(link-external)"
       }
     ],
     "menus": {
@@ -57,6 +72,40 @@
           "command": "bc-al-upgradeassistant.refreshReferenceView",
           "when": "view == bc-al-references || view == bc-al-file-info",
           "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "bc-al-upgradeassistant.toggleDocumentationReferenceDone",
+          "when": "view == bc-al-references && viewItem == documentationRef",
+          "group": "inline"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleDocumentationReferenceDone",
+          "when": "view == bc-al-file-info && viewItem == documentationRef",
+          "group": "inline"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleDocumentationReferenceDone",
+          "when": "view == bc-al-references && viewItem == documentationRefDone",
+          "group": "inline"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleDocumentationReferenceDone",
+          "when": "view == bc-al-file-info && viewItem == documentationRefDone",
+          "group": "inline"
+        },
+        {
+          "command": "bc-al-upgradeassistant.openDocumentationUrl",
+          "when": "view == bc-al-references && (viewItem == documentationRef || viewItem == documentationRefDone || viewItem == documentationRefGroup)",
+          "group": "1_references",
+          "title": "Open Documentation URL"
+        },
+        {
+          "command": "bc-al-upgradeassistant.openDocumentationUrl",
+          "when": "view == bc-al-file-info && (viewItem == documentationRef || viewItem == documentationRefDone || viewItem == documentationRefGroup)",
+          "group": "1_references",
+          "title": "Open Documentation URL"
         }
       ]
     },

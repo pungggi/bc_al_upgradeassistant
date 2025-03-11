@@ -17,6 +17,18 @@ class FileReferenceProvider {
 
     // Store current editor
     this.activeEditor = vscode.window.activeTextEditor;
+
+    // Load documentation IDs from settings
+    this.configManager = require("../utils/configManager");
+    this.documentationIds = this.configManager.getMergedDocumentationIds();
+
+    // Also listen for configuration changes to reload IDs
+    this.configDisposable = vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("bc-al-upgradeassistant.documentationIds")) {
+        this.documentationIds = this.configManager.getMergedDocumentationIds();
+        this.refresh();
+      }
+    });
   }
 
   /**
@@ -96,13 +108,29 @@ class FileReferenceProvider {
       const referenceFileName = fileName.replace(/\.txt$/, ".json");
       const referenceFilePath = path.join(indexFolder, referenceFileName);
 
+      const result = [];
+
+      // Read file content and look for documentation IDs
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      const documentationRefs = this._findDocumentationReferences(
+        fileContent,
+        filePath
+      );
+
+      if (documentationRefs.length > 0) {
+        result.push(new DocumentationRefsItem(documentationRefs, filePath));
+      }
+
       if (!fs.existsSync(referenceFilePath)) {
-        return [
-          new TreeItem(
-            "No references found for this file",
-            vscode.TreeItemCollapsibleState.None
-          ),
-        ];
+        if (result.length === 0) {
+          result.push(
+            new TreeItem(
+              "No references found for this file",
+              vscode.TreeItemCollapsibleState.None
+            )
+          );
+        }
+        return result;
       }
 
       // Read and parse the reference file
@@ -110,21 +138,27 @@ class FileReferenceProvider {
         fs.readFileSync(referenceFilePath, "utf8")
       );
       if (
-        !referenceData.referencedWorkingObjects ||
-        referenceData.referencedWorkingObjects.length === 0
+        referenceData.referencedWorkingObjects &&
+        referenceData.referencedWorkingObjects.length > 0
       ) {
-        return [
+        // Create tree items for each referenced object
+        const referencedObjects = referenceData.referencedWorkingObjects.map(
+          (ref) => {
+            return new ReferencedObjectItem(ref.type, ref.number, indexFolder);
+          }
+        );
+
+        result.push(new ReferencedObjectsGroup(referencedObjects));
+      } else if (result.length === 0) {
+        result.push(
           new TreeItem(
             "No referenced objects found",
             vscode.TreeItemCollapsibleState.None
-          ),
-        ];
+          )
+        );
       }
 
-      // Create tree items for each referenced object
-      return referenceData.referencedWorkingObjects.map((ref) => {
-        return new ReferencedObjectItem(ref.type, ref.number, indexFolder);
-      });
+      return result;
     } catch (error) {
       console.error("Error getting .txt file references:", error);
       return [
@@ -291,11 +325,206 @@ class FileReferenceProvider {
   }
 
   /**
+   * Find documentation references in file content
+   * @param {string} content The file content
+   * @param {string} filePath Path to the file
+   * @returns {Array<{id: string, lineNumber: number, description: string, done: boolean}>} Documentation references
+   */
+  _findDocumentationReferences(content, filePath) {
+    const docRefs = [];
+    const lines = content.split("\n");
+
+    // Create a regex pattern from all the documentation IDs
+    const idMap = {};
+    this.documentationIds.forEach((doc) => {
+      idMap[doc.id] = doc;
+    });
+
+    // Debug output of available documentation IDs
+    console.log("Available documentation IDs:", Object.keys(idMap));
+
+    const idPattern = Object.keys(idMap).join("|");
+    if (!idPattern) {
+      console.log("No documentation IDs configured");
+      return docRefs;
+    }
+
+    // Simpler regex pattern that's more likely to find matches
+    // Will match the ID even if it's part of a larger word/identifier
+    const regex = new RegExp(`(${idPattern})`, "g");
+
+    // Scan each line for references
+    lines.forEach((line, index) => {
+      let match;
+      const originalLine = line; // Keep a copy for debugging
+
+      while ((match = regex.exec(line)) !== null) {
+        const id = match[1]; // This will be the matched ID
+        const docInfo = idMap[id];
+
+        if (docInfo) {
+          console.log(
+            `Found documentation ID '${id}' on line ${
+              index + 1
+            }: "${line.trim()}"`
+          );
+
+          // Check if we already have this reference saved
+          const refData = this._getDocumentationReferenceData(
+            filePath,
+            id,
+            index + 1
+          );
+
+          // Extract the full match to show as context
+          const fullMatch = match[0];
+          const context = line.trim();
+
+          docRefs.push({
+            id,
+            lineNumber: index + 1,
+            description: docInfo.description || "",
+            url: docInfo.url || "",
+            done: refData ? refData.done : false,
+            fullMatch,
+            context:
+              context.length > 80 ? context.substring(0, 77) + "..." : context,
+          });
+        }
+      }
+    });
+
+    console.log(
+      `Found ${docRefs.length} documentation references in ${path.basename(
+        filePath
+      )}`
+    );
+
+    // Sort by line number
+    return docRefs.sort((a, b) => a.lineNumber - b.lineNumber);
+  }
+
+  /**
+   * Get stored data for a documentation reference
+   * @param {string} filePath File path
+   * @param {string} id Documentation ID
+   * @param {number} lineNumber Line number
+   * @returns {any} Stored reference data or null
+   */
+  _getDocumentationReferenceData(filePath, id, lineNumber) {
+    try {
+      const storageFile = this._getDocumentationStorageFile();
+      if (!fs.existsSync(storageFile)) {
+        return null;
+      }
+
+      const storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
+      const fileKey = this._normalizePathForStorage(filePath);
+
+      if (storageData[fileKey] && storageData[fileKey].references) {
+        return storageData[fileKey].references.find(
+          (ref) => ref.id === id && ref.lineNumber === lineNumber
+        );
+      }
+
+      return null;
+    } catch (error) {
+      console.error("Error reading documentation reference data:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Normalize a file path for storage as a key
+   * @param {string} filePath File path
+   * @returns {string} Normalized path
+   */
+  _normalizePathForStorage(filePath) {
+    // Use forward slashes for consistency across platforms
+    return filePath.replace(/\\/g, "/");
+  }
+
+  /**
+   * Get path to documentation references storage file
+   * @returns {string} Path to storage file
+   */
+  _getDocumentationStorageFile() {
+    const indexFolder = this._findIndexFolder();
+    if (!indexFolder) {
+      // Fallback to workspace storage
+      const workspaceFolder =
+        vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!workspaceFolder) {
+        return "";
+      }
+      return path.join(workspaceFolder, ".bc-al-docrefs.json");
+    }
+
+    return path.join(indexFolder, "documentation-references.json");
+  }
+
+  /**
+   * Toggle the "done" state of a documentation reference
+   * @param {string} filePath File path
+   * @param {string} id Documentation ID
+   * @param {number} lineNumber Line number
+   * @returns {boolean} New "done" state
+   */
+  toggleDocumentationReferenceDone(filePath, id, lineNumber) {
+    try {
+      const storageFile = this._getDocumentationStorageFile();
+
+      // Read existing data or create new
+      let storageData = {};
+      if (fs.existsSync(storageFile)) {
+        storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
+      }
+
+      const fileKey = this._normalizePathForStorage(filePath);
+
+      // Initialize file entry if needed
+      if (!storageData[fileKey]) {
+        storageData[fileKey] = {
+          references: [],
+        };
+      }
+
+      // Find existing reference or add new one
+      let ref = storageData[fileKey].references.find(
+        (r) => r.id === id && r.lineNumber === lineNumber
+      );
+
+      if (ref) {
+        // Toggle state
+        ref.done = !ref.done;
+      } else {
+        // Add new entry
+        ref = { id, lineNumber, done: true };
+        storageData[fileKey].references.push(ref);
+      }
+
+      // Save updated data
+      fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
+
+      // Fire change event to refresh tree
+      this.refresh();
+
+      return ref.done;
+    } catch (error) {
+      console.error("Error toggling documentation reference state:", error);
+      return false;
+    }
+  }
+
+  /**
    * Clean up resources
    */
   dispose() {
     if (this.disposable) {
       this.disposable.dispose();
+    }
+    if (this.configDisposable) {
+      this.configDisposable.dispose();
     }
     this._onDidChangeTreeData.dispose();
   }
@@ -322,6 +551,10 @@ class NoFileItem extends TreeItem {
     super("No file selected", vscode.TreeItemCollapsibleState.None);
     this.description = "Open a .txt or .al file to see references";
     this.contextValue = "noFile";
+
+    // Add example documentation IDs for testing
+    this.tooltip =
+      "Documentation ID examples: BC0001, CUSTOM001, #ICCH103/03:400111";
   }
 }
 
@@ -411,6 +644,139 @@ class MigrationFilesItem extends TreeItem {
       item.iconPath = new vscode.ThemeIcon("file");
       return item;
     });
+  }
+}
+
+/**
+ * Tree item for referenced objects group
+ */
+class ReferencedObjectsGroup extends TreeItem {
+  constructor(objects) {
+    super("Referenced Objects", vscode.TreeItemCollapsibleState.Collapsed);
+    this.objects = objects;
+    this.contextValue = "referencedObjectsGroup";
+    this.iconPath = new vscode.ThemeIcon("references");
+  }
+
+  getChildren() {
+    return this.objects;
+  }
+}
+
+/**
+ * Tree item for documentation references
+ */
+class DocumentationRefsItem extends TreeItem {
+  constructor(docRefs, filePath) {
+    super(
+      "Documentation References",
+      vscode.TreeItemCollapsibleState.Collapsed
+    );
+    this.docRefs = docRefs;
+    this.filePath = filePath;
+    this.contextValue = "documentationRefs";
+    this.iconPath = new vscode.ThemeIcon("book");
+
+    // Count distinct documentation IDs
+    this.distinctIds = [...new Set(docRefs.map((ref) => ref.id))];
+  }
+
+  getChildren() {
+    // If only one type of documentation ID or just a few references, return flat list
+    if (this.distinctIds.length <= 1 || this.docRefs.length <= 3) {
+      return this.docRefs.map((ref) => {
+        return new DocumentationRefItem(ref, this.filePath);
+      });
+    }
+
+    // Otherwise, group by documentation ID
+    return this.distinctIds.map((id) => {
+      const refsForId = this.docRefs.filter((ref) => ref.id === id);
+      return new DocumentationRefGroupItem(id, refsForId, this.filePath);
+    });
+  }
+}
+
+/**
+ * Tree item for a group of documentation references with the same ID
+ */
+class DocumentationRefGroupItem extends TreeItem {
+  constructor(id, docRefs, filePath) {
+    // Find the first reference to get description info
+    const firstRef = docRefs[0];
+    const description = firstRef ? firstRef.description : "";
+
+    super(id, vscode.TreeItemCollapsibleState.Collapsed);
+    this.description = `${description} (${docRefs.length} references)`;
+    this.docRefs = docRefs;
+    this.filePath = filePath;
+    this.contextValue = "documentationRefGroup";
+    this.iconPath = new vscode.ThemeIcon("symbol-folder");
+
+    // When a docRef in this group has a URL, expose it for context menu
+    const refWithUrl = docRefs.find((ref) => ref.url);
+    if (refWithUrl && refWithUrl.url) {
+      this.docUrl = refWithUrl.url;
+    }
+  }
+
+  getChildren() {
+    return this.docRefs.map((ref) => {
+      return new DocumentationRefItem(ref, this.filePath);
+    });
+  }
+}
+
+/**
+ * Tree item for a single documentation reference
+ */
+class DocumentationRefItem extends TreeItem {
+  constructor(docRef, filePath) {
+    // Use the context (line content) as the label, limited to 200 chars
+    let contextText = docRef.context || "";
+
+    // Remove the documentation ID from the displayed content
+    const idRegex = new RegExp(docRef.id, "g");
+    contextText = contextText.replace(idRegex, "").trim();
+
+    // Handle any double spaces that might be left after removing the ID
+    contextText = contextText.replace(/\s+/g, " ").trim();
+
+    const label =
+      contextText.length > 200
+        ? contextText.substring(0, 197) + "..."
+        : contextText;
+
+    super(label, vscode.TreeItemCollapsibleState.None);
+    this.docRef = docRef;
+    this.filePath = filePath;
+
+    // Show ID and line number in the description
+    this.description = `${docRef.id} (line ${docRef.lineNumber})`;
+
+    this.contextValue = docRef.done
+      ? "documentationRefDone"
+      : "documentationRef";
+    this.iconPath = docRef.done
+      ? new vscode.ThemeIcon("check")
+      : new vscode.ThemeIcon("book");
+
+    // Command to jump to the line
+    this.command = {
+      command: "bc-al-upgradeassistant.openDocumentationReference",
+      title: "Open Reference Location",
+      arguments: [filePath, docRef.lineNumber],
+    };
+
+    // Include the context in the tooltip for more information
+    this.tooltip = `${docRef.id}: ${docRef.description}\n\nLine: ${docRef.lineNumber}\n\nClick to open file at reference location\nRight-click for more options`;
+
+    // Create separate properties instead of arrays for arguments
+    // This ensures VS Code can correctly pick up the arguments
+    this.filePath = filePath;
+    this.docId = docRef.id;
+    this.lineNumber = docRef.lineNumber;
+    this.docUrl = docRef.url || "";
   }
 }
 

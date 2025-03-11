@@ -37,6 +37,24 @@ async function activate(context) {
       )
     );
 
+    // Watch for changes to settings.json files in workspace folders
+    if (vscode.workspace.workspaceFolders) {
+      vscode.workspace.workspaceFolders.forEach((folder) => {
+        const settingsWatcher = vscode.workspace.createFileSystemWatcher(
+          new vscode.RelativePattern(folder, ".vscode/settings.json")
+        );
+
+        // When settings.json changes, refresh file reference view
+        settingsWatcher.onDidChange(() => {
+          vscode.commands.executeCommand(
+            "bc-al-upgradeassistant.refreshReferenceView"
+          );
+        });
+
+        context.subscriptions.push(settingsWatcher);
+      });
+    }
+
     console.log(`${EXTENSION_ID} extension activated successfully`);
   } catch (error) {
     console.error("Error during extension activation:", error);
