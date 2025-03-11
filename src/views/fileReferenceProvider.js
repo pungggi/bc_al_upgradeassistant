@@ -1,6 +1,7 @@
 const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
+const documentationHelper = require("../utils/documentationHelper");
 
 /**
  * Tree data provider for BC/AL file references
@@ -424,66 +425,38 @@ class FileReferenceProvider {
    * @returns {Array<{id: string, lineNumber: number, description: string, done: boolean}>} Documentation references
    */
   _findDocumentationReferences(content, filePath) {
-    const docRefs = [];
-    const lines = content.split("\n");
+    if (!content) {
+      return [];
+    }
 
-    // Create a regex pattern from all the documentation IDs
-    const idMap = {};
-    this.documentationIds.forEach((doc) => {
-      idMap[doc.id] = doc;
-    });
+    // Create regex pattern from documentation IDs
+    const { idMap, regex } = documentationHelper.createDocumentationRegex(
+      this.documentationIds
+    );
+    if (!regex) {
+      console.log("No documentation IDs configured");
+      return [];
+    }
 
     // Debug output of available documentation IDs
     console.log("Available documentation IDs:", Object.keys(idMap));
 
-    const idPattern = Object.keys(idMap).join("|");
-    if (!idPattern) {
-      console.log("No documentation IDs configured");
-      return docRefs;
-    }
+    // Find references
+    const docRefs = documentationHelper.findDocumentationReferences(
+      content,
+      regex,
+      idMap,
+      filePath
+    );
 
-    // Simpler regex pattern that's more likely to find matches
-    // Will match the ID even if it's part of a larger word/identifier
-    const regex = new RegExp(`(${idPattern})`, "g");
-
-    // Scan each line for references
-    lines.forEach((line, index) => {
-      let match;
-
-      while ((match = regex.exec(line)) !== null) {
-        const id = match[1]; // This will be the matched ID
-        const docInfo = idMap[id];
-
-        if (docInfo) {
-          console.log(
-            `Found documentation ID '${id}' on line ${
-              index + 1
-            }: "${line.trim()}"`
-          );
-
-          // Check if we already have this reference saved
-          const refData = this._getDocumentationReferenceData(
-            filePath,
-            id,
-            index + 1
-          );
-
-          // Extract the full match to show as context
-          const fullMatch = match[0];
-          const context = line.trim();
-
-          docRefs.push({
-            id,
-            lineNumber: index + 1,
-            description: docInfo.description || "",
-            url: docInfo.url || "",
-            done: refData ? refData.done : false,
-            fullMatch,
-            context:
-              context.length > 80 ? context.substring(0, 77) + "..." : context,
-          });
-        }
-      }
+    // Enhance with "done" status from storage
+    docRefs.forEach((ref) => {
+      const refData = this._getDocumentationReferenceData(
+        filePath,
+        ref.id,
+        ref.lineNumber
+      );
+      ref.done = refData ? refData.done : false;
     });
 
     console.log(
@@ -492,8 +465,7 @@ class FileReferenceProvider {
       )}`
     );
 
-    // Sort by line number
-    return docRefs.sort((a, b) => a.lineNumber - b.lineNumber);
+    return docRefs;
   }
 
   /**
@@ -532,8 +504,7 @@ class FileReferenceProvider {
    * @returns {string} Normalized path
    */
   _normalizePathForStorage(filePath) {
-    // Use forward slashes for consistency across platforms
-    return filePath.replace(/\\/g, "/");
+    return documentationHelper.normalizePathForStorage(filePath);
   }
 
   /**
@@ -541,18 +512,9 @@ class FileReferenceProvider {
    * @returns {string} Path to storage file
    */
   _getDocumentationStorageFile() {
-    const indexFolder = this._findIndexFolder();
-    if (!indexFolder) {
-      // Fallback to workspace storage
-      const workspaceFolder =
-        vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      if (!workspaceFolder) {
-        return "";
-      }
-      return path.join(workspaceFolder, ".bc-al-docrefs.json");
-    }
-
-    return path.join(indexFolder, "documentation-references.json");
+    return documentationHelper.getDocumentationStorageFile(() =>
+      this._findIndexFolder()
+    );
   }
 
   /**
