@@ -795,36 +795,36 @@ class InfoItem extends TreeItem {
 /**
  * Tree item for migration files
  */
-class MigrationFilesItem extends TreeItem {
-  constructor(files) {
-    super(
-      "Referenced Migration Files",
-      vscode.TreeItemCollapsibleState.Collapsed
-    );
-    this.files = files;
-    this.contextValue = "migrationFiles";
-    this.iconPath = new vscode.ThemeIcon("references");
+// class MigrationFilesItem extends TreeItem {
+//   constructor(files) {
+//     super(
+//       "Referenced Migration Files",
+//       vscode.TreeItemCollapsibleState.Collapsed
+//     );
+//     this.files = files;
+//     this.contextValue = "migrationFiles";
+//     this.iconPath = new vscode.ThemeIcon("references");
 
-    // Set a unique ID for state persistence
-    this.id = `migrationFiles-${files.length}`;
-  }
+//     // Set a unique ID for state persistence
+//     this.id = `migrationFiles-${files.length}`;
+//   }
 
-  getChildren() {
-    return this.files.map((file) => {
-      const item = new TreeItem(
-        path.basename(file),
-        vscode.TreeItemCollapsibleState.None
-      );
-      item.command = {
-        command: "bc-al-upgradeassistant.openMigrationFile",
-        title: "Open Migration File",
-        arguments: [file],
-      };
-      item.iconPath = new vscode.ThemeIcon("file");
-      return item;
-    });
-  }
-}
+//   getChildren() {
+//     return this.files.map((file) => {
+//       const item = new TreeItem(
+//         path.basename(file),
+//         vscode.TreeItemCollapsibleState.None
+//       );
+//       item.command = {
+//         command: "bc-al-upgradeassistant.openMigrationFile",
+//         title: "Open Migration File",
+//         arguments: [file],
+//       };
+//       item.iconPath = new vscode.ThemeIcon("file");
+//       return item;
+//     });
+//   }
+// }
 
 /**
  * Tree item for referenced objects group

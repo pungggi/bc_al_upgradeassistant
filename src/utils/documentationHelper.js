@@ -1,5 +1,4 @@
 const path = require("path");
-const fs = require("fs");
 
 /**
  * Creates a regex pattern from documentation IDs
