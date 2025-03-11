@@ -168,9 +168,6 @@ function processAlFile(filePath, indexPath, orginFilePath) {
       );
 
       if (sourceFileNameMatch) {
-        const sourceObjectType = sourceFileNameMatch[1];
-        const sourceObjectNumber = sourceFileNameMatch[2];
-
         // Create JSON filename based on source file name (replacing .txt with .json)
         const referenceFileName = sourceFileName.replace(/\.txt$/, ".json");
         const referenceFilePath = path.join(indexPath, referenceFileName);

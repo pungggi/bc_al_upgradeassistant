@@ -77,8 +77,8 @@ class FileReferenceProvider {
     try {
       // Convert Map keys of expanded items to array
       const expandedItems = Array.from(this.expandedState.entries())
-        .filter(([_, isExpanded]) => isExpanded)
-        .map(([id, _]) => id);
+        .filter(([, isExpanded]) => isExpanded)
+        .map(([id]) => id);
 
       this.extensionContext.globalState.update(
         "treeViewExpandedState",
@@ -439,7 +439,6 @@ class FileReferenceProvider {
     // Scan each line for references
     lines.forEach((line, index) => {
       let match;
-      const originalLine = line; // Keep a copy for debugging
 
       while ((match = regex.exec(line)) !== null) {
         const id = match[1]; // This will be the matched ID
@@ -676,16 +675,12 @@ class ReferencedObjectItem extends TreeItem {
     const infoFilePath = path.join(objectFolder, "info.json");
 
     if (fs.existsSync(infoFilePath)) {
-      try {
-        const infoData = JSON.parse(fs.readFileSync(infoFilePath, "utf8"));
-        if (infoData.fileName) {
-          const fileNameMatch = infoData.fileName.match(/_(.+)\.al$/);
-          if (fileNameMatch) {
-            this.description = fileNameMatch[1].replace(/_/g, " ");
-          }
+      const infoData = JSON.parse(fs.readFileSync(infoFilePath, "utf8"));
+      if (infoData.fileName) {
+        const fileNameMatch = infoData.fileName.match(/_(.+)\.al$/);
+        if (fileNameMatch) {
+          this.description = fileNameMatch[1].replace(/_/g, " ");
         }
-      } catch (error) {
-        // Ignore errors in getting description
       }
     }
   }
