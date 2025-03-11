@@ -595,9 +595,6 @@ function getIdRangesFromAppJson() {
       }));
     }
 
-    // Add customization range for IDs 50000-99999 (common customization range)
-    idRanges.push({ from: 50000, to: 99999 });
-
     console.log("Using ID ranges:", idRanges);
     return idRanges;
   } catch (error) {

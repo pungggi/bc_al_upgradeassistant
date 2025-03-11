@@ -1,9 +1,11 @@
+const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
 const configManager = require("../utils/configManager");
-const { fileEvents } = require("../utils/alFileSaver");
+const { convertToAbsolutePath, fileEvents } = require("../utils/alFileSaver");
 const { parseCALToJSON } = require("../utils/calParser");
 const documentationHelper = require("../utils/documentationHelper");
+const alCodeFilter = require("../utils/alCodeFilter");
 
 function createIndexFolder() {
   try {
@@ -366,6 +368,7 @@ function postCorrections(fileInfo) {
     const parsedCal = parseCALToJSON(calCode);
 
     insertDocumentationTrigger(parsedCal, fileInfo, content);
+    assignAvailableObjectNumber(fileInfo, content, objectType, objectNumber);
   } catch (error) {
     console.error("Error in postCorrections:", error);
   }
@@ -404,6 +407,140 @@ function insertDocumentationTrigger(parsedCal, fileInfo, content) {
       "\n" +
       content.substring(firstBraceIndex + 1);
     fs.writeFileSync(fileInfo.path, updatedContent, "utf8");
+  }
+}
+
+/**
+ * Assigns an available object number to the AL file being processed
+ * @param {Object} fileInfo - Information about the file being processed
+ * @returns {boolean} - Whether the number was updated successfully
+ */
+function assignAvailableObjectNumber(
+  fileInfo,
+  content,
+  objectType,
+  currentObjectNumber
+) {
+  try {
+    if (
+      !fileInfo?.path ||
+      path.extname(fileInfo.path).toLowerCase() !== ".al"
+    ) {
+      return false;
+    }
+
+    // Get the ID ranges from app.json
+    const idRanges = alCodeFilter.getIdRangesFromAppJson();
+
+    // If no ID ranges found, use default values
+    let minNumber = 50000;
+    let maxNumber = 99999;
+
+    if (idRanges && idRanges.length > 0) {
+      // Find the minimum and maximum values from all ID ranges
+      minNumber = Math.min(...idRanges.map((range) => range.from));
+      maxNumber = Math.max(...idRanges.map((range) => range.to));
+    } else {
+      console.log(
+        "No ID ranges found in app.json, using default range (50000-99999)"
+      );
+    }
+
+    // Get paths to scan for existing object numbers
+    const workingObjectFolders = configManager.getConfigValue(
+      "workingObjectFolders",
+      null
+    );
+
+    // Find the target path for this object type
+    const targetFolder = convertToAbsolutePath(
+      workingObjectFolders[objectType]
+    );
+
+    if (!fs.existsSync(targetFolder)) {
+      console.warn(
+        `Target path for ${objectType} does not exist: ${targetFolder}`
+      );
+      return false;
+    }
+
+    // Set to track used object numbers
+    const usedNumbers = new Set();
+
+    // Walk through all files in target path
+    const files = fs.readdirSync(targetFolder);
+    for (const file of files) {
+      // Skip the current file
+      if (path.join(targetFolder, file) === fileInfo.path) {
+        continue;
+      }
+
+      if (path.extname(file).toLowerCase() === ".al") {
+        try {
+          const fileContent = fs.readFileSync(
+            path.join(targetFolder, file),
+            "utf8"
+          );
+          const match = fileContent.match(
+            new RegExp(`\\b${objectType}\\b\\s+(\\d+)\\s+["']`, "i")
+          );
+
+          if (match && match[1]) {
+            usedNumbers.add(parseInt(match[1], 10));
+          }
+        } catch (err) {
+          console.error(`Error reading file ${file}:`, err);
+        }
+      }
+    }
+
+    // If current number is not used by other files, keep it
+    if (
+      currentObjectNumber >= minNumber &&
+      currentObjectNumber <= maxNumber &&
+      !usedNumbers.has(currentObjectNumber)
+    ) {
+      console.log(
+        `Object number ${currentObjectNumber} is already valid and available.`
+      );
+      return true;
+    }
+
+    // Find the next available number
+    let nextNumber = minNumber;
+    while (usedNumbers.has(nextNumber) && nextNumber <= maxNumber) {
+      nextNumber++;
+    }
+
+    // Check if we found an available number
+    if (nextNumber > maxNumber) {
+      vscode.window.showInformationMessage(
+        `No available object numbers found in range ${minNumber}-${maxNumber}`
+      );
+    }
+
+    // Define the regex to find the object type and number in the content
+    const objectTypeRegex = new RegExp(
+      `\\b(${objectType})\\b\\s+(\\d+)\\s+["']([^"']+)["']`,
+      "i"
+    );
+
+    // Replace the object number in the file content
+    const updatedContent = content.replace(
+      objectTypeRegex,
+      `$1 ${nextNumber} "$3"`
+    );
+
+    // Write the updated content back to the file
+    fs.writeFileSync(fileInfo.path, updatedContent, "utf8");
+
+    console.log(
+      `Updated object number for ${objectType} from ${currentObjectNumber} to ${nextNumber}`
+    );
+    return true;
+  } catch (error) {
+    console.error("Error in assignAvailableObjectNumber:", error);
+    return false;
   }
 }
 
