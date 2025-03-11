@@ -365,45 +365,45 @@ function postCorrections(fileInfo) {
     const calCode = fs.readFileSync(fileInfo.orginFilePath, "utf8");
     const parsedCal = parseCALToJSON(calCode);
 
-    let documentation = parsedCal.documentation;
-
-    if (!documentation) {
-      return;
-    }
-
-    // Filter only Documentation comments with documentationId configured in documentationIds
-    documentation = filterDocumentationByIds(documentation);
-    if (!documentation) {
-      console.log(`No relevant documentation found for ${fileInfo.path}`);
-      return;
-    }
-
-    // Format the documentation as AL comments
-    const commentedDocumentation = formatAsComments(documentation);
-
-    // Check if file already has the documentation comments
-    if (content.includes(commentedDocumentation)) {
-      console.log(`File ${fileInfo.path} already has documentation comments`);
-      return;
-    }
-
-    // Find the first opening curly brace and insert the documentation after it
-    const firstBraceIndex = content.indexOf("{");
-    if (firstBraceIndex !== -1) {
-      const updatedContent =
-        content.substring(0, firstBraceIndex + 1) +
-        "\n" +
-        commentedDocumentation +
-        "\n" +
-        content.substring(firstBraceIndex + 1);
-      fs.writeFileSync(fileInfo.path, updatedContent, "utf8");
-    } else {
-      // Fallback to adding at the top if no curly brace is found
-      const updatedContent = `${commentedDocumentation}\n${content}`;
-      fs.writeFileSync(fileInfo.path, updatedContent, "utf8");
-    }
+    insertDocumentationTrigger(parsedCal, fileInfo, content);
   } catch (error) {
     console.error("Error in postCorrections:", error);
+  }
+}
+
+function insertDocumentationTrigger(parsedCal, fileInfo, content) {
+  let documentation = parsedCal.documentation;
+
+  if (!documentation) {
+    return;
+  }
+
+  // Filter only Documentation comments with documentationId configured in documentationIds
+  documentation = filterDocumentationByIds(documentation);
+  if (!documentation) {
+    console.log(`No relevant documentation found for ${fileInfo.path}`);
+    return;
+  }
+
+  // Format the documentation as AL comments
+  const commentedDocumentation = formatAsComments(documentation);
+
+  // Check if file already has the documentation comments
+  if (content.includes(commentedDocumentation)) {
+    console.log(`File ${fileInfo.path} already has documentation comments`);
+    return;
+  }
+
+  // Find the first opening curly brace and insert the documentation after it
+  const firstBraceIndex = content.indexOf("{");
+  if (firstBraceIndex !== -1) {
+    const updatedContent =
+      content.substring(0, firstBraceIndex + 1) +
+      "\n" +
+      commentedDocumentation +
+      "\n" +
+      content.substring(firstBraceIndex + 1);
+    fs.writeFileSync(fileInfo.path, updatedContent, "utf8");
   }
 }
 
