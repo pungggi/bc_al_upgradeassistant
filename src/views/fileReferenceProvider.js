@@ -44,15 +44,23 @@ class FileReferenceProvider {
       gutterIconSize: "100%",
       fontWeight: "normal",
       isWholeLine: true,
-      before: {
-        contentText: "✓",
-        color: new vscode.ThemeColor("editorGutter.addedBackground"),
-        margin: "0 0 0 0",
-      },
+      // before: {
+      //   contentText: "✓",
+      //   color: new vscode.ThemeColor("editorGutter.addedBackground"),
+      //   margin: "0 0 0 0",
+      // },
     });
 
     // Create decoration type for undone references
     this.undoneDecorationType = vscode.window.createTextEditorDecorationType({
+      gutterIconPath: path.join(
+        __dirname,
+        "..",
+        "..",
+        "media",
+        "unchecked.svg"
+      ),
+      gutterIconSize: "100%",
       fontWeight: "bold",
       isWholeLine: true,
     });
