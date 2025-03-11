@@ -644,8 +644,14 @@ class FileReferenceProvider {
       return;
     }
 
+    // Only apply decorations for .txt files
+    const filePath = this.currentEditor.document.uri.fsPath;
+    const fileExt = path.extname(filePath).toLowerCase();
+    if (fileExt !== ".txt") {
+      return;
+    }
+
     try {
-      const filePath = this.currentEditor.document.uri.fsPath;
       const doneDecorations = [];
       const undoneDecorations = [];
 
