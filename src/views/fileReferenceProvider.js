@@ -37,6 +37,58 @@ class FileReferenceProvider {
         this.refresh();
       }
     });
+
+    // Create decoration type for done references with more prominent styling
+    this.doneDecorationType = vscode.window.createTextEditorDecorationType({
+      gutterIconPath: path.join(__dirname, "..", "..", "media", "check.svg"),
+      gutterIconSize: "100%",
+      fontWeight: "normal",
+      isWholeLine: true,
+      before: {
+        contentText: "✓",
+        color: new vscode.ThemeColor("editorGutter.addedBackground"),
+        margin: "0 0 0 0",
+      },
+    });
+
+    // Create decoration type for undone references
+    this.undoneDecorationType = vscode.window.createTextEditorDecorationType({
+      fontWeight: "bold",
+      isWholeLine: true,
+    });
+
+    // Track current editor
+    this.currentEditor = vscode.window.activeTextEditor;
+
+    // Listen for editor changes to update decorations
+    this.editorChangeDisposable = [
+      vscode.window.onDidChangeActiveTextEditor((editor) => {
+        this.currentEditor = editor;
+        if (editor) {
+          this.updateDecorations();
+        }
+      }),
+      // Add listener for document changes
+      vscode.workspace.onDidChangeTextDocument((event) => {
+        if (
+          this.currentEditor &&
+          event.document === this.currentEditor.document
+        ) {
+          this.updateDecorations();
+        }
+      }),
+      // Add listener for when text editor is opened
+      vscode.window.onDidChangeVisibleTextEditors(() => {
+        if (this.currentEditor) {
+          this.updateDecorations();
+        }
+      }),
+    ];
+
+    // Initial decoration update
+    if (this.currentEditor) {
+      this.updateDecorations();
+    }
   }
 
   /**
@@ -214,6 +266,7 @@ class FileReferenceProvider {
             )
           );
         }
+        this.updateDecorations();
         return result;
       }
 
@@ -242,6 +295,7 @@ class FileReferenceProvider {
         );
       }
 
+      this.updateDecorations();
       return result;
     } catch (error) {
       console.error("Error getting .txt file references:", error);
@@ -525,48 +579,97 @@ class FileReferenceProvider {
    * @returns {boolean} New "done" state
    */
   toggleDocumentationReferenceDone(filePath, id, lineNumber) {
+    const result = (() => {
+      try {
+        const storageFile = this._getDocumentationStorageFile();
+
+        // Read existing data or create new
+        let storageData = {};
+        if (fs.existsSync(storageFile)) {
+          storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
+        }
+
+        const fileKey = this._normalizePathForStorage(filePath);
+
+        // Initialize file entry if needed
+        if (!storageData[fileKey]) {
+          storageData[fileKey] = {
+            references: [],
+          };
+        }
+
+        // Find existing reference or add new one
+        let ref = storageData[fileKey].references.find(
+          (r) => r.id === id && r.lineNumber === lineNumber
+        );
+
+        if (ref) {
+          // Toggle state
+          ref.done = !ref.done;
+        } else {
+          // Add new entry
+          ref = { id, lineNumber, done: true };
+          storageData[fileKey].references.push(ref);
+        }
+
+        // Save updated data
+        fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
+
+        // Fire change event to refresh tree
+        this.refresh();
+
+        return ref.done;
+      } catch (error) {
+        console.error("Error toggling documentation reference state:", error);
+        return false;
+      }
+    })();
+
+    // Update decorations after toggling
+    this.updateDecorations();
+
+    return result;
+  }
+
+  updateDecorations() {
+    if (!this.currentEditor) {
+      return;
+    }
+
     try {
-      const storageFile = this._getDocumentationStorageFile();
+      const filePath = this.currentEditor.document.uri.fsPath;
+      const doneDecorations = [];
+      const undoneDecorations = [];
 
-      // Read existing data or create new
-      let storageData = {};
-      if (fs.existsSync(storageFile)) {
-        storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
-      }
-
-      const fileKey = this._normalizePathForStorage(filePath);
-
-      // Initialize file entry if needed
-      if (!storageData[fileKey]) {
-        storageData[fileKey] = {
-          references: [],
-        };
-      }
-
-      // Find existing reference or add new one
-      let ref = storageData[fileKey].references.find(
-        (r) => r.id === id && r.lineNumber === lineNumber
+      const docRefs = this._findDocumentationReferences(
+        this.currentEditor.document.getText(),
+        filePath
       );
 
-      if (ref) {
-        // Toggle state
-        ref.done = !ref.done;
-      } else {
-        // Add new entry
-        ref = { id, lineNumber, done: true };
-        storageData[fileKey].references.push(ref);
-      }
+      docRefs.forEach((ref) => {
+        const line = ref.lineNumber - 1;
+        const range = new vscode.Range(
+          new vscode.Position(line, 0),
+          new vscode.Position(line, Number.MAX_VALUE)
+        );
 
-      // Save updated data
-      fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
+        if (ref.done) {
+          doneDecorations.push(range);
+        } else {
+          undoneDecorations.push(range);
+        }
+      });
 
-      // Fire change event to refresh tree
-      this.refresh();
-
-      return ref.done;
+      this.currentEditor.setDecorations(
+        this.doneDecorationType,
+        doneDecorations
+      );
+      this.currentEditor.setDecorations(
+        this.undoneDecorationType,
+        undoneDecorations
+      );
     } catch (error) {
-      console.error("Error toggling documentation reference state:", error);
-      return false;
+      console.error("Error updating decorations:", error);
     }
   }
 
@@ -585,6 +688,11 @@ class FileReferenceProvider {
     this.saveExpandedState();
 
     this._onDidChangeTreeData.dispose();
+    if (this.editorChangeDisposable) {
+      this.editorChangeDisposable.forEach((d) => d.dispose());
+    }
+    this.doneDecorationType.dispose();
+    this.undoneDecorationType.dispose();
   }
 }
 
