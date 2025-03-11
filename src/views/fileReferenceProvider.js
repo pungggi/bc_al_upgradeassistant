@@ -10,6 +10,13 @@ class FileReferenceProvider {
     this._onDidChangeTreeData = new vscode.EventEmitter();
     this.onDidChangeTreeData = this._onDidChangeTreeData.event;
 
+    // Store expanded state
+    this.expandedState = new Map();
+
+    // Load expanded state from storage
+    this.storageLoaded = false;
+    this.extensionContext = null;
+
     // Listen for file change events
     this.disposable = vscode.window.onDidChangeActiveTextEditor((editor) =>
       this._onActiveEditorChanged(editor)
@@ -29,6 +36,58 @@ class FileReferenceProvider {
         this.refresh();
       }
     });
+  }
+
+  /**
+   * Initialize with extension context for storage
+   * @param {vscode.ExtensionContext} context Extension context
+   */
+  initialize(context) {
+    this.extensionContext = context;
+    this.loadExpandedState();
+  }
+
+  /**
+   * Load expanded state from storage
+   */
+  loadExpandedState() {
+    if (!this.extensionContext) return;
+
+    try {
+      const state = this.extensionContext.globalState.get(
+        "treeViewExpandedState"
+      );
+      if (state && Array.isArray(state)) {
+        this.expandedState.clear();
+        state.forEach((id) => this.expandedState.set(id, true));
+      }
+      this.storageLoaded = true;
+      console.log(`Loaded ${this.expandedState.size} expanded tree items`);
+    } catch (error) {
+      console.error("Error loading expanded state:", error);
+    }
+  }
+
+  /**
+   * Save expanded state to storage
+   */
+  saveExpandedState() {
+    if (!this.extensionContext) return;
+
+    try {
+      // Convert Map keys of expanded items to array
+      const expandedItems = Array.from(this.expandedState.entries())
+        .filter(([_, isExpanded]) => isExpanded)
+        .map(([id, _]) => id);
+
+      this.extensionContext.globalState.update(
+        "treeViewExpandedState",
+        expandedItems
+      );
+      console.log(`Saved ${expandedItems.length} expanded tree items`);
+    } catch (error) {
+      console.error("Error saving expanded state:", error);
+    }
   }
 
   /**
@@ -82,7 +141,31 @@ class FileReferenceProvider {
    * @returns {vscode.TreeItem} The tree item
    */
   getTreeItem(element) {
+    // Check if we have stored state for this element and it should be expanded
+    if (
+      element.id &&
+      element.collapsibleState !== vscode.TreeItemCollapsibleState.None
+    ) {
+      const isExpanded = this.expandedState.get(element.id);
+      if (isExpanded !== undefined) {
+        element.collapsibleState = isExpanded
+          ? vscode.TreeItemCollapsibleState.Expanded
+          : vscode.TreeItemCollapsibleState.Collapsed;
+      }
+    }
     return element;
+  }
+
+  /**
+   * Save expanded state for an item
+   * @param {string} itemId ID of the item
+   * @param {boolean} isExpanded Whether the item is expanded
+   */
+  setItemExpandedState(itemId, isExpanded) {
+    if (!itemId) return;
+
+    this.expandedState.set(itemId, isExpanded);
+    this.saveExpandedState();
   }
 
   /**
@@ -526,6 +609,10 @@ class FileReferenceProvider {
     if (this.configDisposable) {
       this.configDisposable.dispose();
     }
+
+    // Save state before disposing
+    this.saveExpandedState();
+
     this._onDidChangeTreeData.dispose();
   }
 }
@@ -628,6 +715,9 @@ class MigrationFilesItem extends TreeItem {
     this.files = files;
     this.contextValue = "migrationFiles";
     this.iconPath = new vscode.ThemeIcon("references");
+
+    // Set a unique ID for state persistence
+    this.id = `migrationFiles-${files.length}`;
   }
 
   getChildren() {
@@ -656,6 +746,9 @@ class ReferencedObjectsGroup extends TreeItem {
     this.objects = objects;
     this.contextValue = "referencedObjectsGroup";
     this.iconPath = new vscode.ThemeIcon("references");
+
+    // Set a unique ID so we can remember expanded state
+    this.id = `refObjectsGroup-${this.objects.length}`;
   }
 
   getChildren() {
@@ -679,6 +772,9 @@ class DocumentationRefsItem extends TreeItem {
 
     // Count distinct documentation IDs
     this.distinctIds = [...new Set(docRefs.map((ref) => ref.id))];
+
+    // Set a unique ID so we can remember expanded state
+    this.id = `docRefs-${filePath}`;
   }
 
   getChildren() {
@@ -712,6 +808,9 @@ class DocumentationRefGroupItem extends TreeItem {
     this.filePath = filePath;
     this.contextValue = "documentationRefGroup";
     this.iconPath = new vscode.ThemeIcon("symbol-folder");
+
+    // Set a unique ID so we can remember expanded state
+    this.id = `docRefGroup-${filePath}-${id}`;
 
     // When a docRef in this group has a URL, expose it for context menu
     const refWithUrl = docRefs.find((ref) => ref.url);

@@ -11,6 +11,9 @@ function registerViews(context) {
   // Create the tree data provider
   const fileReferenceProvider = new FileReferenceProvider();
 
+  // Initialize with extension context for state persistence
+  fileReferenceProvider.initialize(context);
+
   // Register the tree view
   const treeView = vscode.window.createTreeView("bc-al-references", {
     treeDataProvider: fileReferenceProvider,
@@ -21,6 +24,32 @@ function registerViews(context) {
   const explorerView = vscode.window.createTreeView("bc-al-file-info", {
     treeDataProvider: fileReferenceProvider,
     showCollapseAll: true,
+  });
+
+  // Track expanded elements to persist state
+  treeView.onDidExpandElement((e) => {
+    if (e.element.id) {
+      fileReferenceProvider.setItemExpandedState(e.element.id, true);
+    }
+  });
+
+  treeView.onDidCollapseElement((e) => {
+    if (e.element.id) {
+      fileReferenceProvider.setItemExpandedState(e.element.id, false);
+    }
+  });
+
+  // Also track expanded state in explorer view
+  explorerView.onDidExpandElement((e) => {
+    if (e.element.id) {
+      fileReferenceProvider.setItemExpandedState(e.element.id, true);
+    }
+  });
+
+  explorerView.onDidCollapseElement((e) => {
+    if (e.element.id) {
+      fileReferenceProvider.setItemExpandedState(e.element.id, false);
+    }
   });
 
   // Register command to open a referenced object

@@ -22,7 +22,7 @@ async function activate(context) {
     // Register all commands and events at once
     registerCommands(context);
     registerEvents(context);
-    registerViews(context); // Register the custom views
+    registerViews(context); // Register the custom views with context passed
 
     // Initialize symbol cache
     await initializeSymbolCache(context, false);
