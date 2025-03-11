@@ -154,3 +154,31 @@ Each documentation ID requires:
 - `id`: A unique identifier
 - `description`: A brief description of the documentation
 - `url`: (Optional) Link to the documentation resource
+
+## Events
+
+The extension exposes several events that you can subscribe to in your own extensions:
+
+### File Events
+
+The extension emits events when AL files are processed:
+
+```javascript
+const { fileEvents } = require("bc-al-upgradeassistant");
+
+// Subscribe to file events
+fileEvents((fileInfo) => {
+  // fileInfo contains:
+  // - path: string - Path to the AL file
+  // - orginFilePath: string - Original C/AL file path if applicable
+  console.log("AL file processed:", fileInfo.path);
+});
+```
+
+These events are fired whenever:
+
+- A C/AL file is converted to AL
+- An AL file is saved or modified
+- The file indexer processes an AL file
+
+This allows you to build additional functionality on top of the file processing pipeline.
