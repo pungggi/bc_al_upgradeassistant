@@ -2,7 +2,7 @@
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
   "description": "Assists you in transforming old C/AL and more",
-  "version": "0.0.54",
+  "version": "0.0.57",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
@@ -395,8 +395,6 @@
     "webpack": "webpack --mode=production"
   },
   "devDependencies": {
-    "@eslint/js": "^9.21.0",
-    "eslint": "^9.21.0",
     "glob": "^7.1.6",
     "globals": "^16.0.0",
     "javascript-obfuscator": "^4.1.1",

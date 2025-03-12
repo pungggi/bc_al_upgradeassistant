@@ -15,6 +15,9 @@ module.exports = {
   },
   resolve: {
     extensions: [".js"],
+    fallback: {
+      debug: false,
+    },
   },
   plugins: [
     new JavaScriptObfuscator({
