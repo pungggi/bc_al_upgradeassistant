@@ -2,7 +2,7 @@
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
   "description": "Assists you in transforming old C/AL and more",
-  "version": "0.0.59",
+  "version": "0.0.60",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
@@ -63,6 +63,12 @@
         "command": "bc-al-upgradeassistant.openDocumentationUrl",
         "title": "Open Documentation URL",
         "icon": "$(link-external)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.toggleDocumentationReferenceNotImplemented",
+        "title": "Toggle Not Implemented",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(circle-slash)"
       }
     ],
     "menus": {
@@ -106,6 +112,36 @@
           "when": "view == bc-al-file-info && (viewItem == documentationRef || viewItem == documentationRefDone || viewItem == documentationRefGroup)",
           "group": "1_references",
           "title": "Open Documentation URL"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleDocumentationReferenceNotImplemented",
+          "when": "view == bc-al-references && viewItem == documentationRef",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleDocumentationReferenceNotImplemented",
+          "when": "view == bc-al-references && viewItem == documentationRefDone",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleDocumentationReferenceNotImplemented",
+          "when": "view == bc-al-references && viewItem == documentationRefNotImplemented",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleDocumentationReferenceNotImplemented",
+          "when": "view == bc-al-file-info && viewItem == documentationRef",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleDocumentationReferenceNotImplemented",
+          "when": "view == bc-al-file-info && viewItem == documentationRefDone",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleDocumentationReferenceNotImplemented",
+          "when": "view == bc-al-file-info && viewItem == documentationRefNotImplemented",
+          "group": "1_modification"
         }
       ]
     },

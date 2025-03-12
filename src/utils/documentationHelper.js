@@ -56,11 +56,11 @@ function findDocumentationReferences(content, regex, idMap, filePath = "") {
       const docInfo = idMap[id];
 
       if (docInfo) {
-        console.log(
-          `Found documentation ID '${id}' on line ${index + 1}${
-            filePath ? ` in ${path.basename(filePath)}` : ""
-          }: "${line.trim()}"`
-        );
+        // console.log(
+        //   `Found documentation ID '${id}' on line ${index + 1}${
+        //     filePath ? ` in ${path.basename(filePath)}` : ""
+        //   }: "${line.trim()}"`
+        // );
 
         // Extract the context
         const context = line.trim();

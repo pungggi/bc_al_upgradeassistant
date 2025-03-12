@@ -65,6 +65,22 @@ class FileReferenceProvider {
       isWholeLine: true,
     });
 
+    // Create decoration type for not implemented references
+    this.notImplementedDecorationType =
+      vscode.window.createTextEditorDecorationType({
+        gutterIconPath: path.join(
+          __dirname,
+          "..",
+          "..",
+          "media",
+          "not-implemented.svg"
+        ),
+        gutterIconSize: "100%",
+        fontWeight: "normal",
+        isWholeLine: true,
+        opacity: "0.7",
+      });
+
     // Track current editor
     this.currentEditor = vscode.window.activeTextEditor;
 
@@ -335,9 +351,9 @@ class FileReferenceProvider {
       }
 
       const result = [
-        new InfoItem("Object Type", objectInfo.type),
-        new InfoItem("Object ID", objectInfo.id),
-        new InfoItem("Object Name", objectInfo.name),
+        // new InfoItem("Object Type", objectInfo.type),
+        // new InfoItem("Object ID", objectInfo.id),
+        // new InfoItem("Object Name", objectInfo.name),
       ];
 
       // Find the .index folder
@@ -484,7 +500,7 @@ class FileReferenceProvider {
    * Find documentation references in file content
    * @param {string} content The file content
    * @param {string} filePath Path to the file
-   * @returns {Array<{id: string, lineNumber: number, description: string, done: boolean}>} Documentation references
+   * @returns {Array<{id: string, lineNumber: number, description: string, done: boolean, notImplemented: boolean}>} Documentation references
    */
   _findDocumentationReferences(content, filePath) {
     if (!content) {
@@ -519,6 +535,7 @@ class FileReferenceProvider {
         ref.lineNumber
       );
       ref.done = refData ? refData.done : false;
+      ref.notImplemented = refData ? refData.notImplemented : false;
     });
 
     console.log(
@@ -639,6 +656,74 @@ class FileReferenceProvider {
     return result;
   }
 
+  /**
+   * Toggle the "not implemented" state of a documentation reference
+   * @param {string} filePath File path
+   * @param {string} id Documentation ID
+   * @param {number} lineNumber Line number
+   * @returns {boolean} New "not implemented" state
+   */
+  toggleDocumentationReferenceNotImplemented(filePath, id, lineNumber) {
+    const result = (() => {
+      try {
+        const storageFile = this._getDocumentationStorageFile();
+
+        // Read existing data or create new
+        let storageData = {};
+        if (fs.existsSync(storageFile)) {
+          storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
+        }
+
+        const fileKey = this._normalizePathForStorage(filePath);
+
+        // Initialize file entry if needed
+        if (!storageData[fileKey]) {
+          storageData[fileKey] = {
+            references: [],
+          };
+        }
+
+        // Find existing reference or add new one
+        let ref = storageData[fileKey].references.find(
+          (r) => r.id === id && r.lineNumber === lineNumber
+        );
+
+        if (ref) {
+          // Toggle not implemented state
+          ref.notImplemented = !ref.notImplemented;
+
+          // If marked as not implemented, it shouldn't be marked as done
+          if (ref.notImplemented && ref.done) {
+            ref.done = false;
+          }
+        } else {
+          // Add new entry
+          ref = { id, lineNumber, done: false, notImplemented: true };
+          storageData[fileKey].references.push(ref);
+        }
+
+        // Save updated data
+        fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
+
+        // Fire change event to refresh tree
+        this.refresh();
+
+        return ref.notImplemented;
+      } catch (error) {
+        console.error(
+          "Error toggling documentation reference not implemented state:",
+          error
+        );
+        return false;
+      }
+    })();
+
+    // Update decorations after toggling
+    this.updateDecorations();
+
+    return result;
+  }
+
   updateDecorations() {
     if (!this.currentEditor) {
       return;
@@ -654,6 +739,7 @@ class FileReferenceProvider {
     try {
       const doneDecorations = [];
       const undoneDecorations = [];
+      const notImplementedDecorations = [];
 
       const docRefs = this._findDocumentationReferences(
         this.currentEditor.document.getText(),
@@ -667,7 +753,9 @@ class FileReferenceProvider {
           new vscode.Position(line, Number.MAX_VALUE)
         );
 
-        if (ref.done) {
+        if (ref.notImplemented) {
+          notImplementedDecorations.push(range);
+        } else if (ref.done) {
           doneDecorations.push(range);
         } else {
           undoneDecorations.push(range);
@@ -681,6 +769,10 @@ class FileReferenceProvider {
       this.currentEditor.setDecorations(
         this.undoneDecorationType,
         undoneDecorations
+      );
+      this.currentEditor.setDecorations(
+        this.notImplementedDecorationType,
+        notImplementedDecorations
       );
     } catch (error) {
       console.error("Error updating decorations:", error);
@@ -707,6 +799,7 @@ class FileReferenceProvider {
     }
     this.doneDecorationType.dispose();
     this.undoneDecorationType.dispose();
+    this.notImplementedDecorationType.dispose();
   }
 }
 
@@ -942,12 +1035,23 @@ class DocumentationRefItem extends TreeItem {
     // Show ID and line number in the description
     this.description = `${docRef.id} (line ${docRef.lineNumber})`;
 
-    this.contextValue = docRef.done
-      ? "documentationRefDone"
-      : "documentationRef";
-    this.iconPath = docRef.done
-      ? new vscode.ThemeIcon("check")
-      : new vscode.ThemeIcon("book");
+    // Set context value based on status
+    if (docRef.notImplemented) {
+      this.contextValue = "documentationRefNotImplemented";
+    } else if (docRef.done) {
+      this.contextValue = "documentationRefDone";
+    } else {
+      this.contextValue = "documentationRef";
+    }
+
+    // Set icon based on status
+    if (docRef.notImplemented) {
+      this.iconPath = new vscode.ThemeIcon("circle-slash");
+    } else if (docRef.done) {
+      this.iconPath = new vscode.ThemeIcon("check");
+    } else {
+      this.iconPath = new vscode.ThemeIcon("book");
+    }
 
     // Command to jump to the line
     this.command = {

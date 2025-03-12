@@ -22,7 +22,7 @@ async function activate(context) {
     // Register all commands, events or views  at once
     registerCommands(context);
     registerEvents(context);
-    registerViews(context);
+    const { fileReferenceProvider } = registerViews(context);
 
     // Initialize symbol cache
     await initializeSymbolCache(context, false);
@@ -34,6 +34,35 @@ async function activate(context) {
       vscode.languages.registerCodeLensProvider(
         { scheme: "file", language: "al" },
         new ExtendedObjectHoverProvider()
+      )
+    );
+
+    // Register command to toggle documentation reference 'not implemented' status
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.toggleDocumentationReferenceNotImplemented",
+        (item) => {
+          if (
+            item &&
+            item.filePath &&
+            item.docId &&
+            item.lineNumber !== undefined
+          ) {
+            const newState =
+              fileReferenceProvider.toggleDocumentationReferenceNotImplemented(
+                item.filePath,
+                item.docId,
+                item.lineNumber
+              );
+            const statusText = newState
+              ? "marked as not implemented"
+              : "marked as to be implemented";
+            vscode.window.setStatusBarMessage(
+              `Documentation reference ${item.docId} ${statusText}`,
+              3000
+            );
+          }
+        }
       )
     );
 
