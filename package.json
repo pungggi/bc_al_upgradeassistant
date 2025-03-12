@@ -491,6 +491,7 @@
     }
   },
   "devDependencies": {
+    "@eslint/js": "^9.22.0",
     "glob": "^7.1.6",
     "globals": "^16.0.0",
     "javascript-obfuscator": "^4.1.1",

@@ -37,7 +37,7 @@ function createDocumentationRegex(docIds) {
  * @param {string} [filePath] - Optional file path for context
  * @returns {Array<{id: string, lineNumber: number, description: string, url: string, context: string}>} Found references
  */
-function findDocumentationReferences(content, regex, idMap, filePath = "") {
+function findDocumentationReferences(content, regex, idMap = "") {
   if (!content || !regex || !idMap) {
     return [];
   }
