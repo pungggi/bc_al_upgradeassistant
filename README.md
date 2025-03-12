@@ -27,6 +27,8 @@ The extension helps track and manage documentation references in your code:
 
 ## Extension Settings
 
+### Claude AI Settings
+
 This extension contributes the following settings:
 
 - `bc-al-upgradeassistant.claude.apiKey`: API Key for accessing Claude API
@@ -39,17 +41,39 @@ This extension contributes the following settings:
 - `bc-al-upgradeassistant.claude.autoSaveAlCode`: When enabled, automatically saves AL code blocks from Claude responses
 - `bc-al-upgradeassistant.claude.codeSaveMode`: How to handle multiple AL code blocks ("ask" or "saveAll")
 - `bc-al-upgradeassistant.claude.debugMode`: When enabled, shows the prompt being sent to Claude API in a document for review before sending
+
+### Object Folders Settings
+
 - `bc-al-upgradeassistant.upgradedObjectFolders`: Locations where to save upgraded AL objects by type
   - Includes a `basePath` property which specifies the base folder for all object types
 - `bc-al-upgradeassistant.workingObjectFolders`: Locations where working AL objects are located
 
 ## Commands
 
-- `BC AL Upgrade Assistant: Refresh Symbol Cache`: Refreshes the symbol cache
-- `BC AL Upgrade Assistant: Split C/AL Objects from File`: Splits C/AL objects from a text file
-- `BC AL Upgrade Assistant: Run Claude AI Prompt`: Select and run a Claude AI prompt
-- `BC AL Upgrade Assistant: Set Default Claude Model`: Change the default Claude model with a dropdown menu
-- `BC/AL: Generate Documentation References Summary` - Creates a summary report of all documentation references in the workspace, with both file and ID-based views along with status statistics
+### General
+
+- `BC/AL: Refresh Symbol Cache`: Refreshes the symbol cache to update object metadata.
+- `BC/AL: Split C/AL Objects`: Splits C/AL objects from a text file into individual files.
+
+### Documentation
+
+- `BC/AL: Open Documentation Reference Location`: Opens the location of the documentation reference.
+- `BC/AL: Toggle Documentation Reference as Done/Not Done`: Toggles the completion status of a documentation reference.
+- `BC/AL: Open Documentation URL`: Opens the URL associated with a documentation reference.
+- `BC/AL: Toggle Not Implemented`: Toggles the 'Not Implemented' status of a documentation reference.
+- `BC/AL: Add/Edit Note`: Adds or edits a note for a documentation reference.
+- `BC/AL: Generate Documentation References Summary`: Generates a summary report of all documentation references.
+
+### Navigation
+
+- `BC/AL: Open Referenced Object`: Opens the AL object referenced under the cursor.
+- `BC/AL: Open Migration File`: Opens the related migration file, if available.
+- `BC/AL: Refresh BC/AL References`: Refreshes the references view.
+
+### AI Prompting
+
+- `BC/AL: Run Claude Prompt`: Runs a selected Claude AI prompt on the current code.
+- `BC/AL: Set Default Claude Model`: Sets the default Claude model to be used for AI prompts.
 
 ## Getting Started
 

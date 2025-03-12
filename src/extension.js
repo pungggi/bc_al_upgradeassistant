@@ -534,7 +534,8 @@ async function generateDocumentationSummary(provider) {
     const fileGroups = groupBy(allRefs, "filePath");
 
     for (const [file, refs] of Object.entries(fileGroups)) {
-      fileContent += `### ${path.basename(file)}\n\n`;
+      const groupStatus = getCompoundStatus(refs);
+      fileContent += `### ${path.basename(file)} (${groupStatus})\n\n`;
       for (const ref of refs) {
         const status = ref.notImplemented
           ? "❌ Not Implemented"
@@ -555,7 +556,8 @@ async function generateDocumentationSummary(provider) {
     const idGroups = groupBy(allRefs, (ref) => extractFullId(ref.context));
 
     for (const [id, refs] of Object.entries(idGroups)) {
-      idContent += `### ${id}\n\n`;
+      const groupStatus = getCompoundStatus(refs);
+      idContent += `### ${id} (${groupStatus})\n\n`;
       for (const ref of refs) {
         const status = ref.notImplemented
           ? "❌ Not Implemented"
@@ -608,6 +610,26 @@ function extractFullId(context) {
   if (!context) return "Unknown";
   const match = context.match(/(#[A-Z]+\d+\/\d+:\d+)/);
   return match ? match[1] : "Unknown";
+}
+
+function getCompoundStatus(refs) {
+  const allDone = refs.every((ref) => ref.done && !ref.notImplemented);
+  const allNotImplemented = refs.every(
+    (ref) => ref.notImplemented && !ref.done
+  );
+  const hasPending = refs.some((ref) => !ref.done && !ref.notImplemented);
+  const mixedDoneNotImplemented =
+    refs.every((ref) => ref.done || ref.notImplemented) && !hasPending;
+
+  if (hasPending) {
+    return "⏳ Pending";
+  } else if (allDone || mixedDoneNotImplemented) {
+    return "✅ Done";
+  } else if (allNotImplemented) {
+    return "❌ Not Implemented";
+  } else {
+    return "Mixed";
+  }
 }
 
 module.exports = {
