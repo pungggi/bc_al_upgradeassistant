@@ -492,7 +492,22 @@ async function generateDocumentationSummary(provider) {
         content.toString(),
         file.fsPath
       );
-      allRefs.push(...refs.map((ref) => ({ ...ref, filePath: file.fsPath })));
+      allRefs.push(
+        ...refs.map((ref) =>
+          !ref.context
+            ? { ...ref, filePath: file.fsPath }
+            : ref.context.indexOf(ref.id) === -1
+            ? { ...ref, filePath: file.fsPath }
+            : (() => {
+                let newContext = ref.context.substring(
+                  ref.context.indexOf(ref.id)
+                );
+                if (/[([{}<]$/.test(newContext))
+                  newContext = newContext.slice(0, -1);
+                return { ...ref, filePath: file.fsPath, context: newContext };
+              })()
+        )
+      );
     }
 
     // Early exit if no references found

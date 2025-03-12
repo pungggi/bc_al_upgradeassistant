@@ -72,7 +72,7 @@ function findDocumentationReferences(content, regex, idMap, filePath = "") {
           url: docInfo.url || "",
           fullMatch: match[0],
           context:
-            context.length > 80 ? context.substring(0, 77) + "..." : context,
+            context.length > 500 ? context.substring(0, 499) + "..." : context,
         });
       }
     }

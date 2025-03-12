@@ -52,28 +52,28 @@ This extension contributes the following settings:
 
 ### General
 
-- `BC/AL: Refresh Symbol Cache`: Refreshes the symbol cache to update object metadata.
-- `BC/AL: Split C/AL Objects`: Splits C/AL objects from a text file into individual files.
+- `BC/AL Upgrade Assistant: Refresh Symbol Cache`: Refreshes the symbol cache to update object metadata.
+- `BC/AL Upgrade Assistant: Split C/AL Objects`: Splits C/AL objects from a text file into individual files.
 
 ### Documentation
 
-- `BC/AL: Open Documentation Reference Location`: Opens the location of the documentation reference.
-- `BC/AL: Toggle Documentation Reference as Done/Not Done`: Toggles the completion status of a documentation reference.
-- `BC/AL: Open Documentation URL`: Opens the URL associated with a documentation reference.
-- `BC/AL: Toggle Not Implemented`: Toggles the 'Not Implemented' status of a documentation reference.
-- `BC/AL: Add/Edit Note`: Adds or edits a note for a documentation reference.
-- `BC/AL: Generate Documentation References Summary`: Generates a summary report of all documentation references.
+- `BC/AL Upgrade Assistant: Open Documentation Reference Location`: Opens the location of the documentation reference.
+- `BC/AL Upgrade Assistant: Toggle Documentation Reference as Done/Not Done`: Toggles the completion status of a documentation reference.
+- `BC/AL Upgrade Assistant: Open Documentation URL`: Opens the URL associated with a documentation reference.
+- `BC/AL Upgrade Assistant: Toggle Not Implemented`: Toggles the 'Not Implemented' status of a documentation reference.
+- `BC/AL Upgrade Assistant: Add/Edit Note`: Adds or edits a note for a documentation reference.
+- `BC/AL Upgrade Assistant: Generate Documentation References Summary`: Generates a summary report of all documentation references.
 
 ### Navigation
 
-- `BC/AL: Open Referenced Object`: Opens the AL object referenced under the cursor.
-- `BC/AL: Open Migration File`: Opens the related migration file, if available.
-- `BC/AL: Refresh BC/AL References`: Refreshes the references view.
+- `BC/AL Upgrade Assistant: Open Referenced Object`: Opens the AL object referenced under the cursor.
+- `BC/AL Upgrade Assistant: Open Migration File`: Opens the related migration file, if available.
+- `BC/AL Upgrade Assistant: Refresh BC/AL References`: Refreshes the references view.
 
 ### AI Prompting
 
-- `BC/AL: Run Claude Prompt`: Runs a selected Claude AI prompt on the current code.
-- `BC/AL: Set Default Claude Model`: Sets the default Claude model to be used for AI prompts.
+- `BC/AL Upgrade Assistant: Run Claude Prompt`: Runs a selected Claude AI prompt on the current code.
+- `BC/AL Upgrade Assistant: Set Default Claude Model`: Sets the default Claude model to be used for AI prompts.
 
 ## Getting Started
 

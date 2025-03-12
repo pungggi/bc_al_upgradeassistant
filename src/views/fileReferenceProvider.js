@@ -1071,7 +1071,7 @@ class DocumentationRefGroupItem extends TreeItem {
  */
 class DocumentationRefItem extends TreeItem {
   constructor(docRef, filePath) {
-    // Use the context (line content) as the label, limited to 200 chars
+    // Use the context (line content) as the label, limited to 500 chars
     let contextText = docRef.context || "";
 
     // Remove the documentation ID from the displayed content
@@ -1082,8 +1082,8 @@ class DocumentationRefItem extends TreeItem {
     contextText = contextText.replace(/\s+/g, " ").trim();
 
     const label =
-      contextText.length > 200
-        ? contextText.substring(0, 197) + "..."
+      contextText.length > 500
+        ? contextText.substring(0, 499) + "..."
         : contextText;
 
     super(label, vscode.TreeItemCollapsibleState.None);

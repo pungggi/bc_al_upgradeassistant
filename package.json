@@ -2,7 +2,7 @@
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
   "description": "Assists you in transforming old C/AL and more",
-  "version": "0.0.64",
+  "version": "0.0.65",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
@@ -20,65 +20,75 @@
     "commands": [
       {
         "command": "bc-al-upgradeassistant.refreshSymbolCache",
-        "title": "BC/AL: Refresh Symbol Cache"
+        "title": "Refresh Symbol Cache",
+        "category": "BC/AL Upgrade Assistant"
       },
       {
         "command": "bc-al-upgradeassistant.splitCalObjects",
-        "title": "BC/AL: Split C/AL Objects"
+        "title": "Split C/AL Objects",
+        "category": "BC/AL Upgrade Assistant"
       },
       {
         "command": "bc-al-upgradeassistant.runClaudePrompt",
-        "title": "BC/AL: Run Claude Prompt"
+        "title": "Run Claude Prompt",
+        "category": "BC/AL Upgrade Assistant"
       },
       {
         "command": "bc-al-upgradeassistant.setDefaultClaudeModel",
-        "title": "BC/AL: Set Default Claude Model"
+        "title": "Set Default Claude Model",
+        "category": "BC/AL Upgrade Assistant"
       },
       {
         "command": "bc-al-upgradeassistant.openReferencedObject",
-        "title": "BC/AL: Open Referenced Object",
+        "title": "Open Referenced Object",
+        "category": "BC/AL Upgrade Assistant",
         "icon": "$(file-code)"
       },
       {
         "command": "bc-al-upgradeassistant.openMigrationFile",
-        "title": "BC/AL: Open Migration File",
+        "title": "Open Migration File",
+        "category": "BC/AL Upgrade Assistant",
         "icon": "$(file)"
       },
       {
         "command": "bc-al-upgradeassistant.refreshReferenceView",
-        "title": "BC/AL: Refresh BC/AL References",
+        "title": "Refresh BC/AL References",
+        "category": "BC/AL Upgrade Assistant",
         "icon": "$(refresh)"
       },
       {
         "command": "bc-al-upgradeassistant.openDocumentationReference",
-        "title": "BC/AL: Open Documentation Reference Location",
+        "title": "Open Documentation Reference Location",
+        "category": "BC/AL Upgrade Assistant",
         "icon": "$(go-to-file)"
       },
       {
         "command": "bc-al-upgradeassistant.toggleDocumentationReferenceDone",
-        "title": "BC/AL: Toggle Documentation Reference as Done/Not Done",
+        "title": "Toggle Documentation Reference as Done/Not Done",
+        "category": "BC/AL Upgrade Assistant",
         "icon": "$(check)"
       },
       {
         "command": "bc-al-upgradeassistant.openDocumentationUrl",
-        "title": "BC/AL: Open Documentation URL",
+        "title": "Open Documentation URL",
+        "category": "BC/AL Upgrade Assistant",
         "icon": "$(link-external)"
       },
       {
         "command": "bc-al-upgradeassistant.toggleDocumentationReferenceNotImplemented",
-        "title": "BC/AL: Toggle Not Implemented",
+        "title": "Toggle Not Implemented",
         "category": "BC/AL Upgrade Assistant",
         "icon": "$(circle-slash)"
       },
       {
         "command": "bc-al-upgradeassistant.setDocumentationReferenceDescription",
-        "title": "BC/AL: Add/Edit Note",
+        "title": "Add/Edit Note",
         "category": "BC/AL Upgrade Assistant",
         "icon": "$(edit)"
       },
       {
         "command": "bc-al-upgradeassistant.generateDocumentationSummary",
-        "title": "BC/AL: Generate Documentation References Summary",
+        "title": "Generate Documentation References Summary",
         "category": "BC/AL Upgrade Assistant",
         "icon": "$(notebook)"
       }
