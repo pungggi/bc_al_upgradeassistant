@@ -19,10 +19,10 @@ async function activate(context) {
   console.log(`Activating ${EXTENSION_ID} extension`);
 
   try {
-    // Register all commands and events at once
+    // Register all commands, events or views  at once
     registerCommands(context);
     registerEvents(context);
-    registerViews(context); // Register the custom views with context passed
+    registerViews(context);
 
     // Initialize symbol cache
     await initializeSymbolCache(context, false);
