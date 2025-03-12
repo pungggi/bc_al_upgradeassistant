@@ -237,29 +237,28 @@ function parseCALToJSON(calCode) {
 
   // Extract FIELDS section for tables
   if (result.type.toLowerCase() === "table") {
-    const fieldsMatch = calCode.match(/FIELDS\s*\{([\s\S]*?)\}/);
-    if (fieldsMatch) {
-      const fieldsBlock = fieldsMatch[1];
-      // Extract field definitions
-      // Format is typically: { ID ;  ; Name ; DataType ; Properties }
-      const fieldMatches = fieldsBlock.matchAll(
-        /{\s*(\d+)\s*;\s*[^;]*;\s*([^;]+)\s*;\s*([^;]+)\s*;([^}]*?)}/g
-      );
+    const fieldsMatch = calCode.match(/FIELDS\s*\{([\s\S]*?)\}\s*KEYS/);
+    if (!fieldsMatch) {
+      // Early exit if FIELDS section is not found
+      return;
+    }
+    const fieldsBlock = fieldsMatch[1];
+    const fieldRegex =
+      /{\s*(\d+)\s*;\s*[^;]*;\s*([^;]+)\s*;\s*([^;]+)\s*;([^}]*?)}/gs;
+    let match;
+    while ((match = fieldRegex.exec(fieldsBlock)) !== null) {
+      const fieldId = parseInt(match[1].trim(), 10);
+      const fieldName = match[2].trim();
+      const dataType = match[3].trim();
+      const properties = match[4].trim();
 
-      for (const match of fieldMatches) {
-        const fieldId = parseInt(match[1].trim(), 10);
-        const fieldName = match[2].trim();
-        const dataType = match[3].trim();
-        const properties = match[4].trim();
-
-        result.fields.push({
-          id: fieldId,
-          name: fieldName,
-          dataType,
-          properties,
-          originalText: match[0],
-        });
-      }
+      result.fields.push({
+        id: fieldId,
+        name: fieldName,
+        dataType,
+        properties,
+        originalText: match[0],
+      });
     }
   }
 
