@@ -500,7 +500,7 @@ class FileReferenceProvider {
    * Find documentation references in file content
    * @param {string} content The file content
    * @param {string} filePath Path to the file
-   * @returns {Array<{id: string, lineNumber: number, description: string, done: boolean, notImplemented: boolean}>} Documentation references
+   * @returns {Array<{id: string, lineNumber: number, description: string, done: boolean, notImplemented: boolean}>} Documentation references Documentation references
    */
   _findDocumentationReferences(content, filePath) {
     if (!content) {
@@ -536,6 +536,7 @@ class FileReferenceProvider {
       );
       ref.done = refData ? refData.done : false;
       ref.notImplemented = refData ? refData.notImplemented : false;
+      ref.userDescription = refData ? refData.userDescription : "";
     });
 
     console.log(
@@ -722,6 +723,63 @@ class FileReferenceProvider {
     this.updateDecorations();
 
     return result;
+  }
+
+  /**
+   * Set description for a documentation reference
+   * @param {string} filePath File path
+   * @param {string} id Documentation ID
+   * @param {number} lineNumber Line number
+   * @param {string} description User-provided description
+   * @returns {boolean} Success status
+   */
+  setDocumentationReferenceDescription(filePath, id, lineNumber, description) {
+    try {
+      const storageFile = this._getDocumentationStorageFile();
+
+      // Read existing data or create new
+      let storageData = {};
+      if (fs.existsSync(storageFile)) {
+        storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
+      }
+
+      const fileKey = this._normalizePathForStorage(filePath);
+
+      // Initialize file entry if needed
+      if (!storageData[fileKey]) {
+        storageData[fileKey] = {
+          references: [],
+        };
+      }
+
+      // Find existing reference or add new one
+      let ref = storageData[fileKey].references.find(
+        (r) => r.id === id && r.lineNumber === lineNumber
+      );
+
+      if (ref) {
+        // Update description
+        ref.userDescription = description;
+      } else {
+        // Add new entry
+        ref = { id, lineNumber, userDescription: description };
+        storageData[fileKey].references.push(ref);
+      }
+
+      // Save updated data
+      fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
+
+      // Fire change event to refresh tree
+      this.refresh();
+
+      return true;
+    } catch (error) {
+      console.error(
+        "Error setting documentation reference description:",
+        error
+      );
+      return false;
+    }
   }
 
   updateDecorations() {
@@ -1033,7 +1091,14 @@ class DocumentationRefItem extends TreeItem {
     this.filePath = filePath;
 
     // Show ID and line number in the description
-    this.description = `${docRef.id} (line ${docRef.lineNumber})`;
+    let description = `${docRef.id} (line ${docRef.lineNumber})`;
+
+    // Add user description if available
+    if (docRef.userDescription) {
+      description = `${description} - ${docRef.userDescription}`;
+    }
+
+    this.description = description;
 
     // Set context value based on status
     if (docRef.notImplemented) {
@@ -1061,7 +1126,16 @@ class DocumentationRefItem extends TreeItem {
     };
 
     // Include the context in the tooltip for more information
-    this.tooltip = `${docRef.id}: ${docRef.description}\n\nLine: ${docRef.lineNumber}\n\nClick to open file at reference location\nRight-click for more options`;
+    let tooltipText = `${docRef.id}: ${docRef.description}\n\nLine: ${docRef.lineNumber}`;
+
+    // Add user description to tooltip if available
+    if (docRef.userDescription) {
+      tooltipText += `\n\nUser Note: ${docRef.userDescription}`;
+    }
+
+    tooltipText += `\n\nClick to open file at reference location\nRight-click for more options`;
+
+    this.tooltip = tooltipText;
 
     // Create separate properties instead of arrays for arguments
     // This ensures VS Code can correctly pick up the arguments

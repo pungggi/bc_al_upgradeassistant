@@ -66,6 +66,53 @@ async function activate(context) {
       )
     );
 
+    // Register command to set description for documentation reference
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.setDocumentationReferenceDescription",
+        async (item) => {
+          if (
+            item &&
+            item.filePath &&
+            item.docId &&
+            item.lineNumber !== undefined
+          ) {
+            // Get current description if any
+            const currentDescription = item.docRef?.userDescription || "";
+
+            // Prompt user for description
+            const description = await vscode.window.showInputBox({
+              prompt: `Enter description for ${item.docId}`,
+              placeHolder: "Brief description or note",
+              value: currentDescription,
+            });
+
+            // If user didn't cancel (description will be undefined if canceled)
+            if (description !== undefined) {
+              const success =
+                fileReferenceProvider.setDocumentationReferenceDescription(
+                  item.filePath,
+                  item.docId,
+                  item.lineNumber,
+                  description
+                );
+
+              if (success) {
+                vscode.window.setStatusBarMessage(
+                  `Description updated for ${item.docId}`,
+                  3000
+                );
+              } else {
+                vscode.window.showErrorMessage(
+                  `Failed to update description for ${item.docId}`
+                );
+              }
+            }
+          }
+        }
+      )
+    );
+
     // Watch for changes to settings.json files in workspace folders
     if (vscode.workspace.workspaceFolders) {
       vscode.workspace.workspaceFolders.forEach((folder) => {
