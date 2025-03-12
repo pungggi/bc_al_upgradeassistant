@@ -80,33 +80,6 @@ function registerViews(context) {
     )
   );
 
-  // Register command to toggle documentation reference as done
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "bc-al-upgradeassistant.toggleDocumentationReferenceDone",
-      (item) => {
-        if (
-          item &&
-          item.filePath &&
-          item.docId &&
-          item.lineNumber !== undefined
-        ) {
-          const newState =
-            fileReferenceProvider.toggleDocumentationReferenceDone(
-              item.filePath,
-              item.docId,
-              item.lineNumber
-            );
-          const statusText = newState ? "marked as done" : "marked as not done";
-          vscode.window.setStatusBarMessage(
-            `Documentation reference ${item.docId} ${statusText}`,
-            3000
-          );
-        }
-      }
-    )
-  );
-
   // Register command to open documentation URL
   context.subscriptions.push(
     vscode.commands.registerCommand(

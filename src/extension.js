@@ -42,6 +42,7 @@ async function activate(context) {
       vscode.commands.registerCommand(
         "bc-al-upgradeassistant.toggleDocumentationReferenceNotImplemented",
         (item) => {
+          // Handle direct item click
           if (
             item &&
             item.filePath &&
@@ -61,7 +62,34 @@ async function activate(context) {
               `Documentation reference ${item.docId} ${statusText}`,
               3000
             );
+            return;
           }
+
+          // Handle editor context menu
+          const editor = vscode.window.activeTextEditor;
+          if (!editor) return;
+
+          const position = editor.selection.active;
+          const docRef = findDocRefAtLine(
+            fileReferenceProvider,
+            editor.document,
+            position.line
+          );
+          if (!docRef) return;
+
+          const newState =
+            fileReferenceProvider.toggleDocumentationReferenceNotImplemented(
+              editor.document.uri.fsPath,
+              docRef.id,
+              docRef.lineNumber
+            );
+          const statusText = newState
+            ? "marked as not implemented"
+            : "marked as to be implemented";
+          vscode.window.setStatusBarMessage(
+            `Documentation reference ${docRef.id} ${statusText}`,
+            3000
+          );
         }
       )
     );
@@ -71,44 +99,55 @@ async function activate(context) {
       vscode.commands.registerCommand(
         "bc-al-upgradeassistant.setDocumentationReferenceDescription",
         async (item) => {
+          // Handle direct item click
           if (
             item &&
             item.filePath &&
             item.docId &&
             item.lineNumber !== undefined
           ) {
-            // Get current description if any
             const currentDescription = item.docRef?.userDescription || "";
+            const description = await promptForDescription(
+              item.docId,
+              currentDescription
+            );
+            if (description === undefined) return;
 
-            // Prompt user for description
-            const description = await vscode.window.showInputBox({
-              prompt: `Enter description for ${item.docId}`,
-              placeHolder: "Brief description or note",
-              value: currentDescription,
-            });
-
-            // If user didn't cancel (description will be undefined if canceled)
-            if (description !== undefined) {
-              const success =
-                fileReferenceProvider.setDocumentationReferenceDescription(
-                  item.filePath,
-                  item.docId,
-                  item.lineNumber,
-                  description
-                );
-
-              if (success) {
-                vscode.window.setStatusBarMessage(
-                  `Description updated for ${item.docId}`,
-                  3000
-                );
-              } else {
-                vscode.window.showErrorMessage(
-                  `Failed to update description for ${item.docId}`
-                );
-              }
-            }
+            return updateDescription(
+              fileReferenceProvider,
+              item.filePath,
+              item.docId,
+              item.lineNumber,
+              description
+            );
           }
+
+          // Handle editor context menu
+          const editor = vscode.window.activeTextEditor;
+          if (!editor) return;
+
+          const position = editor.selection.active;
+          const docRef = findDocRefAtLine(
+            fileReferenceProvider,
+            editor.document,
+            position.line
+          );
+          if (!docRef) return;
+
+          const currentDescription = docRef.userDescription || "";
+          const description = await promptForDescription(
+            docRef.id,
+            currentDescription
+          );
+          if (description === undefined) return;
+
+          updateDescription(
+            fileReferenceProvider,
+            editor.document.uri.fsPath,
+            docRef.id,
+            docRef.lineNumber,
+            description
+          );
         }
       )
     );
@@ -130,6 +169,99 @@ async function activate(context) {
         context.subscriptions.push(settingsWatcher);
       });
     }
+
+    // Add context menu handler for documentation references - replace the existing CodeLens provider
+    context.subscriptions.push(
+      vscode.workspace.onDidOpenTextDocument((document) => {
+        if (document.languageId === "plaintext") {
+          setTimeout(() => {
+            checkForDocumentationRefs(document, fileReferenceProvider);
+          }, 100);
+        }
+      })
+    );
+
+    // Check any already open documents too
+    if (
+      vscode.window.activeTextEditor &&
+      vscode.window.activeTextEditor.document.languageId === "plaintext"
+    ) {
+      setTimeout(() => {
+        checkForDocumentationRefs(
+          vscode.window.activeTextEditor.document,
+          fileReferenceProvider
+        );
+      }, 100);
+    }
+
+    // Listen for editor changes
+    context.subscriptions.push(
+      vscode.window.onDidChangeActiveTextEditor((editor) => {
+        if (!editor) {
+          vscode.commands.executeCommand(
+            "setContext",
+            "editorHasDocumentationRef",
+            false
+          );
+          return;
+        }
+
+        if (editor.document.languageId === "plaintext") {
+          checkForDocumentationRefs(editor.document, fileReferenceProvider);
+        } else {
+          vscode.commands.executeCommand(
+            "setContext",
+            "editorHasDocumentationRef",
+            false
+          );
+        }
+      })
+    );
+
+    // Listen for document changes to update references
+    context.subscriptions.push(
+      vscode.workspace.onDidChangeTextDocument((e) => {
+        if (e.document.languageId === "plaintext") {
+          checkForDocumentationRefs(e.document, fileReferenceProvider);
+        }
+      })
+    );
+
+    // Update command handlers to support editor context
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.toggleDocumentationReferenceDone",
+        (item) => {
+          // Handle direct item click
+          if (
+            item &&
+            item.filePath &&
+            item.docId &&
+            item.lineNumber !== undefined
+          ) {
+            return toggleDocRefDone(fileReferenceProvider, item);
+          }
+
+          // Handle editor context menu
+          const editor = vscode.window.activeTextEditor;
+          if (editor) {
+            const position = editor.selection.active;
+            const docRef = findDocRefAtLine(
+              fileReferenceProvider,
+              editor.document,
+              position.line
+            );
+            if (docRef) {
+              return toggleDocRefDone(fileReferenceProvider, {
+                filePath: editor.document.uri.fsPath,
+                docId: docRef.id,
+                lineNumber: docRef.lineNumber,
+              });
+            }
+          }
+        }
+      )
+    );
 
     console.log(`${EXTENSION_ID} extension activated successfully`);
   } catch (error) {
@@ -240,6 +372,85 @@ async function initializeSymbolCache(context, force = false) {
  */
 function deactivate() {
   console.log(`${EXTENSION_ID} extension deactivated`);
+}
+
+function findDocRefAtLine(provider, document, line) {
+  const refs = provider._findDocumentationReferences(
+    document.getText(),
+    document.uri.fsPath
+  );
+
+  return refs.find((ref) => ref.lineNumber === line + 1);
+}
+
+function toggleDocRefDone(provider, item) {
+  const newState = provider.toggleDocumentationReferenceDone(
+    item.filePath,
+    item.docId,
+    item.lineNumber
+  );
+  const statusText = newState ? "marked as done" : "marked as not done";
+  vscode.window.setStatusBarMessage(
+    `Documentation reference ${item.docId} ${statusText}`,
+    3000
+  );
+}
+
+/**
+ * Check if document has documentation references and set context
+ * @param {vscode.TextDocument} document The document to check
+ * @param {Object} provider The file reference provider
+ */
+function checkForDocumentationRefs(document, provider) {
+  try {
+    const refs = provider._findDocumentationReferences(
+      document.getText(),
+      document.uri.fsPath
+    );
+
+    const hasRefs = refs.length > 0;
+    console.log(
+      `File ${document.fileName} has documentation refs: ${
+        hasRefs ? "YES" : "NO"
+      }`
+    );
+
+    vscode.commands.executeCommand(
+      "setContext",
+      "editorHasDocumentationRef",
+      hasRefs
+    );
+  } catch (error) {
+    console.error("Error checking for documentation refs:", error);
+    vscode.commands.executeCommand(
+      "setContext",
+      "editorHasDocumentationRef",
+      false
+    );
+  }
+}
+
+async function promptForDescription(docId, currentDescription) {
+  return vscode.window.showInputBox({
+    prompt: `Enter description for ${docId}`,
+    placeHolder: "Brief description or note",
+    value: currentDescription,
+  });
+}
+
+function updateDescription(provider, filePath, docId, lineNumber, description) {
+  const success = provider.setDocumentationReferenceDescription(
+    filePath,
+    docId,
+    lineNumber,
+    description
+  );
+
+  if (success) {
+    vscode.window.setStatusBarMessage(`Description updated for ${docId}`, 3000);
+  } else {
+    vscode.window.showErrorMessage(`Failed to update description for ${docId}`);
+  }
 }
 
 module.exports = {

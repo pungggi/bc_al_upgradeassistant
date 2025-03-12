@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2023-06-24
 
-- Added VS Code task integration for publishing with GitHub Copilot commit message generation
+- Fixed editor context menu support for Toggle Not Implemented and Add/Edit Note commands
 
 ## [Released]
 
