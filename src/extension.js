@@ -27,6 +27,14 @@ async function activate(context) {
     // Initialize symbol cache
     await initializeSymbolCache(context, false);
 
+    // Register command to generate documentation reference summary
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.generateDocumentationSummary",
+        async () => await generateDocumentationSummary(fileReferenceProvider)
+      )
+    );
+
     modelHelper.initializeModels();
 
     // Register the CodeLens provider for AL files
@@ -451,6 +459,155 @@ function updateDescription(provider, filePath, docId, lineNumber, description) {
   } else {
     vscode.window.showErrorMessage(`Failed to update description for ${docId}`);
   }
+}
+
+async function generateDocumentationSummary(provider) {
+  try {
+    const allRefs = [];
+    const configManager = require("./utils/configManager");
+
+    // Get basePath from upgradedObjectFolders config
+    const upgradedObjectFolders = configManager.getConfigValue(
+      "upgradedObjectFolders",
+      null
+    );
+    if (!upgradedObjectFolders?.basePath) {
+      throw new Error(
+        "Base path not configured in upgradedObjectFolders settings"
+      );
+    }
+
+    // Find all .txt files in the base path
+    const txtFiles = await vscode.workspace.findFiles(
+      new vscode.RelativePattern(
+        vscode.Uri.file(upgradedObjectFolders.basePath),
+        "**/*.txt"
+      )
+    );
+
+    // Process each file
+    for (const file of txtFiles) {
+      const content = await vscode.workspace.fs.readFile(file);
+      const refs = provider._findDocumentationReferences(
+        content.toString(),
+        file.fsPath
+      );
+      allRefs.push(...refs.map((ref) => ({ ...ref, filePath: file.fsPath })));
+    }
+
+    // Early exit if no references found
+    if (allRefs.length === 0) {
+      vscode.window.showInformationMessage("No documentation references found");
+      return;
+    }
+
+    // Calculate statistics
+    const totalRefs = allRefs.length;
+    const doneCount = allRefs.filter((ref) => ref.done).length;
+    const notImplementedCount = allRefs.filter(
+      (ref) => ref.notImplemented
+    ).length;
+    const pendingCount = totalRefs - doneCount - notImplementedCount;
+
+    const donePercent = ((doneCount / totalRefs) * 100).toFixed(1);
+    const notImplementedPercent = (
+      (notImplementedCount / totalRefs) *
+      100
+    ).toFixed(1);
+    const pendingPercent = ((pendingCount / totalRefs) * 100).toFixed(1);
+
+    // Get current date and time
+    const now = new Date();
+    const generationTime = now.toLocaleString();
+
+    // Create statistics section
+    const statsSection =
+      `## Statistics (Generated on ${generationTime})\n\n` +
+      `- Total References: ${totalRefs}\n` +
+      `- ✅ Done: ${doneCount} (${donePercent}%)\n` +
+      `- ❌ Not Implemented: ${notImplementedCount} (${notImplementedPercent}%)\n` +
+      `- ⏳ Pending: ${pendingCount} (${pendingPercent}%)\n\n`;
+
+    // Create file-based report
+    let fileContent = `# Documentation References by File\n\n${statsSection}`;
+
+    const fileGroups = groupBy(allRefs, "filePath");
+
+    for (const [file, refs] of Object.entries(fileGroups)) {
+      fileContent += `### ${path.basename(file)}\n\n`;
+      for (const ref of refs) {
+        const status = ref.notImplemented
+          ? "❌ Not Implemented"
+          : ref.done
+          ? "✅ Done"
+          : "⏳ Pending";
+        fileContent += `- ${status} | ${ref.context}\n`;
+        if (ref.userDescription) {
+          fileContent += `  - Note: ${ref.userDescription}\n`;
+        }
+      }
+      fileContent += `\n`;
+    }
+
+    // Create ID-based report
+    let idContent = `# Documentation References by ID\n\n${statsSection}`;
+
+    const idGroups = groupBy(allRefs, (ref) => extractFullId(ref.context));
+
+    for (const [id, refs] of Object.entries(idGroups)) {
+      idContent += `### ${id}\n\n`;
+      for (const ref of refs) {
+        const status = ref.notImplemented
+          ? "❌ Not Implemented"
+          : ref.done
+          ? "✅ Done"
+          : "⏳ Pending";
+        idContent += `- ${status} | ${path.basename(ref.filePath)}:${
+          ref.lineNumber
+        } | ${ref.context}\n`;
+        if (ref.userDescription) {
+          idContent += `  - Note: ${ref.userDescription}\n`;
+        }
+      }
+      idContent += `\n`;
+    }
+
+    // Show both reports in separate windows
+    const fileDoc = await vscode.workspace.openTextDocument({
+      content: fileContent,
+      language: "markdown",
+    });
+    const idDoc = await vscode.workspace.openTextDocument({
+      content: idContent,
+      language: "markdown",
+    });
+
+    await vscode.window.showTextDocument(fileDoc, {
+      viewColumn: vscode.ViewColumn.One,
+    });
+    await vscode.window.showTextDocument(idDoc, {
+      viewColumn: vscode.ViewColumn.Two,
+    });
+  } catch (error) {
+    console.error("Error generating documentation summary:", error);
+    vscode.window.showErrorMessage(
+      `Failed to generate documentation summary: ${error.message}`
+    );
+  }
+}
+
+function groupBy(array, key) {
+  return array.reduce((result, item) => {
+    const groupKey = typeof key === "function" ? key(item) : item[key];
+    (result[groupKey] = result[groupKey] || []).push(item);
+    return result;
+  }, {});
+}
+
+function extractFullId(context) {
+  if (!context) return "Unknown";
+  const match = context.match(/(#[A-Z]+\d+\/\d+:\d+)/);
+  return match ? match[1] : "Unknown";
 }
 
 module.exports = {

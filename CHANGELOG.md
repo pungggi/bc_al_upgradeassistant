@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2023-06-24
 
+- Added statistics to documentation summary reports
+- Split documentation summary report into separate file and ID views
+- Updated documentation summary to use configured base path
+- Added command to generate documentation references summary report with command palette integration
 - Fixed editor context menu support for Toggle Not Implemented and Add/Edit Note commands
 
 ## [Released]

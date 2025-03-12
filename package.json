@@ -75,6 +75,12 @@
         "title": "Add/Edit Note",
         "category": "BC/AL Upgrade Assistant",
         "icon": "$(edit)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.generateDocumentationSummary",
+        "title": "BC/AL: Generate Documentation References Summary",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(notebook)"
       }
     ],
     "menus": {

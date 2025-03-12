@@ -9,6 +9,15 @@ A Visual Studio Code extension to assist in transforming old C/AL code to modern
 - AI-powered code review and suggestions using Claude models
 - Code formatting and documentation help
 
+### Documentation Reference Management
+
+The extension helps track and manage documentation references in your code:
+
+- Track documentation references with status (Done/Not Done/Not Implemented)
+- Add notes to documentation references
+- Toggle implementation status
+- Generate summary reports of all documentation references with statistics
+
 ![Prompt Dialog](https://imgur.com/Fdwiq2K.png)
 
 ## Requirements
@@ -40,6 +49,7 @@ This extension contributes the following settings:
 - `BC AL Upgrade Assistant: Split C/AL Objects from File`: Splits C/AL objects from a text file
 - `BC AL Upgrade Assistant: Run Claude AI Prompt`: Select and run a Claude AI prompt
 - `BC AL Upgrade Assistant: Set Default Claude Model`: Change the default Claude model with a dropdown menu
+- `BC/AL: Generate Documentation References Summary` - Creates a summary report of all documentation references in the workspace, with both file and ID-based views along with status statistics
 
 ## Getting Started
 
@@ -154,6 +164,22 @@ Each documentation ID requires:
 - `id`: A unique identifier
 - `description`: A brief description of the documentation
 - `url`: (Optional) Link to the documentation resource
+
+### Documentation References
+
+#### Summary Report
+
+The documentation reference summary report shows:
+
+- Statistical overview with completion percentages
+- References grouped by file with status and notes
+- References grouped by documentation ID to track related changes (in a separate view)
+- Status indicators:
+  - ✅ Done
+  - ⏳ Pending
+  - ❌ Not Implemented
+
+The summary is displayed in two separate editor views for easy navigation between file-based and ID-based organization of references.
 
 ## Events
 
