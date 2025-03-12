@@ -516,9 +516,6 @@ class FileReferenceProvider {
       return [];
     }
 
-    // Debug output of available documentation IDs
-    console.log("Available documentation IDs:", Object.keys(idMap));
-
     // Find references
     const docRefs = documentationHelper.findDocumentationReferences(
       content,
@@ -537,13 +534,8 @@ class FileReferenceProvider {
       ref.done = refData ? refData.done : false;
       ref.notImplemented = refData ? refData.notImplemented : false;
       ref.userDescription = refData ? refData.userDescription : "";
+      ref.userId = refData ? refData.userId : "";
     });
-
-    console.log(
-      `Found ${docRefs.length} documentation references in ${path.basename(
-        filePath
-      )}`
-    );
 
     return docRefs;
   }
@@ -616,6 +608,10 @@ class FileReferenceProvider {
         }
 
         const fileKey = this._normalizePathForStorage(filePath);
+        const config = vscode.workspace.getConfiguration(
+          "bc-al-upgradeassistant"
+        );
+        const userId = config.get("userId");
 
         // Initialize file entry if needed
         if (!storageData[fileKey]) {
@@ -632,9 +628,20 @@ class FileReferenceProvider {
         if (ref) {
           // Toggle state
           ref.done = !ref.done;
+          // Silently add/update userId
+          if (userId) {
+            ref.userId = userId;
+            ref.lastModified = new Date().toISOString();
+          }
         } else {
           // Add new entry
-          ref = { id, lineNumber, done: true };
+          ref = {
+            id,
+            lineNumber,
+            done: true,
+            userId: userId || undefined,
+            lastModified: new Date().toISOString(),
+          };
           storageData[fileKey].references.push(ref);
         }
 
@@ -676,6 +683,10 @@ class FileReferenceProvider {
         }
 
         const fileKey = this._normalizePathForStorage(filePath);
+        const config = vscode.workspace.getConfiguration(
+          "bc-al-upgradeassistant"
+        );
+        const userId = config.get("userId");
 
         // Initialize file entry if needed
         if (!storageData[fileKey]) {
@@ -692,6 +703,11 @@ class FileReferenceProvider {
         if (ref) {
           // Toggle not implemented state
           ref.notImplemented = !ref.notImplemented;
+          // Silently add/update userId
+          if (userId) {
+            ref.userId = userId;
+            ref.lastModified = new Date().toISOString();
+          }
 
           // If marked as not implemented, it shouldn't be marked as done
           if (ref.notImplemented && ref.done) {
@@ -699,7 +715,14 @@ class FileReferenceProvider {
           }
         } else {
           // Add new entry
-          ref = { id, lineNumber, done: false, notImplemented: true };
+          ref = {
+            id,
+            lineNumber,
+            done: false,
+            notImplemented: true,
+            userId: userId || undefined,
+            lastModified: new Date().toISOString(),
+          };
           storageData[fileKey].references.push(ref);
         }
 
@@ -944,40 +967,6 @@ class InfoItem extends TreeItem {
 }
 
 /**
- * Tree item for migration files
- */
-// class MigrationFilesItem extends TreeItem {
-//   constructor(files) {
-//     super(
-//       "Referenced Migration Files",
-//       vscode.TreeItemCollapsibleState.Collapsed
-//     );
-//     this.files = files;
-//     this.contextValue = "migrationFiles";
-//     this.iconPath = new vscode.ThemeIcon("references");
-
-//     // Set a unique ID for state persistence
-//     this.id = `migrationFiles-${files.length}`;
-//   }
-
-//   getChildren() {
-//     return this.files.map((file) => {
-//       const item = new TreeItem(
-//         path.basename(file),
-//         vscode.TreeItemCollapsibleState.None
-//       );
-//       item.command = {
-//         command: "bc-al-upgradeassistant.openMigrationFile",
-//         title: "Open Migration File",
-//         arguments: [file],
-//       };
-//       item.iconPath = new vscode.ThemeIcon("file");
-//       return item;
-//     });
-//   }
-// }
-
-/**
  * Tree item for referenced objects group
  */
 class ReferencedObjectsGroup extends TreeItem {
@@ -1133,12 +1122,17 @@ class DocumentationRefItem extends TreeItem {
       tooltipText += `\n\nUser Note: ${docRef.userDescription}`;
     }
 
-    tooltipText += `\n\nClick to open file at reference location\nRight-click for more options`;
+    if (docRef.userId) {
+      tooltipText += `\n\nLast modified by: ${docRef.userId}`;
+      if (docRef.lastModified) {
+        tooltipText += ` on ${new Date(docRef.lastModified).toLocaleString()}`;
+      }
+    }
 
+    tooltipText += `\n\nClick to open file at reference location\nRight-click for more options`;
     this.tooltip = tooltipText;
 
     // Create separate properties instead of arrays for arguments
-    // This ensures VS Code can correctly pick up the arguments
     this.filePath = filePath;
     this.docId = docRef.id;
     this.lineNumber = docRef.lineNumber;
@@ -1185,11 +1179,13 @@ class MigrationFileItem extends TreeItem {
         ? vscode.TreeItemCollapsibleState.Collapsed
         : vscode.TreeItemCollapsibleState.None
     );
-
     this.filePath = file;
     this.docRefs = docRefs;
     this.contextValue = "migrationFile";
     this.iconPath = new vscode.ThemeIcon("file");
+
+    // Unique ID for state persistence that includes file path and refs count
+    this.id = `migFile-${path.basename(file)}-${docRefs.length}`;
 
     // Command to open file
     this.command = {
@@ -1197,11 +1193,6 @@ class MigrationFileItem extends TreeItem {
       title: "Open Migration File",
       arguments: [file],
     };
-
-    // Unique ID for state persistence that includes file path and refs count
-    if (docRefs.length > 0) {
-      this.id = `migFile-${path.basename(file)}-${docRefs.length}`;
-    }
   }
 
   getChildren() {

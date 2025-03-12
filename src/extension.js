@@ -417,11 +417,6 @@ function checkForDocumentationRefs(document, provider) {
     );
 
     const hasRefs = refs.length > 0;
-    console.log(
-      `File ${document.fileName} has documentation refs: ${
-        hasRefs ? "YES" : "NO"
-      }`
-    );
 
     vscode.commands.executeCommand(
       "setContext",
@@ -502,7 +497,7 @@ async function generateDocumentationSummary(provider) {
                 let newContext = ref.context.substring(
                   ref.context.indexOf(ref.id)
                 );
-                if (/[([{}<]$/.test(newContext))
+                if (/[([{};:<]$/.test(newContext))
                   newContext = newContext.slice(0, -1);
                 return { ...ref, filePath: file.fsPath, context: newContext };
               })()
@@ -557,7 +552,12 @@ async function generateDocumentationSummary(provider) {
           : ref.done
           ? "✅ Done"
           : "⏳ Pending";
-        fileContent += `- ${status} | ${ref.context}\n`;
+        const userInfo = ref.userId ? `${ref.userId}` : "";
+        const dateInfo = ref.lastModified
+          ? ` (${new Date(ref.lastModified).toLocaleString()})`
+          : "";
+        const code = "```";
+        fileContent += `- ${status} ${code} ${userInfo}${dateInfo} ${code} ${ref.context}\n`;
         if (ref.userDescription) {
           fileContent += `  - Note: ${ref.userDescription}\n`;
         }
@@ -565,7 +565,7 @@ async function generateDocumentationSummary(provider) {
       fileContent += `\n`;
     }
 
-    // Create ID-based report
+    // ID-based report with userId
     let idContent = `# Documentation References by ID\n\n${statsSection}`;
 
     const idGroups = groupBy(allRefs, (ref) => extractFullId(ref.context));
@@ -579,9 +579,14 @@ async function generateDocumentationSummary(provider) {
           : ref.done
           ? "✅ Done"
           : "⏳ Pending";
-        idContent += `- ${status} | ${path.basename(ref.filePath)}:${
-          ref.lineNumber
-        } | ${ref.context}\n`;
+        const userInfo = ref.userId ? `${ref.userId}` : "";
+        const dateInfo = ref.lastModified
+          ? ` (${new Date(ref.lastModified).toLocaleString()})`
+          : "";
+        const code = "```";
+        idContent += `- ${status} ${code} ${userInfo}${dateInfo} ${code}  ${path.basename(
+          ref.filePath
+        )}:${ref.lineNumber} | ${ref.context}\n`;
         if (ref.userDescription) {
           idContent += `  - Note: ${ref.userDescription}\n`;
         }

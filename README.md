@@ -48,6 +48,10 @@ This extension contributes the following settings:
   - Includes a `basePath` property which specifies the base folder for all object types
 - `bc-al-upgradeassistant.workingObjectFolders`: Locations where working AL objects are located
 
+### Additional Settings
+
+- `bc-al-upgradeassistant.userId`: User identifier used to attach to documentation references when toggling their status.
+
 ## Commands
 
 ### General
@@ -58,7 +62,7 @@ This extension contributes the following settings:
 ### Documentation
 
 - `BC/AL Upgrade Assistant: Open Documentation Reference Location`: Opens the location of the documentation reference.
-- `BC/AL Upgrade Assistant: Toggle Documentation Reference as Done/Not Done`: Toggles the completion status of a documentation reference.
+- `BC/AL Upgrade Assistant: Toggle Documentation Reference as Done/Not Done`: Toggles the completion status of a documentation reference and silently adds the configured UserId if set.
 - `BC/AL Upgrade Assistant: Open Documentation URL`: Opens the URL associated with a documentation reference.
 - `BC/AL Upgrade Assistant: Toggle Not Implemented`: Toggles the 'Not Implemented' status of a documentation reference.
 - `BC/AL Upgrade Assistant: Add/Edit Note`: Adds or edits a note for a documentation reference.
