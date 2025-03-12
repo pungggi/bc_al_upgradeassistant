@@ -45,8 +45,14 @@ async function extractObjects(
     const lines = content.split(/\r?\n/);
 
     for (const line of lines) {
-      // Check if line starts a new object
-      if (line.trim().startsWith("OBJECT ")) {
+      // Check if line starts a new object - either C/AL style or AL extension style
+      const isCalObject = line.trim().startsWith("OBJECT ");
+      const isAlExtensionObject =
+        /^\s*(tableextension|pageextension|reportextension|codeunitextension|enumextension)\s+/i.test(
+          line.trim()
+        );
+
+      if (isCalObject || isAlExtensionObject) {
         // Save previous object if exists
         if (isInsideObject && currentObject) {
           const fileName = getFileName(
@@ -85,12 +91,25 @@ async function extractObjects(
         currentObject = "";
         isInsideObject = true;
 
-        // Extract object type and ID
-        const objectMatch = line.match(/OBJECT\s+(\w+)\s+(\d+)\s+(.*)/i);
-        if (objectMatch) {
-          currentObjectType = objectMatch[1];
-          currentObjectId = objectMatch[2];
-          currentObjectName = objectMatch[3];
+        // Extract object type and ID based on object format
+        if (isCalObject) {
+          // Old C/AL format: OBJECT Type ID Name
+          const objectMatch = line.match(/OBJECT\s+(\w+)\s+(\d+)\s+(.*)/i);
+          if (objectMatch) {
+            currentObjectType = objectMatch[1];
+            currentObjectId = objectMatch[2];
+            currentObjectName = objectMatch[3];
+          }
+        } else if (isAlExtensionObject) {
+          // AL extension format: type ID "Name" extends BaseObject
+          const extensionMatch = line.match(
+            /(\w+extension)\s+(\d+)\s+["']([^"']+)["']/i
+          );
+          if (extensionMatch) {
+            currentObjectType = extensionMatch[1]; // e.g., "tableextension"
+            currentObjectId = extensionMatch[2];
+            currentObjectName = extensionMatch[3];
+          }
         }
       }
 
@@ -186,6 +205,10 @@ async function extractObjects(
  * @returns {string} - Generated filename
  */
 function getFileName(objectType, objectId, objectName) {
+  if (!objectType || !objectId || !objectName) {
+    return `Unknown_Object_${Date.now()}.txt`;
+  }
+
   // Clean object name for safe filename - replace spaces with underscores
   const cleanName = objectName
     .replace(/[<>:"/\\|?*]/g, "_")
@@ -214,7 +237,7 @@ function getLocationForObjectType(objectType) {
   const basePath = locations["basePath"];
   if (!basePath) return null;
 
-  // Check for exact match
+  // Early return if exact match found
   if (locations[objectType]) {
     return path.join(basePath, locations[objectType]);
   }
