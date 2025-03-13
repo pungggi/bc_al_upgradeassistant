@@ -371,9 +371,375 @@ async function extractObjectsWithDialog() {
   }
 }
 
+/**
+ * Extract objects from a selected file path through a dialog
+ */
+async function extractObjectsFromPath() {
+  try {
+    // Ask user to select a C/AL file
+    const fileUris = await vscode.window.showOpenDialog({
+      canSelectFiles: true,
+      canSelectFolders: false,
+      canSelectMany: false,
+      openLabel: "Select C/AL file to extract objects from",
+      filters: {
+        "CAL Files": ["txt"],
+        "All Files": ["*"],
+      },
+    });
+
+    if (!fileUris || fileUris.length === 0) {
+      return; // User canceled
+    }
+
+    const sourceFilePath = fileUris[0].fsPath;
+
+    // Ask user to select output folder
+    const outputFolderUri = await vscode.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: "Select output folder",
+    });
+
+    let outputFolderPath = "";
+    if (outputFolderUri && outputFolderUri.length > 0) {
+      outputFolderPath = outputFolderUri[0].fsPath;
+    } else {
+      // Use default if user cancels
+      outputFolderPath = path.join(
+        path.dirname(sourceFilePath),
+        "extracted_objects"
+      );
+    }
+
+    // Always organize by type
+    const shouldOrganize = true;
+
+    // Show progress while splitting
+    const extraction = await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: "Splitting C/AL objects",
+        cancellable: false,
+      },
+      async (progress) => {
+        progress.report({ increment: 0, message: "Reading source file..." });
+
+        // Get file content and estimate object count for better progress reporting
+        const content = fs.readFileSync(sourceFilePath, "utf8");
+        const lines = content.split(/\r?\n/);
+
+        // Rough estimation of object count (each OBJECT keyword likely starts a new object)
+        const estimatedObjectCount = lines.filter(
+          (line) =>
+            line.trim().startsWith("OBJECT ") ||
+            /^\s*(table|page|report|codeunit)\s+/i.test(line.trim())
+        ).length;
+
+        progress.report({
+          increment: 5,
+          message: `Found approximately ${estimatedObjectCount} objects to extract...`,
+        });
+
+        // Call the extraction with progress updates
+        const result = await extractObjectsWithProgress(
+          sourceFilePath,
+          outputFolderPath,
+          shouldOrganize,
+          progress,
+          estimatedObjectCount
+        );
+
+        progress.report({
+          increment: 100,
+          message: `Completed! Extracted ${result.files.length} objects`,
+        });
+
+        return result;
+      }
+    );
+
+    // Save the extracted folder locations to configuration
+    if (
+      extraction.objectLocations &&
+      Object.keys(extraction.objectLocations).length > 0
+    ) {
+      // Keep the locations as they are
+      await configManager.setConfigValue(
+        "upgradedObjectFolders",
+        extraction.objectLocations
+      );
+      vscode.window.showInformationMessage(
+        "Object folder locations have been saved to your settings."
+      );
+    }
+
+    // Show success message with the output folder path and a link to view the summary
+    const summaryUri = vscode.Uri.file(extraction.summaryFile);
+
+    vscode.window
+      .showInformationMessage(
+        `Successfully extracted ${extraction.files.length} objects to "${outputFolderPath}"`,
+        {
+          modal: false,
+          detail: "Click 'View Summary' to see extraction details",
+        },
+        { title: "View Summary" }
+      )
+      .then((selection) => {
+        if (selection && selection.title === "View Summary") {
+          vscode.workspace
+            .openTextDocument(summaryUri)
+            .then((doc) => vscode.window.showTextDocument(doc));
+        }
+      });
+  } catch (error) {
+    vscode.window.showErrorMessage(
+      `Error extracting objects: ${error.message}`
+    );
+  }
+}
+
+/**
+ * Extract objects with progress reporting
+ * @param {string} sourceFilePath - Path to the source file
+ * @param {string} outputFolderPath - Path to the output folder
+ * @param {boolean} organizeByType - Whether to organize objects by type
+ * @param {vscode.Progress} progress - VS Code progress object
+ * @param {number} estimatedCount - Estimated number of objects
+ * @returns {Promise<{files: Array<string>, summaryFile: string, objectLocations: Object}>}
+ */
+async function extractObjectsWithProgress(
+  sourceFilePath,
+  outputFolderPath,
+  organizeByType,
+  progress,
+  estimatedCount
+) {
+  // If no output folder provided, create a subfolder in the same directory as source file
+  if (!outputFolderPath) {
+    outputFolderPath = path.join(
+      path.dirname(sourceFilePath),
+      "extracted_objects"
+    );
+  }
+
+  // Create output folder if it doesn't exist
+  if (!fs.existsSync(outputFolderPath)) {
+    fs.mkdirSync(outputFolderPath, { recursive: true });
+  }
+
+  const extractedFiles = [];
+  let currentObject = "";
+  let currentObjectType = "";
+  let currentObjectId = "";
+  let currentObjectName = "";
+  let isInsideObject = false;
+  let extractedCount = 0;
+
+  // Keep track of object counts by type
+  const objectCountsByType = {};
+  // Keep track of upgraded object folders by type
+  const upgradedObjectFoldersByType = {};
+
+  try {
+    const content = fs.readFileSync(sourceFilePath, "utf8");
+    const lines = content.split(/\r?\n/);
+
+    progress.report({
+      increment: 10,
+      message: `Analyzing ${lines.length} lines of code...`,
+    });
+
+    let lastProgressUpdate = Date.now();
+
+    for (const line of lines) {
+      // Check if line starts a new object - either C/AL style or AL extension style
+      const isCalObject = line.trim().startsWith("OBJECT ");
+      const isAlExtensionObject =
+        /^\s*(tableextension|pageextension|reportextension|codeunitextension|enumextension)\s+/i.test(
+          line.trim()
+        );
+
+      if (isCalObject || isAlExtensionObject) {
+        // Save previous object if exists
+        if (isInsideObject && currentObject) {
+          const fileName = getFileName(
+            currentObjectType,
+            currentObjectId,
+            currentObjectName
+          );
+
+          let targetFolder = outputFolderPath;
+
+          // Create type subfolder if organizing by type
+          if (organizeByType && currentObjectType) {
+            targetFolder = path.join(outputFolderPath, currentObjectType + "s");
+            if (!fs.existsSync(targetFolder)) {
+              fs.mkdirSync(targetFolder, { recursive: true });
+            }
+
+            // Store location for this object type as RELATIVE path to basePath
+            upgradedObjectFoldersByType[currentObjectType] =
+              currentObjectType + "s";
+
+            // Count objects by type
+            if (!objectCountsByType[currentObjectType]) {
+              objectCountsByType[currentObjectType] = 1;
+            } else {
+              objectCountsByType[currentObjectType]++;
+            }
+          }
+
+          const filePath = path.join(targetFolder, fileName);
+          fs.writeFileSync(filePath, currentObject);
+          extractedFiles.push(filePath);
+
+          // Increment extracted count
+          extractedCount++;
+
+          // Update progress periodically (not on every object to avoid UI freezing)
+          const now = Date.now();
+          if (now - lastProgressUpdate > 500) {
+            const progressPercent =
+              estimatedCount > 0
+                ? Math.min(80, 10 + (extractedCount / estimatedCount) * 70)
+                : Math.min(80, 10 + extractedCount * 5);
+
+            progress.report({
+              increment: progressPercent,
+              message: `Extracted ${extractedCount} objects...`,
+            });
+            lastProgressUpdate = now;
+          }
+        }
+
+        // Reset for new object
+        currentObject = "";
+        isInsideObject = true;
+
+        // Extract object type and ID based on object format
+        if (isCalObject) {
+          // Old C/AL format: OBJECT Type ID Name
+          const objectMatch = line.match(/OBJECT\s+(\w+)\s+(\d+)\s+(.*)/i);
+          if (objectMatch) {
+            currentObjectType = objectMatch[1];
+            currentObjectId = objectMatch[2];
+            currentObjectName = objectMatch[3];
+          }
+        } else if (isAlExtensionObject) {
+          // AL extension format: type ID "Name" extends BaseObject
+          const extensionMatch = line.match(
+            /(\w+extension)\s+(\d+)\s+["']([^"']+)["']/i
+          );
+          if (extensionMatch) {
+            currentObjectType = extensionMatch[1]; // e.g., "tableextension"
+            currentObjectId = extensionMatch[2];
+            currentObjectName = extensionMatch[3];
+          }
+        }
+      }
+
+      // Add line to current object
+      if (isInsideObject) {
+        currentObject += line + "\n";
+      }
+    }
+
+    // Save the last object if exists
+    if (isInsideObject && currentObject) {
+      const fileName = getFileName(
+        currentObjectType,
+        currentObjectId,
+        currentObjectName
+      );
+
+      let targetFolder = outputFolderPath;
+
+      // Create type subfolder if organizing by type
+      if (organizeByType && currentObjectType) {
+        targetFolder = path.join(outputFolderPath, currentObjectType + "s");
+        if (!fs.existsSync(targetFolder)) {
+          fs.mkdirSync(targetFolder, { recursive: true });
+        }
+
+        // Store location for this object type as RELATIVE path to basePath
+        upgradedObjectFoldersByType[currentObjectType] =
+          currentObjectType + "s";
+
+        // Count objects by type
+        if (!objectCountsByType[currentObjectType]) {
+          objectCountsByType[currentObjectType] = 1;
+        } else {
+          objectCountsByType[currentObjectType]++;
+        }
+      }
+
+      const filePath = path.join(targetFolder, fileName);
+      fs.writeFileSync(filePath, currentObject);
+      extractedFiles.push(filePath);
+      extractedCount++;
+    }
+
+    progress.report({
+      increment: 85,
+      message: `Creating extraction summary...`,
+    });
+
+    // Create a summary file with statistics
+    const summaryFilePath = path.join(
+      outputFolderPath,
+      "_extraction_summary.txt"
+    );
+    let summaryContent = `Extraction Summary\n`;
+    summaryContent += `----------------\n`;
+    summaryContent += `Source file: ${path.basename(sourceFilePath)}\n`;
+    summaryContent += `Extraction date: ${new Date().toLocaleString()}\n\n`;
+    summaryContent += `Total objects extracted: ${extractedFiles.length}\n\n`;
+
+    // Add base path information
+    summaryContent += `Base extraction path: ${outputFolderPath}\n\n`;
+
+    summaryContent += `Objects by type:\n`;
+
+    for (const type in objectCountsByType) {
+      summaryContent += `- ${type}s: ${objectCountsByType[type]}\n`;
+    }
+
+    fs.writeFileSync(summaryFilePath, summaryContent);
+
+    // Save the upgraded object folders to configuration
+    if (Object.keys(upgradedObjectFoldersByType).length > 0) {
+      // Store base path as absolute path in upgradedObjectFoldersByType
+      upgradedObjectFoldersByType["basePath"] = outputFolderPath;
+
+      await configManager.setConfigValue(
+        "upgradedObjectFolders",
+        upgradedObjectFoldersByType
+      );
+    }
+
+    progress.report({
+      increment: 100,
+      message: `Complete! Extracted ${extractedFiles.length} objects`,
+    });
+
+    return {
+      files: extractedFiles,
+      summaryFile: summaryFilePath,
+      objectLocations: upgradedObjectFoldersByType,
+    };
+  } catch (error) {
+    console.error("Error extracting objects:", error);
+    throw error;
+  }
+}
+
 module.exports = {
   extractObjects,
   extractObjectsWithDialog,
+  extractObjectsFromPath,
   getUpgradedObjectFoldersByType,
   getLocationForObjectType,
 };
