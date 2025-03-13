@@ -71,7 +71,7 @@ function getAlFileName(alCode, defaultName = "GeneratedObject") {
     // Properly sanitize the object name to create a valid filename
     const sanitizedName = sanitizeFileName(objectInfo.name);
     return {
-      fileName: `${objectInfo.type}${objectInfo.id}_${sanitizedName}.al`,
+      fileName: `${sanitizedName}.${objectInfo.type}.al`,
       objectInfo,
     };
   }

@@ -30,7 +30,7 @@ function postCorrections(fileInfo) {
     }
 
     // Extract object information from the AL file
-    const content = fs.readFileSync(fileInfo.path, "utf8");
+    let content = fs.readFileSync(fileInfo.path, "utf8");
     const objectTypeRegex =
       /\b(table|tableextension|page|pageextension|report|reportextension|codeunit|query|xmlport|enum|enumextension|profile|interface)\b\s+(\d+)\s+["']([^"']+)["']/i;
     const objectMatch = content.match(objectTypeRegex);
@@ -82,8 +82,14 @@ function postCorrections(fileInfo) {
     const calCode = fs.readFileSync(fileInfo.orginFilePath, "utf8");
     const parsedCal = parseCALToJSON(calCode);
 
-    insertDocumentationTrigger(parsedCal, fileInfo, content);
-    assignAvailableObjectNumber(fileInfo, content, objectType, objectNumber);
+    content = insertDocumentationTrigger(parsedCal, fileInfo, content);
+    content = assignAvailableObjectNumber(
+      fileInfo,
+      content,
+      objectType,
+      objectNumber
+    );
+    content = reorderLanguageProperties(fileInfo, content);
   } catch (error) {
     console.error("Error in postCorrections:", error);
   }
@@ -93,14 +99,14 @@ function insertDocumentationTrigger(parsedCal, fileInfo, content) {
   let documentation = parsedCal.documentation;
 
   if (!documentation) {
-    return;
+    return content;
   }
 
   // Filter only Documentation comments with documentationId configured in documentationIds
   documentation = filterDocumentationByIds(documentation);
   if (!documentation) {
     console.log(`No relevant documentation found for ${fileInfo.path}`);
-    return;
+    return content;
   }
 
   // Format the documentation as AL comments
@@ -109,7 +115,7 @@ function insertDocumentationTrigger(parsedCal, fileInfo, content) {
   // Check if file already has the documentation comments
   if (content.includes(commentedDocumentation)) {
     console.log(`File ${fileInfo.path} already has documentation comments`);
-    return;
+    return content;
   }
 
   // Find the first opening curly brace and insert the documentation after it
@@ -122,7 +128,11 @@ function insertDocumentationTrigger(parsedCal, fileInfo, content) {
       "\n" +
       content.substring(firstBraceIndex + 1);
     fs.writeFileSync(fileInfo.path, updatedContent, "utf8");
+
+    return updatedContent;
   }
+
+  return content;
 }
 
 /**
@@ -141,7 +151,7 @@ function assignAvailableObjectNumber(
       !fileInfo?.path ||
       path.extname(fileInfo.path).toLowerCase() !== ".al"
     ) {
-      return false;
+      return content;
     }
 
     // Get the ID ranges from app.json
@@ -176,7 +186,7 @@ function assignAvailableObjectNumber(
       console.warn(
         `Target path for ${objectType} does not exist: ${targetFolder}`
       );
-      return false;
+      return content;
     }
 
     // Set to track used object numbers
@@ -218,7 +228,7 @@ function assignAvailableObjectNumber(
       console.log(
         `Object number ${currentObjectNumber} is already valid and available.`
       );
-      return true;
+      return content;
     }
 
     // Find the next available number
@@ -249,13 +259,10 @@ function assignAvailableObjectNumber(
     // Write the updated content back to the file
     fs.writeFileSync(fileInfo.path, updatedContent, "utf8");
 
-    console.log(
-      `Updated object number for ${objectType} from ${currentObjectNumber} to ${nextNumber}`
-    );
-    return true;
+    return updatedContent;
   } catch (error) {
     console.error("Error in assignAvailableObjectNumber:", error);
-    return false;
+    return content;
   }
 }
 
@@ -281,6 +288,46 @@ function formatAsComments(documentation) {
   });
 
   return commentedLines.join("\n");
+}
+
+/**
+ * Reorders language comment lines so that lines starting with language patterns
+ * (//de-CH=, //de-DE=, //en-US=, //it-IT=) immediately precede properties
+ * equal to 'Caption' or 'OptionCaption'.
+ */
+function reorderLanguageProperties(fileInfo, content) {
+  if (typeof content !== "string") return content;
+  const lines = content.split(/\r?\n/);
+  const newLines = [];
+
+  // Regex to match language comment lines
+  const langCommentRegex = /^\s*\/\/([a-z]{2}-[A-Z]{2})=/;
+  // Regex to match Caption or OptionCaption assignment lines
+  const captionPropRegex = /^\s*(Caption|OptionCaption)\s*=/i;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (langCommentRegex.test(line)) {
+      if (captionPropRegex.test(lines[i - 1])) {
+        const lastLine = newLines.pop(); // Remove the caption line
+        newLines.push(line); // Add the language line
+        newLines.push(lastLine); // Add the caption line
+      }
+      continue;
+    } else {
+      newLines.push(line);
+    }
+  }
+
+  const updatedContent = newLines.join("\n");
+  if (updatedContent !== content) {
+    fs.writeFileSync(fileInfo.path, updatedContent, "utf8");
+
+    return updatedContent;
+  }
+
+  return content;
 }
 
 /**
