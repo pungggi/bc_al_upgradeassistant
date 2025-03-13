@@ -113,7 +113,7 @@ function registerViews(context) {
                 .then((doc) => vscode.window.showTextDocument(doc));
             } else {
               vscode.window.showErrorMessage(
-                `Cannot find original file for ${type} ${id}`
+                `Cannot find original file for ${type} ${id} at ${infoData.originalPath}`
               );
             }
           } else {

@@ -157,10 +157,11 @@ async function saveAlCodeToFile(alCode, orginFilePath) {
 
   let targetFolder = null;
 
+  let objectType;
   // Check if we have workingObjectFolders setting and try to use it
   if (objectInfo && objectInfo.type) {
     // Convert object type to lowercase for consistent lookup
-    const objectType = objectInfo.type.toLowerCase();
+    objectType = objectInfo.type.toLowerCase();
     const workingObjectFolders = configManager.getConfigValue(
       "workingObjectFolders",
       {}
@@ -204,7 +205,7 @@ async function saveAlCodeToFile(alCode, orginFilePath) {
       canSelectFiles: false,
       canSelectFolders: true,
       canSelectMany: false,
-      openLabel: "Save AL code to folder",
+      openLabel: `Save ${objectType} here`,
       title: "Select folder to save AL code",
       defaultUri,
     });
@@ -217,26 +218,14 @@ async function saveAlCodeToFile(alCode, orginFilePath) {
 
     // If object info was detected, offer to save the location for future use
     if (objectInfo && objectInfo.type) {
-      const saveLocation = await vscode.window.showQuickPick(
-        [
-          {
-            label: "Yes",
-            description: "Remember this location for future use",
-          },
-          { label: "No", description: "Don't remember location" },
-        ],
-        {
-          placeHolder: `Remember this location for ${objectInfo.type} objects?`,
-          canPickMany: false,
-        }
+      // Automatically save this location for future use
+      const currentLocations = configManager.getConfigValue(
+        "workingObjectFolders",
+        {}
       );
 
-      if (saveLocation && saveLocation.label === "Yes") {
-        // Update the settings
-        const currentLocations = configManager.getConfigValue(
-          "workingObjectFolders",
-          {}
-        );
+      // Only save if not already saved
+      if (!currentLocations[objectInfo.type.toLowerCase()]) {
         const updatedLocations = {
           ...currentLocations,
           [objectInfo.type.toLowerCase()]: convertToRelativePath(targetFolder),
