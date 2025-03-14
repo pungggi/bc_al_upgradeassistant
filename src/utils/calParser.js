@@ -376,7 +376,6 @@ function filterParsedObjectByIdRanges(parsedObject, idRanges) {
       if (isIdInRanges(field.id, idRanges)) {
         return true;
       }
-      console.log(`Filtered out field ${field.name} with ID ${field.id}`);
       return false;
     });
   }
@@ -387,7 +386,6 @@ function filterParsedObjectByIdRanges(parsedObject, idRanges) {
       if (isIdInRanges(control.id, idRanges)) {
         return true;
       }
-      console.log(`Filtered out control with ID ${control.id}`);
       return false;
     });
   }
@@ -398,7 +396,6 @@ function filterParsedObjectByIdRanges(parsedObject, idRanges) {
       if (isIdInRanges(action.id, idRanges)) {
         return true;
       }
-      console.log(`Filtered out action with ID ${action.id}`);
       return false;
     });
   }
