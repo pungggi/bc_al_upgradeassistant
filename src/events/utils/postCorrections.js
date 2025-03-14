@@ -83,12 +83,18 @@ function postCorrections(fileInfo) {
     const parsedCal = parseCALToJSON(calCode);
 
     content = insertDocumentationTrigger(parsedCal, fileInfo, content);
-    content = assignAvailableObjectNumber(
+    const updatedContent = assignAvailableObjectNumber(
       fileInfo,
       content,
       objectType,
       objectNumber
     );
+
+    // If content was modified by assigning new object number, update the index
+    if (updatedContent !== content) {
+      updateIndexAfterObjectChange(fileInfo.path, content, updatedContent);
+    }
+    content = updatedContent;
     content = reorderLanguageProperties(fileInfo, content);
   } catch (error) {
     console.error("Error in postCorrections:", error);
@@ -359,6 +365,154 @@ function filterDocumentationByIds(documentation) {
   );
 }
 
+/**
+ * Updates the index information after an object's properties have changed
+ * @param {string} filePath - Path of the file that was modified
+ * @param {string} oldContent - Original content before modification
+ * @param {string} newContent - New content after modification
+ */
+function updateIndexAfterObjectChange(filePath, oldContent, newContent) {
+  try {
+    if (!filePath || !oldContent || !newContent) {
+      return;
+    }
+
+    // Extract old object info
+    const oldObjectMatch = oldContent.match(
+      /\b(table|tableextension|page|pageextension|report|reportextension|codeunit|query|xmlport|enum|enumextension|profile|interface)\b\s+(\d+)\s+["']([^"']+)["']/i
+    );
+
+    // Extract new object info
+    const newObjectMatch = newContent.match(
+      /\b(table|tableextension|page|pageextension|report|reportextension|codeunit|query|xmlport|enum|enumextension|profile|interface)\b\s+(\d+)\s+["']([^"']+)["']/i
+    );
+
+    if (!oldObjectMatch || !newObjectMatch) {
+      console.warn("Could not extract object information for index update");
+      return;
+    }
+
+    const oldType = oldObjectMatch[1].toLowerCase();
+    const oldNumber = oldObjectMatch[2];
+    const oldName = oldObjectMatch[3];
+
+    const newType = newObjectMatch[1].toLowerCase();
+    const newNumber = newObjectMatch[2];
+    const newName = newObjectMatch[3];
+
+    // Get the base path for indexes
+    const upgradedObjectFolders = configManager.getConfigValue(
+      "upgradedObjectFolders",
+      null
+    );
+    if (!upgradedObjectFolders || !upgradedObjectFolders.basePath) {
+      console.warn("Base path not configured for upgraded objects");
+      return;
+    }
+
+    const basePath = upgradedObjectFolders.basePath;
+    const indexPath = path.join(basePath, ".index");
+
+    // Handle case where object type, number, or name changed
+    if (oldType !== newType || oldNumber !== newNumber || oldName !== newName) {
+      // Path to the old object's info file
+      const oldObjectTypeFolder = path.join(indexPath, oldType);
+      const oldObjectNumberFolder = path.join(oldObjectTypeFolder, oldNumber);
+      const oldInfoFilePath = path.join(oldObjectNumberFolder, "info.json");
+
+      // If the old info file exists, read it
+      if (fs.existsSync(oldInfoFilePath)) {
+        // Read the existing info file
+        const infoData = JSON.parse(fs.readFileSync(oldInfoFilePath, "utf8"));
+
+        // Create the new structure if needed
+        const newObjectTypeFolder = path.join(indexPath, newType);
+        if (!fs.existsSync(newObjectTypeFolder)) {
+          fs.mkdirSync(newObjectTypeFolder, { recursive: true });
+        }
+
+        const newObjectNumberFolder = path.join(newObjectTypeFolder, newNumber);
+        if (!fs.existsSync(newObjectNumberFolder)) {
+          fs.mkdirSync(newObjectNumberFolder, { recursive: true });
+        }
+
+        // Update the info data
+        infoData.originalPath = filePath;
+        infoData.objectType = newType;
+        infoData.objectNumber = newNumber;
+        infoData.lastUpdated = new Date().toISOString();
+
+        // Write the updated info to the new location
+        fs.writeFileSync(
+          path.join(newObjectNumberFolder, "info.json"),
+          JSON.stringify(infoData, null, 2),
+          "utf8"
+        );
+
+        // If object number or type changed, clean up the old info file
+        if (oldType !== newType || oldNumber !== newNumber) {
+          try {
+            // Delete the old info file
+            fs.unlinkSync(oldInfoFilePath);
+
+            // Check if old folder is empty and delete if it is
+            if (fs.readdirSync(oldObjectNumberFolder).length === 0) {
+              fs.rmdirSync(oldObjectNumberFolder);
+            }
+
+            // Check if old type folder is empty and delete if it is
+            if (fs.readdirSync(oldObjectTypeFolder).length === 0) {
+              fs.rmdirSync(oldObjectTypeFolder);
+            }
+          } catch (error) {
+            console.error("Error cleaning up old index files:", error);
+          }
+        }
+
+        console.log(
+          `Updated index for object ${oldType} ${oldNumber} -> ${newType} ${newNumber}`
+        );
+      } else {
+        // If no existing info file, this might be a new object
+        console.log(
+          `No existing index found for ${oldType} ${oldNumber}, treating as new object`
+        );
+
+        // Create the new structure
+        const newObjectTypeFolder = path.join(indexPath, newType);
+        if (!fs.existsSync(newObjectTypeFolder)) {
+          fs.mkdirSync(newObjectTypeFolder, { recursive: true });
+        }
+
+        const newObjectNumberFolder = path.join(newObjectTypeFolder, newNumber);
+        if (!fs.existsSync(newObjectNumberFolder)) {
+          fs.mkdirSync(newObjectNumberFolder, { recursive: true });
+        }
+
+        // Create new info file
+        const newInfoData = {
+          originalPath: filePath,
+          fileName: path.basename(filePath),
+          objectType: newType,
+          objectNumber: newNumber,
+          indexedAt: new Date().toISOString(),
+          referencedMigrationFiles: [],
+        };
+
+        fs.writeFileSync(
+          path.join(newObjectNumberFolder, "info.json"),
+          JSON.stringify(newInfoData, null, 2),
+          "utf8"
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Error updating index after object change:", error);
+  }
+}
+
 module.exports = {
   postCorrections,
+  // Export for testing or direct usage from other modules
+  updateIndexAfterObjectChange,
 };

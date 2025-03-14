@@ -2,7 +2,7 @@
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
   "description": "Assists you in transforming old C/AL and more",
-  "version": "0.0.69",
+  "version": "0.0.70",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
@@ -21,11 +21,6 @@
       {
         "command": "bc-al-upgradeassistant.refreshSymbolCache",
         "title": "Refresh Symbol Cache",
-        "category": "BC/AL Upgrade Assistant"
-      },
-      {
-        "command": "bc-al-upgradeassistant.splitCalObjects",
-        "title": "Split C/AL Objects",
         "category": "BC/AL Upgrade Assistant"
       },
       {

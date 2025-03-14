@@ -3,6 +3,7 @@ const path = require("path");
 const configManager = require("../utils/configManager");
 const { fileEvents } = require("../utils/alFileSaver");
 const { postCorrections } = require("./utils/postCorrections");
+const vscode = require("vscode");
 
 function createIndexFolder() {
   try {
@@ -236,12 +237,280 @@ function processAlFile(filePath, indexPath, orginFilePath) {
   }
 }
 
+/**
+ * Set up a file system watcher for AL files to detect and respond to changes
+ * @param {vscode.ExtensionContext} context - The extension context
+ */
+function setupFileWatcher(context) {
+  try {
+    // Watch for changes to .al files in the workspace
+    const alFileWatcher = vscode.workspace.createFileSystemWatcher("**/*.al");
+
+    // Handle changes to .al files
+    alFileWatcher.onDidChange(async (uri) => {
+      try {
+        // Get the file content to analyze changes
+        const document = await vscode.workspace.openTextDocument(uri);
+        const content = document.getText();
+
+        // Process the changed file
+        handleAlFileChange(uri.fsPath, content);
+      } catch (error) {
+        console.error(`Error handling file change for ${uri.fsPath}:`, error);
+      }
+    });
+
+    // Handle creation of new .al files
+    alFileWatcher.onDidCreate(async (uri) => {
+      try {
+        const document = await vscode.workspace.openTextDocument(uri);
+        const content = document.getText();
+
+        // Process the new file
+        handleAlFileCreate(uri.fsPath, content);
+      } catch (error) {
+        console.error(`Error handling file creation for ${uri.fsPath}:`, error);
+      }
+    });
+
+    // Handle deletion of .al files
+    alFileWatcher.onDidDelete((uri) => {
+      try {
+        // Process the deleted file
+        handleAlFileDelete(uri.fsPath);
+      } catch (error) {
+        console.error(`Error handling file deletion for ${uri.fsPath}:`, error);
+      }
+    });
+
+    if (context && context.subscriptions) {
+      context.subscriptions.push(alFileWatcher);
+    }
+  } catch (error) {
+    console.error("Error setting up file watcher:", error);
+  }
+}
+
+/**
+ * Process changes to an existing AL file
+ * @param {string} filePath - Path to the changed AL file
+ * @param {string} content - Content of the file
+ */
+function handleAlFileChange(filePath, content) {
+  try {
+    // Extract object information from the AL file
+    const objectTypeRegex =
+      /\b(table|tableextension|page|pageextension|report|reportextension|codeunit|query|xmlport|enum|enumextension|profile|interface)\b\s+(\d+)\s+["']([^"']+)["']/i;
+    const objectMatch = content.match(objectTypeRegex);
+
+    if (!objectMatch) {
+      console.warn(`Could not extract object info from ${filePath}`);
+      return;
+    }
+
+    const objectType = objectMatch[1].toLowerCase();
+    const objectNumber = objectMatch[2];
+
+    // Get the base path for indexes
+    const upgradedObjectFolders = configManager.getConfigValue(
+      "upgradedObjectFolders",
+      null
+    );
+    if (!upgradedObjectFolders || !upgradedObjectFolders.basePath) {
+      return;
+    }
+
+    const basePath = upgradedObjectFolders.basePath;
+    const indexPath = path.join(basePath, ".index");
+
+    // Look for the current index entry for this file
+    const objectTypeFolder = path.join(indexPath, objectType);
+    const objectNumberFolder = path.join(objectTypeFolder, objectNumber);
+    const infoFilePath = path.join(objectNumberFolder, "info.json");
+
+    // If the info file exists, update its information
+    if (fs.existsSync(infoFilePath)) {
+      const infoData = JSON.parse(fs.readFileSync(infoFilePath, "utf8"));
+
+      // Update relevant fields
+      infoData.lastUpdated = new Date().toISOString();
+
+      // If the file path has changed, update that too
+      if (infoData.originalPath !== filePath) {
+        infoData.originalPath = filePath;
+        infoData.fileName = path.basename(filePath);
+      }
+
+      // Write back the updated info
+      fs.writeFileSync(infoFilePath, JSON.stringify(infoData, null, 2), "utf8");
+      console.log(`Updated index info for ${filePath}`);
+    } else {
+      // If no index exists for this object, create one
+      createNewIndexEntry(filePath, objectType, objectNumber, indexPath);
+    }
+  } catch (error) {
+    console.error(`Error handling AL file change for ${filePath}:`, error);
+  }
+}
+
+/**
+ * Process the creation of a new AL file
+ * @param {string} filePath - Path to the new AL file
+ * @param {string} content - Content of the file
+ */
+function handleAlFileCreate(filePath, content) {
+  try {
+    // Extract object information from the AL file
+    const objectTypeRegex =
+      /\b(table|tableextension|page|pageextension|report|reportextension|codeunit|query|xmlport|enum|enumextension|profile|interface)\b\s+(\d+)\s+["']([^"']+)["']/i;
+    const objectMatch = content.match(objectTypeRegex);
+
+    if (!objectMatch) {
+      console.warn(`Could not extract object info from new file ${filePath}`);
+      return;
+    }
+
+    const objectType = objectMatch[1].toLowerCase();
+    const objectNumber = objectMatch[2];
+
+    // Get the base path for indexes
+    const upgradedObjectFolders = configManager.getConfigValue(
+      "upgradedObjectFolders",
+      null
+    );
+    if (!upgradedObjectFolders || !upgradedObjectFolders.basePath) {
+      return;
+    }
+
+    const basePath = upgradedObjectFolders.basePath;
+    const indexPath = path.join(basePath, ".index");
+
+    // Create a new index entry for this file
+    createNewIndexEntry(filePath, objectType, objectNumber, indexPath);
+  } catch (error) {
+    console.error(`Error handling AL file creation for ${filePath}:`, error);
+  }
+}
+
+/**
+ * Create a new index entry for an AL file
+ * @param {string} filePath - Path to the AL file
+ * @param {string} objectType - Type of the AL object
+ * @param {string} objectNumber - Number of the AL object
+ * @param {string} indexPath - Path to the index directory
+ */
+function createNewIndexEntry(filePath, objectType, objectNumber, indexPath) {
+  try {
+    // Create object type folder if needed
+    const objectTypeFolder = path.join(indexPath, objectType);
+    if (!fs.existsSync(objectTypeFolder)) {
+      fs.mkdirSync(objectTypeFolder, { recursive: true });
+    }
+
+    // Create object number folder if needed
+    const objectNumberFolder = path.join(objectTypeFolder, objectNumber);
+    if (!fs.existsSync(objectNumberFolder)) {
+      fs.mkdirSync(objectNumberFolder, { recursive: true });
+    }
+
+    // Create info.json file
+    const infoData = {
+      originalPath: filePath,
+      fileName: path.basename(filePath),
+      objectType,
+      objectNumber,
+      indexedAt: new Date().toISOString(),
+      referencedMigrationFiles: [],
+    };
+
+    fs.writeFileSync(
+      path.join(objectNumberFolder, "info.json"),
+      JSON.stringify(infoData, null, 2),
+      "utf8"
+    );
+
+    console.log(`Created new index entry for ${filePath}`);
+  } catch (error) {
+    console.error(`Error creating index entry for ${filePath}:`, error);
+  }
+}
+
+/**
+ * Handle the deletion of an AL file
+ * @param {string} filePath - Path to the deleted AL file
+ */
+function handleAlFileDelete(filePath) {
+  try {
+    // Get the base path for indexes
+    const upgradedObjectFolders = configManager.getConfigValue(
+      "upgradedObjectFolders",
+      null
+    );
+    if (!upgradedObjectFolders || !upgradedObjectFolders.basePath) {
+      return;
+    }
+
+    const basePath = upgradedObjectFolders.basePath;
+    const indexPath = path.join(basePath, ".index");
+
+    // We need to find the index entry for this file
+    // Since we don't have the content anymore, we'll search through all index entries
+    const objectTypeFolders = fs.readdirSync(indexPath);
+
+    for (const objectType of objectTypeFolders) {
+      const objectTypeFolder = path.join(indexPath, objectType);
+      if (!fs.statSync(objectTypeFolder).isDirectory()) continue;
+
+      const objectNumberFolders = fs.readdirSync(objectTypeFolder);
+
+      for (const objectNumber of objectNumberFolders) {
+        const objectNumberFolder = path.join(objectTypeFolder, objectNumber);
+        if (!fs.statSync(objectNumberFolder).isDirectory()) continue;
+
+        const infoFilePath = path.join(objectNumberFolder, "info.json");
+
+        if (fs.existsSync(infoFilePath)) {
+          try {
+            const infoData = JSON.parse(fs.readFileSync(infoFilePath, "utf8"));
+
+            if (infoData.originalPath === filePath) {
+              // Found the index entry for this file - mark it as deleted
+              infoData.deleted = true;
+              infoData.deletedAt = new Date().toISOString();
+
+              fs.writeFileSync(
+                infoFilePath,
+                JSON.stringify(infoData, null, 2),
+                "utf8"
+              );
+              console.log(`Marked index entry for ${filePath} as deleted`);
+
+              // No need to continue searching
+              return;
+            }
+          } catch (error) {
+            console.error(
+              `Error processing index file ${infoFilePath}:`,
+              error
+            );
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`Error handling AL file deletion for ${filePath}:`, error);
+  }
+}
+
 function registerfileEvents(context) {
   const disposable = fileEvents((fileInfo) => {
     createIndexFolder();
     updateFileIndex(fileInfo);
     postCorrections(fileInfo);
   });
+
+  // Set up file watcher for real-time monitoring of AL files
+  setupFileWatcher(context);
 
   if (context && context.subscriptions) {
     context.subscriptions.push(disposable);

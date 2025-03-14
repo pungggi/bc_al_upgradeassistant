@@ -1,8 +1,5 @@
 const vscode = require("vscode");
-const {
-  extractObjectsWithDialog,
-  extractObjectsFromPath,
-} = require("./utils/objectExtractor");
+const { extractObjectsFromPath } = require("./utils/objectExtractor");
 const path = require("path");
 const claude = require("./claude");
 const configManager = require("./utils/configManager");
@@ -12,7 +9,6 @@ const { registerClipboardMonitor } = require("./clipboardMonitor");
 
 function registerCommands(context) {
   registerRefreshSymbolCacheCommand(context);
-  registerSplitCalObjectsCommand(context);
   registerSplitCalObjectsByPathCommand(context);
   registerPromptClaudeCommand(context);
   registerModelCommands(context);
@@ -36,14 +32,6 @@ function registerRefreshSymbolCacheCommand(context) {
         );
       }
     }
-  );
-}
-
-function registerSplitCalObjectsCommand(context) {
-  registerCommandOnce(
-    context,
-    `${EXTENSION_ID}.splitCalObjects`,
-    extractObjectsWithDialog
   );
 }
 

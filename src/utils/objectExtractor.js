@@ -257,121 +257,6 @@ function getLocationForObjectType(objectType) {
 }
 
 /**
- * Show a UI dialog to extract objects from the current active file
- */
-async function extractObjectsWithDialog() {
-  try {
-    // Get the current active text editor
-    const editor = vscode.window.activeTextEditor;
-    if (!editor) {
-      vscode.window.showErrorMessage(
-        "No active file. Please open a C/AL text file first."
-      );
-      return;
-    }
-
-    const sourceFilePath = editor.document.uri.fsPath;
-
-    // Check if file is saved
-    if (editor.document.isDirty) {
-      const save = await vscode.window.showWarningMessage(
-        "The file has unsaved changes. Do you want to save it before extracting objects?",
-        "Save",
-        "Extract without saving",
-        "Cancel"
-      );
-
-      if (save === "Save") {
-        await editor.document.save();
-      } else if (save === "Cancel" || save === undefined) {
-        return;
-      }
-    }
-
-    // Ask user to select output folder
-    const outputFolderUri = await vscode.window.showOpenDialog({
-      canSelectFiles: false,
-      canSelectFolders: true,
-      canSelectMany: false,
-      openLabel: "Select output folder",
-    });
-
-    let outputFolderPath = "";
-    if (outputFolderUri && outputFolderUri.length > 0) {
-      outputFolderPath = outputFolderUri[0].fsPath;
-    } else {
-      // Use default if user cancels
-      outputFolderPath = path.join(
-        path.dirname(sourceFilePath),
-        "extracted_objects"
-      );
-    }
-
-    // Always organize by type (removed user prompt)
-    const shouldOrganize = true;
-
-    // Show progress while splitting
-    const extraction = await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: "Splitting C/AL objects",
-        cancellable: false,
-      },
-      async (progress) => {
-        progress.report({ increment: 0, message: "Starting extraction..." });
-        const result = await extractObjects(
-          sourceFilePath,
-          outputFolderPath,
-          shouldOrganize
-        );
-        progress.report({
-          increment: 100,
-          message: `Splitted ${result.files.length} objects`,
-        });
-        return result;
-      }
-    );
-
-    // Save the extracted folder locations to configuration
-    if (
-      extraction.objectLocations &&
-      Object.keys(extraction.objectLocations).length > 0
-    ) {
-      // Keep the locations as they are
-      await configManager.setConfigValue(
-        "upgradedObjectFolders",
-        extraction.objectLocations
-      );
-      vscode.window.showInformationMessage(
-        "Object folder locations have been saved to your settings."
-      );
-    }
-
-    // Show success message with the output folder path and a link to view the summary
-    const summaryUri = vscode.Uri.file(extraction.summaryFile);
-
-    vscode.window
-      .showInformationMessage(
-        `Successfully splitted ${extraction.files.length} objects to "${outputFolderPath}"`,
-        {
-          modal: false,
-          detail: "Click 'View Summary' to see extraction details",
-        },
-        { title: "View Summary" }
-      )
-      .then((selection) => {
-        if (selection && selection.title === "View Summary") {
-          vscode.workspace
-            .openTextDocument(summaryUri)
-            .then((doc) => vscode.window.showTextDocument(doc));
-        }
-      });
-  } catch (error) {
-    vscode.window.showErrorMessage(`Error splitting objects: ${error.message}`);
-  }
-}
-
-/**
  * Extract objects from a selected file path through a dialog
  */
 async function extractObjectsFromPath() {
@@ -738,7 +623,6 @@ async function extractObjectsWithProgress(
 
 module.exports = {
   extractObjects,
-  extractObjectsWithDialog,
   extractObjectsFromPath,
   getUpgradedObjectFoldersByType,
   getLocationForObjectType,
