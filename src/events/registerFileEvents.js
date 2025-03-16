@@ -1,9 +1,15 @@
+const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
 const configManager = require("../utils/configManager");
 const { fileEvents } = require("../utils/alFileSaver");
 const { postCorrections } = require("./utils/postCorrections");
-const vscode = require("vscode");
+const {
+  createNewIndexEntry,
+  handleAlFileChange,
+} = require("./handleAlFileChange");
+
+const fileContentCache = new Map();
 
 function createIndexFolder() {
   try {
@@ -246,15 +252,30 @@ function setupFileWatcher(context) {
     // Watch for changes to .al files in the workspace
     const alFileWatcher = vscode.workspace.createFileSystemWatcher("**/*.al");
 
+    // Subscribe to document open events to initialize cache
+    const documentOpenSubscription = vscode.workspace.onDidOpenTextDocument(
+      (document) => {
+        if (document.fileName.endsWith(".al")) {
+          fileContentCache.set(document.fileName, document.getText());
+        }
+      }
+    );
+
     // Handle changes to .al files
     alFileWatcher.onDidChange(async (uri) => {
       try {
-        // Get the file content to analyze changes
+        // Get the current file content
         const document = await vscode.workspace.openTextDocument(uri);
-        const content = document.getText();
+        const newContent = document.getText();
 
-        // Process the changed file
-        handleAlFileChange(uri.fsPath, content);
+        // Get previous content from cache
+        const previousContent = fileContentCache.get(uri.fsPath) || "";
+
+        // Process the changed file with both contents
+        handleAlFileChange(uri.fsPath, newContent, previousContent);
+
+        // Update cache with new content
+        fileContentCache.set(uri.fsPath, newContent);
       } catch (error) {
         console.error(`Error handling file change for ${uri.fsPath}:`, error);
       }
@@ -266,6 +287,9 @@ function setupFileWatcher(context) {
         const document = await vscode.workspace.openTextDocument(uri);
         const content = document.getText();
 
+        // Add to cache
+        fileContentCache.set(uri.fsPath, content);
+
         // Process the new file
         handleAlFileCreate(uri.fsPath, content);
       } catch (error) {
@@ -276,6 +300,12 @@ function setupFileWatcher(context) {
     // Handle deletion of .al files
     alFileWatcher.onDidDelete((uri) => {
       try {
+        // Get previous content before removing from cache
+        fileContentCache.get(uri.fsPath) || "";
+
+        // Remove from cache
+        fileContentCache.delete(uri.fsPath);
+
         // Process the deleted file
         handleAlFileDelete(uri.fsPath);
       } catch (error) {
@@ -284,72 +314,10 @@ function setupFileWatcher(context) {
     });
 
     if (context && context.subscriptions) {
-      context.subscriptions.push(alFileWatcher);
+      context.subscriptions.push(alFileWatcher, documentOpenSubscription);
     }
   } catch (error) {
     console.error("Error setting up file watcher:", error);
-  }
-}
-
-/**
- * Process changes to an existing AL file
- * @param {string} filePath - Path to the changed AL file
- * @param {string} content - Content of the file
- */
-function handleAlFileChange(filePath, content) {
-  try {
-    // Extract object information from the AL file
-    const objectTypeRegex =
-      /\b(table|tableextension|page|pageextension|report|reportextension|codeunit|query|xmlport|enum|enumextension|profile|interface)\b\s+(\d+)\s+["']([^"']+)["']/i;
-    const objectMatch = content.match(objectTypeRegex);
-
-    if (!objectMatch) {
-      console.warn(`Could not extract object info from ${filePath}`);
-      return;
-    }
-
-    const objectType = objectMatch[1].toLowerCase();
-    const objectNumber = objectMatch[2];
-
-    // Get the base path for indexes
-    const upgradedObjectFolders = configManager.getConfigValue(
-      "upgradedObjectFolders",
-      null
-    );
-    if (!upgradedObjectFolders || !upgradedObjectFolders.basePath) {
-      return;
-    }
-
-    const basePath = upgradedObjectFolders.basePath;
-    const indexPath = path.join(basePath, ".index");
-
-    // Look for the current index entry for this file
-    const objectTypeFolder = path.join(indexPath, objectType);
-    const objectNumberFolder = path.join(objectTypeFolder, objectNumber);
-    const infoFilePath = path.join(objectNumberFolder, "info.json");
-
-    // If the info file exists, update its information
-    if (fs.existsSync(infoFilePath)) {
-      const infoData = JSON.parse(fs.readFileSync(infoFilePath, "utf8"));
-
-      // Update relevant fields
-      infoData.lastUpdated = new Date().toISOString();
-
-      // If the file path has changed, update that too
-      if (infoData.originalPath !== filePath) {
-        infoData.originalPath = filePath;
-        infoData.fileName = path.basename(filePath);
-      }
-
-      // Write back the updated info
-      fs.writeFileSync(infoFilePath, JSON.stringify(infoData, null, 2), "utf8");
-      console.log(`Updated index info for ${filePath}`);
-    } else {
-      // If no index exists for this object, create one
-      createNewIndexEntry(filePath, objectType, objectNumber, indexPath);
-    }
-  } catch (error) {
-    console.error(`Error handling AL file change for ${filePath}:`, error);
   }
 }
 
@@ -389,49 +357,6 @@ function handleAlFileCreate(filePath, content) {
     createNewIndexEntry(filePath, objectType, objectNumber, indexPath);
   } catch (error) {
     console.error(`Error handling AL file creation for ${filePath}:`, error);
-  }
-}
-
-/**
- * Create a new index entry for an AL file
- * @param {string} filePath - Path to the AL file
- * @param {string} objectType - Type of the AL object
- * @param {string} objectNumber - Number of the AL object
- * @param {string} indexPath - Path to the index directory
- */
-function createNewIndexEntry(filePath, objectType, objectNumber, indexPath) {
-  try {
-    // Create object type folder if needed
-    const objectTypeFolder = path.join(indexPath, objectType);
-    if (!fs.existsSync(objectTypeFolder)) {
-      fs.mkdirSync(objectTypeFolder, { recursive: true });
-    }
-
-    // Create object number folder if needed
-    const objectNumberFolder = path.join(objectTypeFolder, objectNumber);
-    if (!fs.existsSync(objectNumberFolder)) {
-      fs.mkdirSync(objectNumberFolder, { recursive: true });
-    }
-
-    // Create info.json file
-    const infoData = {
-      originalPath: filePath,
-      fileName: path.basename(filePath),
-      objectType,
-      objectNumber,
-      indexedAt: new Date().toISOString(),
-      referencedMigrationFiles: [],
-    };
-
-    fs.writeFileSync(
-      path.join(objectNumberFolder, "info.json"),
-      JSON.stringify(infoData, null, 2),
-      "utf8"
-    );
-
-    console.log(`Created new index entry for ${filePath}`);
-  } catch (error) {
-    console.error(`Error creating index entry for ${filePath}:`, error);
   }
 }
 
@@ -485,6 +410,19 @@ function handleAlFileDelete(filePath) {
               );
               console.log(`Marked index entry for ${filePath} as deleted`);
 
+              // Remove object from migration reference files
+              if (
+                infoData.referencedMigrationFiles &&
+                infoData.referencedMigrationFiles.length > 0
+              ) {
+                removeMigrationReferences(
+                  indexPath,
+                  infoData.referencedMigrationFiles,
+                  objectType,
+                  objectNumber
+                );
+              }
+
               // No need to continue searching
               return;
             }
@@ -499,6 +437,74 @@ function handleAlFileDelete(filePath) {
     }
   } catch (error) {
     console.error(`Error handling AL file deletion for ${filePath}:`, error);
+  }
+}
+
+/**
+ * Removes an object from migration reference files when the object is deleted
+ * @param {string} indexPath - Path to the index directory
+ * @param {Array<string>} migrationFiles - List of migration files that reference the object
+ * @param {string} objectType - Type of the object to remove
+ * @param {string} objectNumber - Number of the object to remove
+ */
+function removeMigrationReferences(
+  indexPath,
+  migrationFiles,
+  objectType,
+  objectNumber
+) {
+  if (
+    !migrationFiles ||
+    !Array.isArray(migrationFiles) ||
+    migrationFiles.length === 0
+  ) {
+    return;
+  }
+
+  for (const migrationPath of migrationFiles) {
+    if (!migrationPath || migrationPath === "orginFilePath") continue;
+
+    const sourceFileName = path.basename(migrationPath);
+    const referenceFileName = sourceFileName.replace(/\.txt$/, ".json");
+    const referenceFilePath = path.join(indexPath, referenceFileName);
+
+    if (!fs.existsSync(referenceFilePath)) continue;
+
+    try {
+      // Read the current reference file
+      const referenceData = JSON.parse(
+        fs.readFileSync(referenceFilePath, "utf8")
+      );
+
+      if (!referenceData.referencedWorkingObjects) {
+        continue;
+      }
+
+      // Remove the reference
+      const originalLength = referenceData.referencedWorkingObjects.length;
+      referenceData.referencedWorkingObjects =
+        referenceData.referencedWorkingObjects.filter(
+          (ref) => !(ref.type === objectType && ref.number === objectNumber)
+        );
+
+      if (referenceData.referencedWorkingObjects.length < originalLength) {
+        // Write back to the file
+        fs.writeFileSync(
+          referenceFilePath,
+          JSON.stringify(referenceData, null, 2),
+          "utf8"
+        );
+
+        console.log(
+          `Removed ${objectType} ${objectNumber} from migration reference in ${referenceFileName}`
+        );
+      }
+    } catch (error) {
+      console.error(
+        `Error removing migration reference in ${referenceFilePath}:`,
+        error
+      );
+    }
   }
 }
 

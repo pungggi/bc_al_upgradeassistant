@@ -6,6 +6,10 @@ const { convertToAbsolutePath } = require("../../utils/alFileSaver");
 const { parseCALToJSON } = require("../../utils/calParser");
 const alCodeFilter = require("../../utils/alCodeFilter");
 const documentationHelper = require("../../utils/documentationHelper");
+const {
+  handleAlFileChange,
+  updateMigrationReferences,
+} = require("../handleAlFileChange");
 
 function postCorrections(fileInfo) {
   try {
@@ -92,7 +96,12 @@ function postCorrections(fileInfo) {
 
     // If content was modified by assigning new object number, update the index
     if (updatedContent !== content) {
-      updateIndexAfterObjectChange(fileInfo.path, content, updatedContent);
+      handleAlFileChange(fileInfo.path, updatedContent, content);
+      fileInfo = updateIndexAfterObjectChange(
+        fileInfo.path,
+        content,
+        updatedContent
+      );
     }
     content = updatedContent;
     content = reorderLanguageProperties(fileInfo, content);
@@ -182,6 +191,17 @@ function assignAvailableObjectNumber(
       "workingObjectFolders",
       null
     );
+    // Get the base path for indexes
+    const upgradedObjectFolders = configManager.getConfigValue(
+      "upgradedObjectFolders",
+      null
+    );
+    const indexPath = path.join(upgradedObjectFolders.basePath, ".index");
+    // Look for the current index entry for this file
+    const objectTypeFolder = path.join(indexPath, objectType);
+    const objectNumberFolder = path.join(objectTypeFolder, currentObjectNumber);
+    const infoFilePath = path.join(objectNumberFolder, "info.json");
+    const infoData = JSON.parse(fs.readFileSync(infoFilePath, "utf8"));
 
     // Find the target path for this object type
     const targetFolder = convertToAbsolutePath(
@@ -265,6 +285,15 @@ function assignAvailableObjectNumber(
     // Write the updated content back to the file
     fs.writeFileSync(fileInfo.path, updatedContent, "utf8");
 
+    updateMigrationReferences(
+      indexPath,
+      infoData.referencedMigrationFiles,
+      objectType,
+      currentObjectNumber,
+      objectType,
+      nextNumber
+    );
+
     return updatedContent;
   } catch (error) {
     console.error("Error in assignAvailableObjectNumber:", error);
@@ -303,6 +332,8 @@ function formatAsComments(documentation) {
  */
 function reorderLanguageProperties(fileInfo, content) {
   if (typeof content !== "string") return content;
+  if (!fileInfo) return content;
+
   const lines = content.split(/\r?\n/);
   const newLines = [];
 
@@ -328,7 +359,7 @@ function reorderLanguageProperties(fileInfo, content) {
 
   const updatedContent = newLines.join("\n");
   if (updatedContent !== content) {
-    fs.writeFileSync(fileInfo.path, updatedContent, "utf8");
+    fs.writeFileSync(fileInfo.originalPath, updatedContent, "utf8");
 
     return updatedContent;
   }
@@ -472,6 +503,7 @@ function updateIndexAfterObjectChange(filePath, oldContent, newContent) {
         console.log(
           `Updated index for object ${oldType} ${oldNumber} -> ${newType} ${newNumber}`
         );
+        return infoData;
       } else {
         // If no existing info file, this might be a new object
         console.log(
@@ -504,6 +536,8 @@ function updateIndexAfterObjectChange(filePath, oldContent, newContent) {
           JSON.stringify(newInfoData, null, 2),
           "utf8"
         );
+
+        return newInfoData;
       }
     }
   } catch (error) {
