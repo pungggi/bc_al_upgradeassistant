@@ -350,11 +350,7 @@ class FileReferenceProvider {
         ];
       }
 
-      const result = [
-        // new InfoItem("Object Type", objectInfo.type),
-        // new InfoItem("Object ID", objectInfo.id),
-        // new InfoItem("Object Name", objectInfo.name),
-      ];
+      const result = [];
 
       // Find the .index folder
       const indexFolder = this._findIndexFolder();
@@ -418,7 +414,7 @@ class FileReferenceProvider {
 
       return result;
     } catch (error) {
-      console.error("Error getting AL file references:", error);
+      console.error("Error retrieving AL file references:", error);
       return [
         new TreeItem(
           `Error: ${error.message}`,

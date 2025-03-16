@@ -157,7 +157,6 @@ function processAlFile(filePath, indexPath, orginFilePath) {
     // Create file information to store
     const fileInfo = {
       originalPath: filePath,
-      fileName: path.basename(filePath),
       objectType,
       objectNumber,
       indexedAt: new Date().toISOString(),
@@ -251,6 +250,13 @@ function setupFileWatcher(context) {
   try {
     // Watch for changes to .al files in the workspace
     const alFileWatcher = vscode.workspace.createFileSystemWatcher("**/*.al");
+
+    // Cache all currently open AL files
+    for (const document of vscode.workspace.textDocuments) {
+      if (document.fileName.endsWith(".al")) {
+        fileContentCache.set(document.fileName, document.getText());
+      }
+    }
 
     // Subscribe to document open events to initialize cache
     const documentOpenSubscription = vscode.workspace.onDidOpenTextDocument(
@@ -399,28 +405,20 @@ function handleAlFileDelete(filePath) {
             const infoData = JSON.parse(fs.readFileSync(infoFilePath, "utf8"));
 
             if (infoData.originalPath === filePath) {
-              // Found the index entry for this file - mark it as deleted
-              infoData.deleted = true;
-              infoData.deletedAt = new Date().toISOString();
+              // Delete the info.json file
+              fs.unlinkSync(infoFilePath);
+              console.log(`Removed index entry for ${filePath}`);
 
-              fs.writeFileSync(
-                infoFilePath,
-                JSON.stringify(infoData, null, 2),
-                "utf8"
-              );
-              console.log(`Marked index entry for ${filePath} as deleted`);
-
-              // Remove object from migration reference files
-              if (
-                infoData.referencedMigrationFiles &&
-                infoData.referencedMigrationFiles.length > 0
-              ) {
-                removeMigrationReferences(
-                  indexPath,
-                  infoData.referencedMigrationFiles,
-                  objectType,
-                  objectNumber
-                );
+              // Try to clean up empty folders
+              try {
+                if (fs.readdirSync(objectNumberFolder).length === 0) {
+                  fs.rmdirSync(objectNumberFolder);
+                }
+                if (fs.readdirSync(objectTypeFolder).length === 0) {
+                  fs.rmdirSync(objectTypeFolder);
+                }
+              } catch (cleanupError) {
+                console.error("Error cleaning up folders:", cleanupError);
               }
 
               // No need to continue searching
@@ -437,74 +435,6 @@ function handleAlFileDelete(filePath) {
     }
   } catch (error) {
     console.error(`Error handling AL file deletion for ${filePath}:`, error);
-  }
-}
-
-/**
- * Removes an object from migration reference files when the object is deleted
- * @param {string} indexPath - Path to the index directory
- * @param {Array<string>} migrationFiles - List of migration files that reference the object
- * @param {string} objectType - Type of the object to remove
- * @param {string} objectNumber - Number of the object to remove
- */
-function removeMigrationReferences(
-  indexPath,
-  migrationFiles,
-  objectType,
-  objectNumber
-) {
-  if (
-    !migrationFiles ||
-    !Array.isArray(migrationFiles) ||
-    migrationFiles.length === 0
-  ) {
-    return;
-  }
-
-  for (const migrationPath of migrationFiles) {
-    if (!migrationPath || migrationPath === "orginFilePath") continue;
-
-    const sourceFileName = path.basename(migrationPath);
-    const referenceFileName = sourceFileName.replace(/\.txt$/, ".json");
-    const referenceFilePath = path.join(indexPath, referenceFileName);
-
-    if (!fs.existsSync(referenceFilePath)) continue;
-
-    try {
-      // Read the current reference file
-      const referenceData = JSON.parse(
-        fs.readFileSync(referenceFilePath, "utf8")
-      );
-
-      if (!referenceData.referencedWorkingObjects) {
-        continue;
-      }
-
-      // Remove the reference
-      const originalLength = referenceData.referencedWorkingObjects.length;
-      referenceData.referencedWorkingObjects =
-        referenceData.referencedWorkingObjects.filter(
-          (ref) => !(ref.type === objectType && ref.number === objectNumber)
-        );
-
-      if (referenceData.referencedWorkingObjects.length < originalLength) {
-        // Write back to the file
-        fs.writeFileSync(
-          referenceFilePath,
-          JSON.stringify(referenceData, null, 2),
-          "utf8"
-        );
-
-        console.log(
-          `Removed ${objectType} ${objectNumber} from migration reference in ${referenceFileName}`
-        );
-      }
-    } catch (error) {
-      console.error(
-        `Error removing migration reference in ${referenceFilePath}:`,
-        error
-      );
-    }
   }
 }
 

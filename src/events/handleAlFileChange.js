@@ -1,6 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 const configManager = require("../utils/configManager");
+const { updateIndexAfterObjectChange } = require("./utils/indexManager");
+const { findMigrationReferences } = require("../utils/migrationHelper");
 
 /**
  * Process changes to an existing AL file
@@ -30,12 +32,7 @@ function handleAlFileChange(filePath, newContent, previousContent) {
     const objectNumber = objectMatch[2];
 
     //#region previous object
-    // Check if previousContent exists before using it
     if (!previousContent) {
-      console.log(
-        `No previous content available for ${filePath}, treating as new file`
-      );
-
       // Get the base path for indexes
       const upgradedObjectFolders = configManager.getConfigValue(
         "upgradedObjectFolders",
@@ -99,117 +96,16 @@ function handleAlFileChange(filePath, newContent, previousContent) {
       return;
     }
 
-    // Update relevant fields
-    infoData.lastUpdated = new Date().toISOString();
-
-    // Check if object number or type changed
-    const objectInfoChanged =
-      previousObjectType !== objectType || previousObjectId !== objectNumber;
-
-    // If object info changed, update migration reference files
-    if (objectInfoChanged) {
-      // Update migration references for the changed object
-      updateMigrationReferences(
-        indexPath,
-        infoData.referencedMigrationFiles,
-        previousObjectType,
-        previousObjectId,
-        objectType,
-        objectNumber
+    if (previousContent) {
+      infoData = updateIndexAfterObjectChange(
+        filePath,
+        previousContent,
+        newContent
       );
     }
-
-    // If the file path has changed, update that too
-    if (infoData.originalPath !== filePath) {
-      infoData.originalPath = filePath;
-      infoData.fileName = path.basename(filePath);
-    }
-
-    // Write back the updated info
-    fs.writeFileSync(infoFilePath, JSON.stringify(infoData, null, 2), "utf8");
-    console.log(`Updated index info for ${filePath}`);
+    return infoData;
   } catch (error) {
-    console.error(`Error handling AL file change for ${filePath}:`, error);
-  }
-}
-
-/**
- * Updates migration reference files when an object's type or number changes
- * @param {string} indexPath - Path to the index directory
- * @param {Array<string>} migrationFiles - List of migration files that reference the object
- * @param {string} oldType - Previous object type
- * @param {string} oldNumber - Previous object number
- * @param {string} newType - New object type
- * @param {string} newNumber - New object number
- */
-function updateMigrationReferences(
-  indexPath,
-  migrationFiles,
-  oldType,
-  oldNumber,
-  newType,
-  newNumber
-) {
-  if (
-    !migrationFiles ||
-    !Array.isArray(migrationFiles) ||
-    migrationFiles.length === 0
-  ) {
-    return;
-  }
-
-  for (const migrationPath of migrationFiles) {
-    if (!migrationPath || migrationPath === "orginFilePath") continue;
-
-    const sourceFileName = path.basename(migrationPath);
-    const referenceFileName = sourceFileName.replace(/\.txt$/, ".json");
-    const referenceFilePath = path.join(indexPath, referenceFileName);
-
-    if (!fs.existsSync(referenceFilePath)) continue;
-
-    try {
-      // Read the current reference file
-      const referenceData = JSON.parse(
-        fs.readFileSync(referenceFilePath, "utf8")
-      );
-
-      if (!referenceData.referencedWorkingObjects) {
-        referenceData.referencedWorkingObjects = [];
-      }
-
-      // Remove the old reference
-      const oldReference = { type: oldType, number: oldNumber };
-      referenceData.referencedWorkingObjects.splice(
-        referenceData.referencedWorkingObjects.indexOf(oldReference),
-        1
-      );
-
-      // Add the new reference
-      const newReference = { type: newType, number: newNumber };
-      const exists = referenceData.referencedWorkingObjects.some(
-        (ref) => ref.type === newType && ref.number === newNumber
-      );
-
-      if (!exists) {
-        referenceData.referencedWorkingObjects.push(newReference);
-      }
-
-      // Write back to the file
-      fs.writeFileSync(
-        referenceFilePath,
-        JSON.stringify(referenceData, null, 2),
-        "utf8"
-      );
-
-      console.log(
-        `Updated migration reference in ${referenceFileName}: changed ${oldType} ${oldNumber} to ${newType} ${newNumber}`
-      );
-    } catch (error) {
-      console.error(
-        `Error updating migration reference in ${referenceFilePath}:`,
-        error
-      );
-    }
+    console.error(`Error updating index after object change:`, error);
   }
 }
 
@@ -241,14 +137,20 @@ function createNewIndexEntry(filePath, objectType, objectNumber, indexPath) {
       return;
     }
 
+    // Find migration references for this object
+    const migrationReferences = findMigrationReferences(
+      indexPath,
+      objectType,
+      objectNumber
+    );
+
     // Create info.json file
     const infoData = {
       originalPath: filePath,
-      fileName: path.basename(filePath),
       objectType,
       objectNumber,
       indexedAt: new Date().toISOString(),
-      referencedMigrationFiles: [],
+      referencedMigrationFiles: migrationReferences,
     };
 
     fs.writeFileSync(infoFilePath, JSON.stringify(infoData, null, 2), "utf8");
@@ -261,6 +163,5 @@ function createNewIndexEntry(filePath, objectType, objectNumber, indexPath) {
 
 module.exports = {
   handleAlFileChange,
-  updateMigrationReferences,
   createNewIndexEntry,
 };
