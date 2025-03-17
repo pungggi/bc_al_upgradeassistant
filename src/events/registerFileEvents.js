@@ -438,6 +438,80 @@ function handleAlFileDelete(filePath) {
   }
 }
 
+function setupTxtFileWatcher(context) {
+  try {
+    const upgradedObjectFolders = configManager.getConfigValue(
+      "upgradedObjectFolders",
+      null
+    );
+    if (!upgradedObjectFolders || !upgradedObjectFolders.basePath) {
+      console.warn("Base path not configured for upgraded objects");
+      return;
+    }
+
+    const basePath = upgradedObjectFolders.basePath;
+
+    // Add direct rename event listener
+    const renameSubscription = vscode.workspace.onDidRenameFiles((event) => {
+      for (const { oldUri, newUri } of event.files) {
+        // Skip non-txt files
+        if (!oldUri.fsPath.endsWith(".txt") || !newUri.fsPath.endsWith(".txt"))
+          continue;
+
+        // Skip files outside our base path
+        if (
+          !oldUri.fsPath.startsWith(basePath) ||
+          !newUri.fsPath.startsWith(basePath)
+        )
+          continue;
+
+        const oldFilename = path.basename(oldUri.fsPath);
+        const newFilename = path.basename(newUri.fsPath);
+
+        // Process the rename
+        handleTxtFileRename(basePath, oldFilename, newFilename);
+      }
+    });
+
+    if (context && context.subscriptions) {
+      context.subscriptions.push(renameSubscription);
+    }
+  } catch (error) {
+    console.error("Error setting up .txt file watcher:", error);
+  }
+}
+
+/**
+ * Handles .txt file rename by updating corresponding index files
+ * @param {string} basePath - The base path for upgraded objects
+ * @param {string} oldFilename - Original file name
+ * @param {string} newFilename - New file name
+ */
+function handleTxtFileRename(basePath, oldFilename, newFilename) {
+  const indexPath = path.join(basePath, ".index");
+  const oldJsonPath = path.join(
+    indexPath,
+    oldFilename.replace(/\.txt$/, ".json")
+  );
+  const newJsonPath = path.join(
+    indexPath,
+    newFilename.replace(/\.txt$/, ".json")
+  );
+
+  // If no index file exists, nothing to do
+  if (!fs.existsSync(oldJsonPath)) return;
+
+  try {
+    // Read and write in a single operation
+    const jsonContent = fs.readFileSync(oldJsonPath, "utf8");
+    fs.writeFileSync(newJsonPath, jsonContent);
+    fs.unlinkSync(oldJsonPath);
+    console.log(`Renamed index file from ${oldFilename} to ${newFilename}`);
+  } catch (error) {
+    console.error("Error handling .json file rename:", error);
+  }
+}
+
 function registerfileEvents(context) {
   const disposable = fileEvents((fileInfo) => {
     createIndexFolder();
@@ -445,8 +519,9 @@ function registerfileEvents(context) {
     postCorrections(fileInfo);
   });
 
-  // Set up file watcher for real-time monitoring of AL files
+  // Set up file watchers for real-time monitoring
   setupFileWatcher(context);
+  setupTxtFileWatcher(context);
 
   if (context && context.subscriptions) {
     context.subscriptions.push(disposable);
