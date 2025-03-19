@@ -23,9 +23,10 @@ function createDocumentationRegex(docIds) {
   }
 
   // Return regex that matches the ID even if it's part of a larger word/identifier
+  // and captures the task ID (text after the doc ID until the first space)
   return {
     idMap,
-    regex: new RegExp(`(${idPattern})`, "g"),
+    regex: new RegExp(`(${idPattern})(\/[^\\s]+)?`, "g"),
   };
 }
 
@@ -35,7 +36,7 @@ function createDocumentationRegex(docIds) {
  * @param {RegExp} regex - Regex pattern for matching documentation IDs
  * @param {Object} idMap - Map of documentation IDs to their info
  * @param {string} [filePath] - Optional file path for context
- * @returns {Array<{id: string, lineNumber: number, description: string, url: string, context: string}>} Found references
+ * @returns {Array<{id: string, taskId: string, lineNumber: number, description: string, url: string, context: string}>} Found references
  */
 function findDocumentationReferences(content, regex, idMap = "") {
   if (!content || !regex || !idMap) {
@@ -53,20 +54,16 @@ function findDocumentationReferences(content, regex, idMap = "") {
 
     while ((match = regex.exec(line)) !== null) {
       const id = match[1]; // This will be the matched ID
+      const taskId = match[2] || ""; // This will be the task ID if available
       const docInfo = idMap[id];
 
       if (docInfo) {
-        // console.log(
-        //   `Found documentation ID '${id}' on line ${index + 1}${
-        //     filePath ? ` in ${path.basename(filePath)}` : ""
-        //   }: "${line.trim()}"`
-        // );
-
         // Extract the context
         const context = line.trim();
 
         docRefs.push({
           id,
+          taskId,
           lineNumber: index + 1,
           description: docInfo.description || "",
           url: docInfo.url || "",

@@ -998,16 +998,66 @@ class DocumentationRefsItem extends TreeItem {
     // Count distinct documentation IDs
     this.distinctIds = [...new Set(docRefs.map((ref) => ref.id))];
 
+    // Count distinct task IDs (if task ID is present)
+    this.distinctTaskIds = [
+      ...new Set(
+        docRefs
+          .filter((ref) => ref.taskId && ref.taskId.trim().length > 0)
+          .map((ref) => ref.taskId)
+      ),
+    ];
+
     // Set a unique ID so we can remember expanded state
     this.id = `docRefs-${filePath}`;
   }
 
   getChildren() {
     // If only one type of documentation ID or just a few references, return flat list
-    if (this.distinctIds.length <= 1 || this.docRefs.length <= 3) {
+    if (this.distinctIds.length <= 1 && this.docRefs.length <= 3) {
       return this.docRefs.map((ref) => {
         return new DocumentationRefItem(ref, this.filePath);
       });
+    }
+
+    // If we have task IDs, group by task ID first
+    if (this.distinctTaskIds.length > 0) {
+      // Create an array to hold all groups
+      const groups = [];
+
+      // Group references by task ID
+      this.distinctTaskIds.forEach((taskId) => {
+        const refsWithTaskId = this.docRefs.filter(
+          (ref) => ref.taskId === taskId
+        );
+        if (refsWithTaskId.length > 0) {
+          groups.push(
+            new DocumentationRefTaskGroupItem(
+              taskId,
+              refsWithTaskId,
+              this.filePath
+            )
+          );
+        }
+      });
+
+      // Add references without task ID under regular documentation ID groups
+      const refsWithoutTaskId = this.docRefs.filter(
+        (ref) => !ref.taskId || ref.taskId.trim().length === 0
+      );
+      if (refsWithoutTaskId.length > 0) {
+        const distinctIdsWithoutTask = [
+          ...new Set(refsWithoutTaskId.map((ref) => ref.id)),
+        ];
+
+        distinctIdsWithoutTask.forEach((id) => {
+          const refsForId = refsWithoutTaskId.filter((ref) => ref.id === id);
+          groups.push(
+            new DocumentationRefGroupItem(id, refsForId, this.filePath)
+          );
+        });
+      }
+
+      return groups;
     }
 
     // Otherwise, group by documentation ID
@@ -1052,6 +1102,46 @@ class DocumentationRefGroupItem extends TreeItem {
 }
 
 /**
+ * Tree item for a group of documentation references with the same task ID
+ */
+class DocumentationRefTaskGroupItem extends TreeItem {
+  constructor(taskId, docRefs, filePath) {
+    // Use the task ID as the label
+    super(taskId, vscode.TreeItemCollapsibleState.Collapsed);
+
+    // Count references for the description
+    this.description = `(${docRefs.length} references)`;
+    this.docRefs = docRefs;
+    this.filePath = filePath;
+    this.contextValue = "documentationRefTaskGroup";
+
+    // Use a different icon for task groups
+    this.iconPath = new vscode.ThemeIcon("tasklist");
+
+    // Set a unique ID so we can remember expanded state
+    this.id = `docRefTaskGroup-${filePath}-${taskId}`;
+  }
+
+  getChildren() {
+    // Group by document ID within task ID
+    const distinctDocIds = [...new Set(this.docRefs.map((ref) => ref.id))];
+
+    if (distinctDocIds.length === 1) {
+      // If only one doc ID in this task group, return the references directly
+      return this.docRefs.map(
+        (ref) => new DocumentationRefItem(ref, this.filePath)
+      );
+    } else {
+      // If multiple doc IDs, group by doc ID first
+      return distinctDocIds.map((id) => {
+        const refsForId = this.docRefs.filter((ref) => ref.id === id);
+        return new DocumentationRefGroupItem(id, refsForId, this.filePath);
+      });
+    }
+  }
+}
+
+/**
  * Tree item for a single documentation reference
  */
 class DocumentationRefItem extends TreeItem {
@@ -1059,7 +1149,14 @@ class DocumentationRefItem extends TreeItem {
     // Use the context (line content) as the label, limited to 500 chars
     let contextText = docRef.context || "";
 
-    // Remove the documentation ID from the displayed content
+    // Remove the documentation ID and task ID from the displayed content
+    const idWithTaskRegex = new RegExp(
+      `${docRef.id}${docRef.taskId || ""}`,
+      "g"
+    );
+    contextText = contextText.replace(idWithTaskRegex, "").trim();
+
+    // As fallback, just remove the ID if the above didn't work
     const idRegex = new RegExp(docRef.id, "g");
     contextText = contextText.replace(idRegex, "").trim();
 
@@ -1075,8 +1172,10 @@ class DocumentationRefItem extends TreeItem {
     this.docRef = docRef;
     this.filePath = filePath;
 
-    // Show ID and line number in the description
-    let description = `${docRef.id} (line ${docRef.lineNumber})`;
+    // Show ID, task ID, and line number in the description
+    let description = docRef.taskId
+      ? `${docRef.id}${docRef.taskId} (line ${docRef.lineNumber})`
+      : `${docRef.id} (line ${docRef.lineNumber})`;
 
     // Add user description if available
     if (docRef.userDescription) {
@@ -1111,7 +1210,9 @@ class DocumentationRefItem extends TreeItem {
     };
 
     // Include the context in the tooltip for more information
-    let tooltipText = `${docRef.id}: ${docRef.description}\n\nLine: ${docRef.lineNumber}`;
+    let tooltipText = docRef.taskId
+      ? `${docRef.id}${docRef.taskId}: ${docRef.description}\n\nLine: ${docRef.lineNumber}`
+      : `${docRef.id}: ${docRef.description}\n\nLine: ${docRef.lineNumber}`;
 
     // Add user description to tooltip if available
     if (docRef.userDescription) {
@@ -1133,6 +1234,7 @@ class DocumentationRefItem extends TreeItem {
     this.docId = docRef.id;
     this.lineNumber = docRef.lineNumber;
     this.docUrl = docRef.url || "";
+    this.taskId = docRef.taskId || "";
   }
 }
 

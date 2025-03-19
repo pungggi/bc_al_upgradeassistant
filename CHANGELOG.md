@@ -1,8 +1,15 @@
 # Change Log
 
-## [0.0.70]
+## [Unreleased]
 
-- Added real-time monitoring of AL files for object property changes
+### Added
+
+- Added grouping by task ID in Documentation References view if applicable
+- Enhance toggleDocumentationReferenceNotImplemented to prompt for user description
+
+### Fixed
+
+- Copy multiline comments, keep intendation
 
 ## [0.0.69]
 
