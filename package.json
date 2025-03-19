@@ -479,13 +479,15 @@
         {
           "id": "bc-al-references",
           "name": "File References",
-          "contextualTitle": "BC/AL References"
+          "contextualTitle": "BC/AL References",
+          "icon": "media/relationship-icon.svg"
         }
       ],
       "explorer": [
         {
           "id": "bc-al-file-info",
-          "name": "BC/AL File Info"
+          "name": "BC/AL File Info",
+          "icon": "media/relationship-icon.svg"
         }
       ]
     }
