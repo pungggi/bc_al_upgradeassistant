@@ -389,7 +389,6 @@ function filterDocumentationByIds(documentation) {
   const filteredLines = [];
 
   let currentlyCapturing = false;
-  let currentDocId = null;
 
   // Process each line
   for (let i = 0; i < lines.length; i++) {
@@ -401,7 +400,6 @@ function filterDocumentationByIds(documentation) {
       if (currentlyCapturing) {
         filteredLines.push(""); // Preserve empty line
         currentlyCapturing = false;
-        currentDocId = null;
       }
       continue;
     }
@@ -413,7 +411,6 @@ function filterDocumentationByIds(documentation) {
     if (match) {
       // This line contains a documentation ID
       currentlyCapturing = true;
-      currentDocId = match[1];
       filteredLines.push(line);
     } else if (currentlyCapturing) {
       // This line doesn't have a doc ID but belongs to the previous doc ID

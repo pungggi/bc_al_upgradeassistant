@@ -26,7 +26,7 @@ function createDocumentationRegex(docIds) {
   // and captures the task ID (text after the doc ID until the first space)
   return {
     idMap,
-    regex: new RegExp(`(${idPattern})(\/[^\\s]+)?`, "g"),
+    regex: new RegExp(`(${idPattern})(/[^\\s]+)?`, "g"),
   };
 }
 
