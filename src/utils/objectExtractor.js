@@ -432,14 +432,34 @@ async function extractObjectsWithProgress(
     const content = fs.readFileSync(sourceFilePath, "utf8");
     const lines = content.split(/\r?\n/);
 
+    // Calculate file size in KB for display
+    const fileSizeKB = (content.length / 1024).toFixed(2);
+
     progress.report({
       increment: 10,
-      message: `Analyzing ${lines.length} lines of code...`,
+      message: `Analyzing ${fileSizeKB} KB file (${lines.length} lines)...`,
     });
 
     let lastProgressUpdate = Date.now();
+    let processedLines = 0;
+    const totalLines = lines.length;
 
     for (const line of lines) {
+      processedLines++;
+
+      // Periodically update the line processing progress
+      const now = Date.now();
+      if (now - lastProgressUpdate > 300) {
+        const lineProgressPercent = Math.round(
+          (processedLines / totalLines) * 100
+        );
+        progress.report({
+          increment: 0,
+          message: `Analyzing file: ${lineProgressPercent}% (${processedLines}/${totalLines} lines, ${fileSizeKB} KB)`,
+        });
+        lastProgressUpdate = now;
+      }
+
       // Check if line starts a new object - either C/AL style or AL extension style
       const isCalObject = line.trim().startsWith("OBJECT ");
       const isAlExtensionObject =
@@ -486,15 +506,20 @@ async function extractObjectsWithProgress(
 
           // Update progress periodically (not on every object to avoid UI freezing)
           const now = Date.now();
-          if (now - lastProgressUpdate > 500) {
+          if (now - lastProgressUpdate > 300) {
+            const objectSizeKB = (currentObject.length / 1024).toFixed(2);
             const progressPercent =
               estimatedCount > 0
                 ? Math.min(80, 10 + (extractedCount / estimatedCount) * 70)
-                : Math.min(80, 10 + extractedCount * 5);
+                : Math.min(80, 10 + extractedCount * 2);
+
+            // Calculate approximate remaining objects
+            const remainingObjects =
+              estimatedCount > 0 ? estimatedCount - extractedCount : "unknown";
 
             progress.report({
-              increment: progressPercent,
-              message: `Extracted ${extractedCount} objects...`,
+              increment: 0,
+              message: `Extracted ${extractedCount} objects (${objectSizeKB} KB last, ${remainingObjects} remaining)...`,
             });
             lastProgressUpdate = now;
           }
@@ -569,7 +594,7 @@ async function extractObjectsWithProgress(
 
     progress.report({
       increment: 85,
-      message: `Creating extraction summary...`,
+      message: `Creating extraction summary for ${extractedCount} objects (${fileSizeKB} KB processed)...`,
     });
 
     // Create a summary file with statistics
@@ -607,7 +632,7 @@ async function extractObjectsWithProgress(
 
     progress.report({
       increment: 100,
-      message: `Complete! Extracted ${extractedFiles.length} objects`,
+      message: `Complete! Extracted ${extractedFiles.length} objects from ${fileSizeKB} KB file`,
     });
 
     return {

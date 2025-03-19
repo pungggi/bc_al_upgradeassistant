@@ -91,7 +91,10 @@ function registerPromptClaudeCommand(context) {
         });
       }
 
-      // Show progress notification
+      // Calculate size in KB for display
+      const codeSizeKB = (code.length / 1024).toFixed(2);
+
+      // Show enhanced progress notification
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
@@ -99,13 +102,34 @@ function registerPromptClaudeCommand(context) {
           cancellable: false,
         },
         async (progress) => {
+          // Initialize progress tracking
+          let processedChunks = 0;
+          let totalChunks = 0;
+
+          progress.report({
+            message: `Preparing code (${codeSizeKB} KB)...`,
+          });
+
           try {
-            // Call Claude API
+            // Call Claude API with enhanced progress callback
             const response = await claude.executePrompt(
               selectedPrompt,
               code,
               (progressData) => {
-                progress.report(progressData);
+                if (progressData.chunksTotal && progressData.chunksTotal > 0) {
+                  totalChunks = progressData.chunksTotal;
+                  processedChunks = progressData.chunksProcessed || 0;
+
+                  const percent = Math.round(
+                    (processedChunks / totalChunks) * 100
+                  );
+                  progress.report({
+                    message: `Processing: ${processedChunks}/${totalChunks} chunks (${percent}%) of ${codeSizeKB} KB`,
+                    increment: progressData.increment,
+                  });
+                } else {
+                  progress.report(progressData);
+                }
               }
             );
 
