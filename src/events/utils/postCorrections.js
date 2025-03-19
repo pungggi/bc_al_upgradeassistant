@@ -312,7 +312,9 @@ function formatAsComments(documentation) {
     if (line.trim() === "") {
       return "//";
     }
-    return `// ${line.trimStart()}`;
+    // Preserve indentation by keeping leading spaces
+    const indentation = line.match(/^(\s*)/)[0];
+    return `//${indentation}${line.trimStart()}`;
   });
 
   return commentedLines.join("\n");
@@ -382,11 +384,44 @@ function filterDocumentationByIds(documentation) {
     return documentation; // Return all documentation if no valid pattern
   }
 
-  // Filter content using the regex
-  return documentationHelper.filterContentByDocumentationIds(
-    documentation,
-    regex
-  );
+  // Split the documentation into lines
+  const lines = documentation.split(/\r?\n/);
+  const filteredLines = [];
+
+  let currentlyCapturing = false;
+  let currentDocId = null;
+
+  // Process each line
+  for (let i = 0; i < lines.length; i++) {
+    // const line = lines[i].trim();
+    const line = lines[i];
+
+    // Skip empty lines but use them to end current doc block
+    if (line === "") {
+      if (currentlyCapturing) {
+        filteredLines.push(""); // Preserve empty line
+        currentlyCapturing = false;
+        currentDocId = null;
+      }
+      continue;
+    }
+
+    // Reset regex for each line
+    regex.lastIndex = 0;
+    const match = regex.exec(line);
+
+    if (match) {
+      // This line contains a documentation ID
+      currentlyCapturing = true;
+      currentDocId = match[1];
+      filteredLines.push(line);
+    } else if (currentlyCapturing) {
+      // This line doesn't have a doc ID but belongs to the previous doc ID
+      filteredLines.push(`${line}`);
+    }
+  }
+
+  return filteredLines.join("\n");
 }
 
 module.exports = {
