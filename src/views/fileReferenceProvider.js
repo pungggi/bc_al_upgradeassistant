@@ -986,10 +986,7 @@ class ReferencedObjectsGroup extends TreeItem {
  */
 class DocumentationRefsItem extends TreeItem {
   constructor(docRefs, filePath) {
-    super(
-      "Documentation References",
-      vscode.TreeItemCollapsibleState.Collapsed
-    );
+    super("Documentation References", vscode.TreeItemCollapsibleState.Expanded);
     this.docRefs = docRefs;
     this.filePath = filePath;
     this.contextValue = "documentationRefs";
@@ -1077,7 +1074,16 @@ class DocumentationRefGroupItem extends TreeItem {
     const firstRef = docRefs[0];
     const description = firstRef ? firstRef.description : "";
 
-    super(id, vscode.TreeItemCollapsibleState.Collapsed);
+    // Only auto-expand if not too many references
+    const shouldStartExpanded = docRefs.length <= 8;
+
+    super(
+      id,
+      shouldStartExpanded
+        ? vscode.TreeItemCollapsibleState.Expanded
+        : vscode.TreeItemCollapsibleState.Collapsed
+    );
+
     this.description = `${description} (${docRefs.length} references)`;
     this.docRefs = docRefs;
     this.filePath = filePath;
@@ -1106,8 +1112,22 @@ class DocumentationRefGroupItem extends TreeItem {
  */
 class DocumentationRefTaskGroupItem extends TreeItem {
   constructor(taskId, docRefs, filePath) {
-    // Use the task ID as the label
-    super(taskId, vscode.TreeItemCollapsibleState.Collapsed);
+    // Only auto-expand if not too many references
+    const shouldStartExpanded = docRefs.length <= 12;
+
+    // Use TreeItemLabel with highlights
+    const labelObject = {
+      label: taskId,
+      highlights: [[0, taskId.length]], // Highlight the entire label
+    };
+
+    // Use the task ID as the label with appropriate initial state
+    super(
+      labelObject,
+      shouldStartExpanded
+        ? vscode.TreeItemCollapsibleState.Expanded
+        : vscode.TreeItemCollapsibleState.Collapsed
+    );
 
     // Count references for the description
     this.description = `(${docRefs.length} references)`;
