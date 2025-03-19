@@ -508,10 +508,6 @@ async function extractObjectsWithProgress(
           const now = Date.now();
           if (now - lastProgressUpdate > 300) {
             const objectSizeKB = (currentObject.length / 1024).toFixed(2);
-            const progressPercent =
-              estimatedCount > 0
-                ? Math.min(80, 10 + (extractedCount / estimatedCount) * 70)
-                : Math.min(80, 10 + extractedCount * 2);
 
             // Calculate approximate remaining objects
             const remainingObjects =
