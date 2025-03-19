@@ -49,7 +49,7 @@ async function activate(context) {
     context.subscriptions.push(
       vscode.commands.registerCommand(
         "bc-al-upgradeassistant.toggleDocumentationReferenceNotImplemented",
-        (item) => {
+        async (item) => {
           // Handle direct item click
           if (
             item &&
@@ -57,19 +57,40 @@ async function activate(context) {
             item.docId &&
             item.lineNumber !== undefined
           ) {
-            const newState =
+            const result =
               fileReferenceProvider.toggleDocumentationReferenceNotImplemented(
                 item.filePath,
                 item.docId,
                 item.lineNumber
               );
-            const statusText = newState
+
+            const statusText = result.notImplemented
               ? "marked as not implemented"
               : "marked as to be implemented";
+
+            // Show confirmation
             vscode.window.setStatusBarMessage(
               `Documentation reference ${item.docId} ${statusText}`,
-              3000
+              2300
             );
+
+            // If marked as not implemented, prompt for description
+            if (result.notImplemented) {
+              const description = await promptForDescription(
+                item.docId,
+                result.userDescription
+              );
+
+              if (description !== undefined) {
+                updateDescription(
+                  fileReferenceProvider,
+                  item.filePath,
+                  item.docId,
+                  item.lineNumber,
+                  description
+                );
+              }
+            }
             return;
           }
 
@@ -85,19 +106,40 @@ async function activate(context) {
           );
           if (!docRef) return;
 
-          const newState =
+          const result =
             fileReferenceProvider.toggleDocumentationReferenceNotImplemented(
               editor.document.uri.fsPath,
               docRef.id,
               docRef.lineNumber
             );
-          const statusText = newState
+
+          const statusText = result.notImplemented
             ? "marked as not implemented"
             : "marked as to be implemented";
+
+          // Show confirmation
           vscode.window.setStatusBarMessage(
             `Documentation reference ${docRef.id} ${statusText}`,
             3000
           );
+
+          // If marked as not implemented, prompt for description
+          if (result.notImplemented) {
+            const description = await promptForDescription(
+              docRef.id,
+              result.userDescription
+            );
+
+            if (description !== undefined) {
+              updateDescription(
+                fileReferenceProvider,
+                editor.document.uri.fsPath,
+                docRef.id,
+                docRef.lineNumber,
+                description
+              );
+            }
+          }
         }
       )
     );

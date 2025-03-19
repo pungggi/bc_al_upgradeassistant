@@ -668,80 +668,81 @@ class FileReferenceProvider {
    * @returns {boolean} New "not implemented" state
    */
   toggleDocumentationReferenceNotImplemented(filePath, id, lineNumber) {
-    const result = (() => {
-      try {
-        const storageFile = this._getDocumentationStorageFile();
+    try {
+      const storageFile = this._getDocumentationStorageFile();
 
-        // Read existing data or create new
-        let storageData = {};
-        if (fs.existsSync(storageFile)) {
-          storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
-        }
-
-        const fileKey = this._normalizePathForStorage(filePath);
-        const config = vscode.workspace.getConfiguration(
-          "bc-al-upgradeassistant"
-        );
-        const userId = config.get("userId");
-
-        // Initialize file entry if needed
-        if (!storageData[fileKey]) {
-          storageData[fileKey] = {
-            references: [],
-          };
-        }
-
-        // Find existing reference or add new one
-        let ref = storageData[fileKey].references.find(
-          (r) => r.id === id && r.lineNumber === lineNumber
-        );
-
-        if (ref) {
-          // Toggle not implemented state
-          ref.notImplemented = !ref.notImplemented;
-          // Silently add/update userId
-          if (userId) {
-            ref.userId = userId;
-            ref.lastModified = new Date().toISOString();
-          }
-
-          // If marked as not implemented, it shouldn't be marked as done
-          if (ref.notImplemented && ref.done) {
-            ref.done = false;
-          }
-        } else {
-          // Add new entry
-          ref = {
-            id,
-            lineNumber,
-            done: false,
-            notImplemented: true,
-            userId: userId || undefined,
-            lastModified: new Date().toISOString(),
-          };
-          storageData[fileKey].references.push(ref);
-        }
-
-        // Save updated data
-        fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
-
-        // Fire change event to refresh tree
-        this.refresh();
-
-        return ref.notImplemented;
-      } catch (error) {
-        console.error(
-          "Error toggling documentation reference not implemented state:",
-          error
-        );
-        return false;
+      // Read existing data or create new
+      let storageData = {};
+      if (fs.existsSync(storageFile)) {
+        storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
       }
-    })();
 
-    // Update decorations after toggling
-    this.updateDecorations();
+      const fileKey = this._normalizePathForStorage(filePath);
+      const config = vscode.workspace.getConfiguration(
+        "bc-al-upgradeassistant"
+      );
+      const userId = config.get("userId");
 
-    return result;
+      // Initialize file entry if needed
+      if (!storageData[fileKey]) {
+        storageData[fileKey] = {
+          references: [],
+        };
+      }
+
+      // Find existing reference or add new one
+      let ref = storageData[fileKey].references.find(
+        (r) => r.id === id && r.lineNumber === lineNumber
+      );
+
+      if (ref) {
+        // Toggle not implemented state
+        ref.notImplemented = !ref.notImplemented;
+        // Silently add/update userId
+        if (userId) {
+          ref.userId = userId;
+          ref.lastModified = new Date().toISOString();
+        }
+
+        // If marked as not implemented, it shouldn't be marked as done
+        if (ref.notImplemented && ref.done) {
+          ref.done = false;
+        }
+      } else {
+        // Add new entry
+        ref = {
+          id,
+          lineNumber,
+          done: false,
+          notImplemented: true,
+          userId: userId || undefined,
+          lastModified: new Date().toISOString(),
+        };
+        storageData[fileKey].references.push(ref);
+      }
+
+      // Save updated data
+      fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
+
+      // Fire change event to refresh tree
+      this.refresh();
+
+      // Update decorations after toggling
+      this.updateDecorations();
+
+      // Return object with state and reference info
+      return {
+        notImplemented: ref.notImplemented,
+        userDescription: ref.userDescription || "",
+        ref,
+      };
+    } catch (error) {
+      console.error(
+        "Error toggling documentation reference not implemented state:",
+        error
+      );
+      return { notImplemented: false, userDescription: "" };
+    }
   }
 
   /**
