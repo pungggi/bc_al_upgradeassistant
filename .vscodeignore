@@ -16,3 +16,4 @@ media/**/*.ai
 **/*.ts
 !dist/**
 eslint.config.mjs
+.prompts/**
