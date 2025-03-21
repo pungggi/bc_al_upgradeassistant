@@ -254,6 +254,17 @@ class FileReferenceProvider {
    */
   async _getTxtFileReferences(filePath) {
     try {
+      // Safety check for filePath type
+      if (typeof filePath !== "string") {
+        console.error("Invalid file path type:", typeof filePath, filePath);
+        return [
+          new TreeItem(
+            "Invalid file path",
+            vscode.TreeItemCollapsibleState.None
+          ),
+        ];
+      }
+
       // Find the .index folder
       const indexFolder = this._findIndexFolder();
       if (!indexFolder) {
@@ -283,6 +294,7 @@ class FileReferenceProvider {
         result.push(new DocumentationRefsItem(documentationRefs, filePath));
       }
 
+      // Check for reference file
       if (!fs.existsSync(referenceFilePath)) {
         if (result.length === 0) {
           result.push(
@@ -296,26 +308,35 @@ class FileReferenceProvider {
         return result;
       }
 
-      // Read and parse the reference file
-      const referenceData = JSON.parse(
-        fs.readFileSync(referenceFilePath, "utf8")
-      );
-      if (
-        referenceData.referencedWorkingObjects &&
-        referenceData.referencedWorkingObjects.length > 0
-      ) {
-        // Create tree items for each referenced object
-        const referencedObjects = referenceData.referencedWorkingObjects.map(
-          (ref) => {
-            return new ReferencedObjectItem(ref.type, ref.number, indexFolder);
-          }
+      try {
+        const referenceData = JSON.parse(
+          fs.readFileSync(referenceFilePath, "utf8")
         );
 
-        result.push(new ReferencedObjectsGroup(referencedObjects));
-      } else if (result.length === 0) {
+        if (referenceData.referencedWorkingObjects?.length > 0) {
+          const referencedObjects = referenceData.referencedWorkingObjects.map(
+            (ref) => {
+              return new ReferencedObjectItem(
+                ref.type,
+                ref.number.toString(),
+                indexFolder
+              );
+            }
+          );
+          result.push(new ReferencedObjectsGroup(referencedObjects));
+        } else if (result.length === 0) {
+          result.push(
+            new TreeItem(
+              "No referenced objects found",
+              vscode.TreeItemCollapsibleState.None
+            )
+          );
+        }
+      } catch (parseError) {
+        console.error("Error parsing reference file:", parseError);
         result.push(
           new TreeItem(
-            "No referenced objects found",
+            `Error reading references: ${parseError.message}`,
             vscode.TreeItemCollapsibleState.None
           )
         );
