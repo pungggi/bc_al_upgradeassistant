@@ -68,7 +68,7 @@ async function activate(context) {
               : "marked as to be implemented";
             vscode.window.setStatusBarMessage(
               `Documentation reference ${item.docId} ${statusText}`,
-              3000
+              2200
             );
             return;
           }
@@ -96,7 +96,7 @@ async function activate(context) {
             : "marked as to be implemented";
           vscode.window.setStatusBarMessage(
             `Documentation reference ${docRef.id} ${statusText}`,
-            3000
+            2200
           );
         }
       )
@@ -456,6 +456,44 @@ function updateDescription(provider, filePath, docId, lineNumber, description) {
   }
 }
 
+/**
+ * Check if upgradedObjectFolders has a basePath already configured
+ * @param {Object} configManager - Config manager instance
+ * @returns {Promise<{proceed: boolean, overwrite: boolean}>} Object indicating whether to proceed and overwrite
+ */
+async function checkExistingBasePath(configManager) {
+  const upgradedObjectFolders = configManager.getConfigValue(
+    "upgradedObjectFolders",
+    null
+  );
+
+  if (!upgradedObjectFolders?.basePath) {
+    return { proceed: true, overwrite: true };
+  }
+
+  const options = [
+    "Yes, overwrite existing configuration",
+    "No, but run anyway",
+    "Cancel",
+  ];
+
+  const selection = await vscode.window.showQuickPick(options, {
+    placeHolder: `The setting upgradedObjectFolders already has basePath configured as: ${upgradedObjectFolders.basePath}`,
+  });
+
+  if (!selection) {
+    return { proceed: false, overwrite: false };
+  }
+
+  if (selection === options[0]) {
+    return { proceed: true, overwrite: true };
+  } else if (selection === options[1]) {
+    return { proceed: true, overwrite: false };
+  } else {
+    return { proceed: false, overwrite: false };
+  }
+}
+
 async function generateDocumentationSummary(provider) {
   try {
     const allRefs = [];
@@ -656,4 +694,5 @@ module.exports = {
   activate,
   deactivate,
   initializeSymbolCache,
+  checkExistingBasePath,
 };

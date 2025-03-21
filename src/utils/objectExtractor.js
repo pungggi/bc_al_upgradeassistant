@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const vscode = require("vscode");
 const configManager = require("./configManager");
+const { checkExistingBasePath } = require("./basePathHelper");
 
 /**
  * Extract individual C/AL objects from a text file containing multiple objects
@@ -166,7 +167,6 @@ async function extractObjects(
 
     // Add base path information
     summaryContent += `Base extraction path: ${outputFolderPath}\n\n`;
-
     summaryContent += `Objects by type:\n`;
 
     for (const type in objectCountsByType) {
@@ -180,10 +180,23 @@ async function extractObjects(
       // Store base path as absolute path in upgradedObjectFoldersByType
       upgradedObjectFoldersByType["basePath"] = outputFolderPath;
 
-      await configManager.setConfigValue(
-        "upgradedObjectFolders",
-        upgradedObjectFoldersByType
-      );
+      // Check if we already have a configuration
+      const { proceed, overwrite } = await checkExistingBasePath(configManager);
+
+      if (!proceed) {
+        return {
+          success: false,
+          message: "Operation cancelled by user",
+        };
+      }
+
+      if (overwrite) {
+        // Only update the configuration if user chose to overwrite
+        await configManager.setConfigValue(
+          "upgradedObjectFolders",
+          upgradedObjectFoldersByType
+        );
+      }
     }
 
     return {
@@ -261,6 +274,13 @@ function getLocationForObjectType(objectType) {
  */
 async function extractObjectsFromPath() {
   try {
+    // Check for existing configuration first
+    const { proceed, overwrite } = await checkExistingBasePath(configManager);
+
+    if (!proceed) {
+      return;
+    }
+
     // Ask user to select a C/AL file
     const fileUris = await vscode.window.showOpenDialog({
       canSelectFiles: true,
@@ -333,8 +353,21 @@ async function extractObjectsFromPath() {
           outputFolderPath,
           shouldOrganize,
           progress,
-          estimatedObjectCount
+          estimatedObjectCount,
+          overwrite
         );
+
+        // Check if we received a valid result
+        if (!result || result.success === false) {
+          return (
+            result || {
+              success: false,
+              files: [],
+              summaryFile: null,
+              objectLocations: {},
+            }
+          );
+        }
 
         progress.report({
           increment: 100,
@@ -345,12 +378,21 @@ async function extractObjectsFromPath() {
       }
     );
 
+    // Exit early if extraction was cancelled or failed
+    if (!extraction || extraction.success === false) {
+      if (extraction && extraction.message) {
+        vscode.window.showInformationMessage(extraction.message);
+      }
+      return;
+    }
+
     // Save the extracted folder locations to configuration
     if (
       extraction.objectLocations &&
-      Object.keys(extraction.objectLocations).length > 0
+      Object.keys(extraction.objectLocations).length > 0 &&
+      overwrite
     ) {
-      // Keep the locations as they are
+      // Only save if overwrite was chosen
       await configManager.setConfigValue(
         "upgradedObjectFolders",
         extraction.objectLocations
@@ -360,12 +402,21 @@ async function extractObjectsFromPath() {
       );
     }
 
+    // Only continue if we have a valid summary file
+    if (!extraction.summaryFile || !extraction.files) {
+      vscode.window.showInformationMessage(
+        "The extraction was completed but produced no results."
+      );
+      return;
+    }
+
     // Show success message with the output folder path and a link to view the summary
     const summaryUri = vscode.Uri.file(extraction.summaryFile);
+    const fileCount = extraction.files.length || 0;
 
     vscode.window
       .showInformationMessage(
-        `Successfully extracted ${extraction.files.length} objects to "${outputFolderPath}"`,
+        `Successfully extracted ${fileCount} objects to "${outputFolderPath}"`,
         {
           modal: false,
           detail: "Click 'View Summary' to see extraction details",
@@ -380,6 +431,7 @@ async function extractObjectsFromPath() {
         }
       });
   } catch (error) {
+    console.error("Error extracting objects:", error);
     vscode.window.showErrorMessage(
       `Error extracting objects: ${error.message}`
     );
@@ -393,15 +445,28 @@ async function extractObjectsFromPath() {
  * @param {boolean} organizeByType - Whether to organize objects by type
  * @param {vscode.Progress} progress - VS Code progress object
  * @param {number} estimatedCount - Estimated number of objects
- * @returns {Promise<{files: Array<string>, summaryFile: string, objectLocations: Object}>}
+ * @param {boolean} overwrite - Whether to overwrite existing configuration
+ * @returns {Promise<{files: Array<string>, summaryFile: string, objectLocations: Object, success: boolean}>}
  */
 async function extractObjectsWithProgress(
   sourceFilePath,
   outputFolderPath,
   organizeByType,
   progress,
-  estimatedCount
+  estimatedCount,
+  overwrite = false
 ) {
+  // Validate input parameters to prevent undefined errors
+  if (!sourceFilePath || !fs.existsSync(sourceFilePath)) {
+    return {
+      success: false,
+      message: "Source file does not exist or is invalid",
+      files: [],
+      summaryFile: null,
+      objectLocations: {},
+    };
+  }
+
   // If no output folder provided, create a subfolder in the same directory as source file
   if (!outputFolderPath) {
     outputFolderPath = path.join(
@@ -412,7 +477,17 @@ async function extractObjectsWithProgress(
 
   // Create output folder if it doesn't exist
   if (!fs.existsSync(outputFolderPath)) {
-    fs.mkdirSync(outputFolderPath, { recursive: true });
+    try {
+      fs.mkdirSync(outputFolderPath, { recursive: true });
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to create output directory: ${error.message}`,
+        files: [],
+        summaryFile: null,
+        objectLocations: {},
+      };
+    }
   }
 
   const extractedFiles = [];
@@ -619,11 +694,6 @@ async function extractObjectsWithProgress(
     if (Object.keys(upgradedObjectFoldersByType).length > 0) {
       // Store base path as absolute path in upgradedObjectFoldersByType
       upgradedObjectFoldersByType["basePath"] = outputFolderPath;
-
-      await configManager.setConfigValue(
-        "upgradedObjectFolders",
-        upgradedObjectFoldersByType
-      );
     }
 
     progress.report({
@@ -632,13 +702,21 @@ async function extractObjectsWithProgress(
     });
 
     return {
+      success: true,
       files: extractedFiles,
       summaryFile: summaryFilePath,
       objectLocations: upgradedObjectFoldersByType,
     };
   } catch (error) {
     console.error("Error extracting objects:", error);
-    throw error;
+    return {
+      success: false,
+      message: `Error during extraction: ${error.message}`,
+      files: extractedFiles,
+      summaryFile: null,
+      objectLocations: {},
+      overwrite: false,
+    };
   }
 }
 
