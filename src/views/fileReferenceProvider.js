@@ -1328,12 +1328,15 @@ class MigrationFileItem extends TreeItem {
     // Unique ID for state persistence that includes file path and refs count
     this.id = `migFile-${path.basename(file)}-${docRefs.length}`;
 
-    // Command to open file
+    // Command to open file - ensure we're passing the full file path
     this.command = {
       command: "bc-al-upgradeassistant.openMigrationFile",
       title: "Open Migration File",
       arguments: [file],
     };
+
+    // Add a tooltip that shows the full path
+    this.tooltip = `${file}\n\nClick to open file or use context menu`;
   }
 
   getChildren() {

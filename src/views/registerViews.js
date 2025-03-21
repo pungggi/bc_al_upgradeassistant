@@ -66,16 +66,85 @@ function registerViews(context) {
     vscode.commands.registerCommand(
       "bc-al-upgradeassistant.openDocumentationReference",
       (filePath, lineNumber) => {
-        vscode.workspace.openTextDocument(filePath).then((doc) => {
-          vscode.window.showTextDocument(doc).then((editor) => {
-            const position = new vscode.Position(lineNumber - 1, 0);
-            editor.selection = new vscode.Selection(position, position);
-            editor.revealRange(
-              new vscode.Range(position, position),
-              vscode.TextEditorRevealType.InCenter
-            );
-          });
-        });
+        if (!filePath) {
+          console.error(
+            "openDocumentationReference called with no filePath argument"
+          );
+          vscode.window.showErrorMessage("No file path provided");
+          return;
+        }
+
+        try {
+          if (!fs.existsSync(filePath)) {
+            vscode.window.showErrorMessage(`File not found: ${filePath}`);
+            return;
+          }
+
+          // Create position object for cursor placement
+          const position = new vscode.Position(lineNumber - 1, 0);
+          const range = new vscode.Range(position, position);
+
+          // Check if the file is already open in any visible editor
+          for (const editor of vscode.window.visibleTextEditors) {
+            if (editor.document.fileName === filePath) {
+              // File is already open, just focus its tab and position cursor
+              editor.selection = new vscode.Selection(position, position);
+              editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+              return vscode.window.showTextDocument(
+                editor.document,
+                editor.viewColumn
+              );
+            }
+          }
+
+          // Also check if document is loaded but not visible (in a tab)
+          for (const doc of vscode.workspace.textDocuments) {
+            if (doc.fileName === filePath) {
+              // Document is in a tab but not visible, focus it and position cursor
+              return vscode.window.showTextDocument(doc, {
+                viewColumn: vscode.ViewColumn.Active,
+                preserveFocus: false,
+                selection: range,
+              });
+            }
+          }
+
+          // File is not already open, open in a new tab and position cursor
+          return vscode.workspace.openTextDocument(filePath).then(
+            (doc) => {
+              return vscode.window.showTextDocument(doc).then(
+                (editor) => {
+                  editor.selection = new vscode.Selection(position, position);
+                  editor.revealRange(
+                    range,
+                    vscode.TextEditorRevealType.InCenter
+                  );
+                  return editor;
+                },
+                (error) => {
+                  console.error(`Error showing document: ${error.message}`);
+                  vscode.window.showErrorMessage(
+                    `Error showing document: ${error.message}`
+                  );
+                }
+              );
+            },
+            (error) => {
+              console.error(`Error opening document: ${error.message}`);
+              vscode.window.showErrorMessage(
+                `Failed to open file: ${error.message}`
+              );
+            }
+          );
+        } catch (error) {
+          console.error(
+            `Error handling documentation reference: ${error.message}`,
+            error
+          );
+          vscode.window.showErrorMessage(
+            `Error opening documentation reference: ${error.message}`
+          );
+        }
       }
     )
   );
@@ -164,6 +233,12 @@ function registerViews(context) {
     vscode.commands.registerCommand(
       "bc-al-upgradeassistant.openMigrationFile",
       (filePath) => {
+        if (!filePath) {
+          console.error("openMigrationFile called with no filePath argument");
+          vscode.window.showErrorMessage("No file path provided");
+          return;
+        }
+
         try {
           if (!fs.existsSync(filePath)) {
             vscode.window.showErrorMessage(`File not found: ${filePath}`);
@@ -193,13 +268,25 @@ function registerViews(context) {
           }
 
           // File is not already open, open in a new tab beside and focus it
-          vscode.workspace.openTextDocument(filePath).then((doc) => {
-            return vscode.window.showTextDocument(doc, {
-              viewColumn: vscode.ViewColumn.Beside,
-              preserveFocus: false, // Focus the new tab
-            });
-          });
+          return vscode.workspace.openTextDocument(filePath).then(
+            (doc) => {
+              return vscode.window.showTextDocument(doc, {
+                viewColumn: vscode.ViewColumn.Beside,
+                preserveFocus: false, // Focus the new tab
+              });
+            },
+            (error) => {
+              console.error(`Error opening document: ${error.message}`);
+              vscode.window.showErrorMessage(
+                `Failed to open file: ${error.message}`
+              );
+            }
+          );
         } catch (error) {
+          console.error(
+            `Error handling migration file: ${error.message}`,
+            error
+          );
           vscode.window.showErrorMessage(
             `Error opening migration file: ${error.message}`
           );

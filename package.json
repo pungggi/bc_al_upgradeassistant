@@ -2,7 +2,7 @@
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
   "description": "Assists you in transforming old C/AL and more",
-  "version": "0.0.79",
+  "version": "0.0.80",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
@@ -200,6 +200,12 @@
           "command": "bc-al-upgradeassistant.setDocumentationReferenceDescription",
           "when": "view == bc-al-file-info && (viewItem == documentationRef || viewItem == documentationRefDone || viewItem == documentationRefNotImplemented)",
           "group": "inline"
+        },
+        {
+          "command": "bc-al-upgradeassistant.openMigrationFile",
+          "when": "view == bc-al-references && viewItem == migrationFile || view == bc-al-file-info && viewItem == migrationFile",
+          "group": "inline@1",
+          "title": "Open"
         }
       ]
     },
