@@ -1,31 +1,71 @@
 # BC/AL Upgrade Assistant
 
-A Visual Studio Code extension to assist in transforming old C/AL code to modern AL syntax and provide AI-powered assistance for Microsoft Dynamics 365 Business Central development.
+A Visual Studio Code extension to assist in upgrading from older NAV or BC Versions, organize your Upgrade Tasks and provide AI-powered assistance if needed.
 
 ## Features
 
-- Split C/AL objects from text files
-- Convert C/AL code to AL syntax
-- AI-powered code review and suggestions using Claude models
-- Code formatting and documentation help
+- Documentation Reference Management. Keep track of your progress and notes.
+- Navigate to and from Referenced Migration files (.txt)
+- Suggests available events to subscribe to
+- Migrate obsolete code. (like NoSeriesManagement, Codeunit 1 and more)
+- AI-powered custom prompts. Create .al Files directly from the response.
 
-### Documentation Reference Management
-
-The extension helps track and manage documentation references in your code:
-
-- Track documentation references with status (Done/Not Done/Not Implemented)
-- Add notes to documentation references
-- Toggle implementation status
-- Generate summary reports of all documentation references with statistics
-
-![Prompt Dialog](https://imgur.com/Fdwiq2K.png)
+A tutorial of how to use those features will be released.
 
 ## Requirements
 
 - Visual Studio Code 1.80.0 or higher
 - Claude API key for AI-powered features
 
-## Extension Settings
+## Documentation Reference Management
+
+The extension helps track and manage documentation references like Project and Task Id's in your code:
+
+- Track documentation references with status (Done/Not Done/Not Implemented)
+- Add notes to documentation references
+- Generate summary reports of all documentation references with statistics
+
+The extension supports a collection of documentation references through the `bc-al-upgradeassistant.documentationIds` setting. This allows you to maintain a curated list of documentation references like tasks or projects.
+
+> After modifying settings, you'll need to reload the window for changes to take effect.
+
+### Customizing Documentation IDs
+
+You can modify these defaults or add your own documentation references in your settings.
+
+Example custom configuration:
+
+```json
+"bc-al-upgradeassistant.documentationIds": [
+  {
+    "id": "VAT001",
+    "description": "Project Task for implementing the new VAT Logic",
+    "url": "https://dev.azure.com/contoso/_userstory/vat"
+  }
+]
+```
+
+Each documentation ID requires:
+
+- `id`: A unique identifier
+- `description`: A brief description of the documentation
+- `url`: (Optional) Link to the documentation resource
+
+### Default Assignee
+
+- `bc-al-upgradeassistant.userId`: User identifier used to attach to documentation references when toggling their status.
+
+#### Summary Report
+
+The documentation reference summary report shows some Status indicators:
+
+- ✅ Done
+- ⏳ Pending
+- ❌ Not Implemented
+- Statistical overview with completion percentages
+- References grouped by file and by documentation ID
+
+The summary is generated when running the command `BC/AL Upgrade Assistant: Generate Documentation References Summary`.
 
 ### Claude AI Settings
 
@@ -48,108 +88,9 @@ This extension contributes the following settings:
   - Includes a `basePath` property which specifies the base folder for all object types
 - `bc-al-upgradeassistant.workingObjectFolders`: Locations where working AL objects are located
 
-### Additional Settings
-
-- `bc-al-upgradeassistant.userId`: User identifier used to attach to documentation references when toggling their status.
-
-## Commands
-
-### General
-
-- `BC/AL Upgrade Assistant: Refresh Symbol Cache`: Refreshes the symbol cache to update object metadata.
-- `BC/AL Upgrade Assistant: Split C/AL Objects`: Splits C/AL objects from a text file into individual files.
-
-### Documentation
-
-- `BC/AL Upgrade Assistant: Open Documentation Reference Location`: Opens the location of the documentation reference.
-- `BC/AL Upgrade Assistant: Toggle Documentation Reference as Done/Not Done`: Toggles the completion status of a documentation reference and silently adds the configured UserId if set.
-- `BC/AL Upgrade Assistant: Open Documentation URL`: Opens the URL associated with a documentation reference.
-- `BC/AL Upgrade Assistant: Toggle Not Implemented`: Toggles the 'Not Implemented' status of a documentation reference.
-- `BC/AL Upgrade Assistant: Add/Edit Note`: Adds or edits a note for a documentation reference.
-- `BC/AL Upgrade Assistant: Generate Documentation References Summary`: Generates a summary report of all documentation references.
-
-### Navigation
-
-- `BC/AL Upgrade Assistant: Open Referenced Object`: Opens the AL object referenced under the cursor.
-- `BC/AL Upgrade Assistant: Open Migration File`: Opens the related migration file, if available.
-- `BC/AL Upgrade Assistant: Refresh BC/AL References`: Refreshes the references view.
-
-### AI Prompting
-
-- `BC/AL Upgrade Assistant: Run Claude Prompt`: Runs a selected Claude AI prompt on the current code.
-- `BC/AL Upgrade Assistant: Set Default Claude Model`: Sets the default Claude model to be used for AI prompts.
-
-## Getting Started
-
-1. Install the extension
-2. Set your Claude API key in the extension settings
-3. Open a C/AL or AL file
-4. Use the commands from the command palette (Ctrl+Shift+P)
-
-## Documentation IDs
-
-The extension supports a collection of documentation references through the `bc-al-upgradeassistant.documentationIds` setting. This allows you to maintain a curated list of documentation references like tasks or projects.
-
-### Default Documentation IDs
-
-For demo, the extension includes these documentation references:
-
-- **BC0001**: Business Central Development Documentation
-- **AL0001**: AL Language Reference
-
-### Customizing Documentation IDs
-
-You can modify these defaults or add your own documentation references in your settings:
-
-1. Open VS Code Settings (File > Preferences > Settings)
-2. Search for "BC/AL documentation"
-3. Click on "Edit in settings.json"
-4. Modify the `bc-al-upgradeassistant.documentationIds` array
-
-Example custom configuration:
-
-```json
-"bc-al-upgradeassistant.documentationIds": [
-  {
-    "id": "VAT001",
-    "description": "Project Task for implementing the new VAT Logic",
-    "url": "https://dev.azure.com/contoso/_userstory/vat"
-  }
-]
-```
-
-Each documentation ID requires:
-
-- `id`: A unique identifier
-- `description`: A brief description of the documentation
-- `url`: (Optional) Link to the documentation resource
-
-### Documentation References
-
-#### Summary Report
-
-The documentation reference summary report shows some Status indicators:
-
-- ✅ Done
-- ⏳ Pending
-- ❌ Not Implemented
-- Statistical overview with completion percentages
-- References grouped by file and by documentation ID
-
-The summary is displayed in two separate editor views.
-
-### Debugging Claude Prompts
-
-When working with complex prompts, you can enable the debug mode to review exactly what is being sent to the Claude API:
-
-1. Set `bc-al-upgradeassistant.claude.debugMode` to `true` in your VS Code settings
-2. Run any Claude command
-3. A new document will open showing the system prompt, user prompt with your code inserted, and configuration details
-4. You'll be prompted to confirm before the API call is made
-
 ### Configuring Custom Prompts
 
-You can customize the AI prompts through the settings:
+You can customize the AI prompts through the settings, for example:
 
 ```json
 "bc-al-upgradeassistant.claude.prompts": [
@@ -172,13 +113,6 @@ You can customize the AI prompts through the settings:
     "userPrompt": "Explain in detail how the following complex algorithm works:\n\n{{code}}",
     "systemPrompt": "You are an expert AL code explainer for Microsoft Dynamics 365 Business Central.",
     "model": "claude-3-opus-20240229",
-  },
-  {
-    "commandName": "explainComplexAI",
-    "commandDescription": "Use Claude 3.7 to explain complex AI concepts",
-    "userPrompt": "Explain the following algorithm as if explaining to another developer:\n\n{{code}}",
-    "systemPrompt": "You are an AI expert with deep understanding of complex algorithms. Explain concepts clearly.",
-    "model": "claude-3-7-sonnet-20250219",
   }
 ]
 ```
@@ -192,35 +126,41 @@ Each prompt has the following properties:
 - `model`: (Optional) Specific Claude model to use for this prompt
 - `disabled`: (Optional) A boolean to disable the prompt without removing it from the settings
 
-**Notes:**
+> The extension will fall back to your default model from `bc-al-upgradeassistant.claude.model` if no valid model is specified.
 
-> The extension will validate model names and fall back to your default model if an invalid model is specified.
+### Debugging Claude Prompts
 
-> After modifying prompts in settings, you'll need to reload the window for changes to take effect.
+When working with complex prompts, you can enable the debug mode to review exactly what is being sent to the Claude API:
 
-## Events
+1. Set `bc-al-upgradeassistant.claude.debugMode` to `true` in your VS Code settings
+2. Run any Claude prompt
+3. A new document will open showing the system prompt, user prompt with your code inserted, and configuration details
 
-The extension exposes several events that you can subscribe to in your own extensions:
+## Commands
 
-### File Events
+### General
 
-The extension emits events when AL files are processed:
+- `BC/AL Upgrade Assistant: Split C/AL Objects (Select File)`: Splits C/AL objects from a text file into individual files.
+- `BC/AL Upgrade Assistant: Refresh Symbol Cache`: Refreshes the symbol cache to update object metadata and source if available.
 
-```javascript
-const { fileEvents } = require("bc-al-upgradeassistant");
+### Documentation
 
-// Subscribe to file events
-fileEvents((fileInfo) => {
-  // fileInfo contains:
-  // - path: string - Path to the AL file
-  // - orginFilePath: string - Original C/AL file path if applicable
-  console.log("AL file processed:", fileInfo.path);
-});
-```
+- `BC/AL Upgrade Assistant: Toggle Documentation Reference as Done/Not Done`: Toggles the completion status of a documentation reference and silently adds the configured UserId if set.
+- `BC/AL Upgrade Assistant: Toggle Not Implemented`: Toggles the 'Not Implemented' status of a documentation reference.
+- `BC/AL Upgrade Assistant: Add/Edit Note`: Adds or edits a note for a documentation reference.
+- `BC/AL Upgrade Assistant: Generate Documentation References Summary`: Generates a summary report of all documentation references.
 
-These events are fired whenever:
+### Navigation
 
-- A C/AL file is converted to AL
-- An AL file is saved or modified
+- `BC/AL Upgrade Assistant: Open Documentation URL`: Opens the URL associated with a documentation reference.
+- `BC/AL Upgrade Assistant: Open Documentation Reference Location`: Opens the location of the documentation reference.
 
-This allows you to build additional functionality on top of the file processing pipeline.
+- `BC/AL Upgrade Assistant: Open Referenced Object`: Opens the AL object referenced under the cursor.
+- `BC/AL Upgrade Assistant: Open Migration File`: Opens the related migration file, if available.
+
+- `BC/AL Upgrade Assistant: Refresh BC/AL References`: Refreshes the references view.
+
+### AI Prompting
+
+- `BC/AL Upgrade Assistant: Run Claude Prompt`: Runs a selected Claude AI prompt on the current code.
+- `BC/AL Upgrade Assistant: Set Default Claude Model`: Sets the default Claude model to be used for AI prompts.
