@@ -927,7 +927,7 @@ class NoFileItem extends TreeItem {
 
     // Add example documentation IDs for testing
     this.tooltip =
-      "Documentation ID examples: BC0001, CUSTOM001, #ICCH103/03:400111";
+      "Documentation ID examples: BC0001, CUSTOM001, #PKZZ900/09:999111";
   }
 }
 

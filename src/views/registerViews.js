@@ -103,24 +103,53 @@ function registerViews(context) {
           const objectFolder = path.join(indexFolder, type.toLowerCase(), id);
           const infoFilePath = path.join(objectFolder, "info.json");
 
-          if (fs.existsSync(infoFilePath)) {
-            const infoData = JSON.parse(fs.readFileSync(infoFilePath, "utf8"));
-
-            if (infoData.originalPath && fs.existsSync(infoData.originalPath)) {
-              // Open the file
-              vscode.workspace
-                .openTextDocument(infoData.originalPath)
-                .then((doc) => vscode.window.showTextDocument(doc));
-            } else {
-              vscode.window.showErrorMessage(
-                `Cannot find original file for ${type} ${id} at ${infoData.originalPath}`
-              );
-            }
-          } else {
+          if (!fs.existsSync(infoFilePath)) {
             vscode.window.showErrorMessage(
               `No info file found for ${type} ${id}`
             );
+            return;
           }
+
+          const infoData = JSON.parse(fs.readFileSync(infoFilePath, "utf8"));
+
+          if (!infoData.originalPath || !fs.existsSync(infoData.originalPath)) {
+            vscode.window.showErrorMessage(
+              `Cannot find original file for ${type} ${id} at ${infoData.originalPath}`
+            );
+            return;
+          }
+
+          // Check if the file is already open in any visible editor
+          for (const editor of vscode.window.visibleTextEditors) {
+            if (editor.document.fileName === infoData.originalPath) {
+              // File is already open, just focus its tab
+              return vscode.window.showTextDocument(
+                editor.document,
+                editor.viewColumn
+              );
+            }
+          }
+
+          // Also check if document is loaded but not visible (in a tab)
+          for (const doc of vscode.workspace.textDocuments) {
+            if (doc.fileName === infoData.originalPath) {
+              // Document is in a tab but not visible, move it beside and focus it
+              return vscode.window.showTextDocument(doc, {
+                viewColumn: vscode.ViewColumn.Beside,
+                preserveFocus: false,
+              });
+            }
+          }
+
+          // File is not already open, open in a new tab beside and focus it
+          vscode.workspace
+            .openTextDocument(infoData.originalPath)
+            .then((doc) => {
+              return vscode.window.showTextDocument(doc, {
+                viewColumn: vscode.ViewColumn.Beside,
+                preserveFocus: false, // Focus the new tab
+              });
+            });
         } catch (error) {
           vscode.window.showErrorMessage(
             `Error opening referenced object: ${error.message}`
@@ -136,14 +165,40 @@ function registerViews(context) {
       "bc-al-upgradeassistant.openMigrationFile",
       (filePath) => {
         try {
-          if (fs.existsSync(filePath)) {
-            // Open the file
-            vscode.workspace
-              .openTextDocument(filePath)
-              .then((doc) => vscode.window.showTextDocument(doc));
-          } else {
+          if (!fs.existsSync(filePath)) {
             vscode.window.showErrorMessage(`File not found: ${filePath}`);
+            return;
           }
+
+          // Check if the file is already open in any visible editor
+          for (const editor of vscode.window.visibleTextEditors) {
+            if (editor.document.fileName === filePath) {
+              // File is already open, just focus its tab
+              return vscode.window.showTextDocument(
+                editor.document,
+                editor.viewColumn
+              );
+            }
+          }
+
+          // Also check if document is loaded but not visible (in a tab)
+          for (const doc of vscode.workspace.textDocuments) {
+            if (doc.fileName === filePath) {
+              // Document is in a tab but not visible, move it beside and focus it
+              return vscode.window.showTextDocument(doc, {
+                viewColumn: vscode.ViewColumn.Beside,
+                preserveFocus: false,
+              });
+            }
+          }
+
+          // File is not already open, open in a new tab beside and focus it
+          vscode.workspace.openTextDocument(filePath).then((doc) => {
+            return vscode.window.showTextDocument(doc, {
+              viewColumn: vscode.ViewColumn.Beside,
+              preserveFocus: false, // Focus the new tab
+            });
+          });
         } catch (error) {
           vscode.window.showErrorMessage(
             `Error opening migration file: ${error.message}`
