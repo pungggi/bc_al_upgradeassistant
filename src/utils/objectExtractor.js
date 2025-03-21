@@ -353,8 +353,7 @@ async function extractObjectsFromPath() {
           outputFolderPath,
           shouldOrganize,
           progress,
-          estimatedObjectCount,
-          overwrite
+          estimatedObjectCount
         );
 
         // Check if we received a valid result
@@ -445,7 +444,6 @@ async function extractObjectsFromPath() {
  * @param {boolean} organizeByType - Whether to organize objects by type
  * @param {vscode.Progress} progress - VS Code progress object
  * @param {number} estimatedCount - Estimated number of objects
- * @param {boolean} overwrite - Whether to overwrite existing configuration
  * @returns {Promise<{files: Array<string>, summaryFile: string, objectLocations: Object, success: boolean}>}
  */
 async function extractObjectsWithProgress(
@@ -453,8 +451,7 @@ async function extractObjectsWithProgress(
   outputFolderPath,
   organizeByType,
   progress,
-  estimatedCount,
-  overwrite = false
+  estimatedCount
 ) {
   // Validate input parameters to prevent undefined errors
   if (!sourceFilePath || !fs.existsSync(sourceFilePath)) {

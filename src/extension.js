@@ -11,6 +11,11 @@ const ExtendedObjectHoverProvider = require("./hover/extendedObjectHoverProvider
 const { EXTENSION_ID } = require("./constants");
 const { registerViews } = require("./views/registerViews");
 
+let globalStatusBarItems = {};
+
+// Add an event emitter for file decorations
+const fileDecorationEventEmitter = new vscode.EventEmitter();
+
 /**
  * Extension activation handler
  * @param {vscode.ExtensionContext} context - Extension context
@@ -70,6 +75,10 @@ async function activate(context) {
               `Documentation reference ${item.docId} ${statusText}`,
               2200
             );
+
+            // Update all tabs showing this file
+            updateAllTabsForFile(item.filePath, fileReferenceProvider);
+
             return;
           }
 
@@ -183,7 +192,7 @@ async function activate(context) {
       vscode.workspace.onDidOpenTextDocument((document) => {
         if (document.languageId === "plaintext") {
           setTimeout(() => {
-            checkForDocumentationRefs(document, fileReferenceProvider);
+            checkDocumentationReferences(document, fileReferenceProvider);
           }, 100);
         }
       })
@@ -195,7 +204,7 @@ async function activate(context) {
       vscode.window.activeTextEditor.document.languageId === "plaintext"
     ) {
       setTimeout(() => {
-        checkForDocumentationRefs(
+        checkDocumentationReferences(
           vscode.window.activeTextEditor.document,
           fileReferenceProvider
         );
@@ -205,6 +214,9 @@ async function activate(context) {
     // Listen for editor changes
     context.subscriptions.push(
       vscode.window.onDidChangeActiveTextEditor((editor) => {
+        // Clear any status bar items for files that are no longer active
+        cleanupStatusBarItems();
+
         if (!editor) {
           vscode.commands.executeCommand(
             "setContext",
@@ -215,7 +227,7 @@ async function activate(context) {
         }
 
         if (editor.document.languageId === "plaintext") {
-          checkForDocumentationRefs(editor.document, fileReferenceProvider);
+          checkDocumentationReferences(editor.document, fileReferenceProvider);
         } else {
           vscode.commands.executeCommand(
             "setContext",
@@ -230,7 +242,7 @@ async function activate(context) {
     context.subscriptions.push(
       vscode.workspace.onDidChangeTextDocument((e) => {
         if (e.document.languageId === "plaintext") {
-          checkForDocumentationRefs(e.document, fileReferenceProvider);
+          checkDocumentationReferences(e.document, fileReferenceProvider);
         }
       })
     );
@@ -267,6 +279,195 @@ async function activate(context) {
               });
             }
           }
+        }
+      )
+    );
+
+    // Register command to check documentation references and update tab icon
+    let disposable = vscode.commands.registerCommand(
+      "bc-al-upgradeassistant.checkDocumentation",
+      function () {
+        const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+        if (!activeTab) {
+          vscode.window.showInformationMessage("No active tab found.");
+          return;
+        }
+
+        // Check if all documentation references are set to done or not implemented
+        const allReferencesDone = checkDocumentationReferences(
+          activeTab.input.uri,
+          fileReferenceProvider
+        );
+        if (allReferencesDone) {
+          updateTabIcon(activeTab, "done-icon");
+        } else {
+          updateTabIcon(activeTab, "default-icon");
+        }
+      }
+    );
+
+    context.subscriptions.push(disposable);
+
+    // Check documentation status when a document is opened or changed
+    context.subscriptions.push(
+      vscode.workspace.onDidOpenTextDocument((document) => {
+        updateDocumentationStatusIcon(document, fileReferenceProvider);
+      }),
+      vscode.workspace.onDidChangeTextDocument((e) => {
+        updateDocumentationStatusIcon(e.document, fileReferenceProvider);
+      })
+    );
+
+    // Add a new function to check documentation references and update tab icon
+    function updateDocumentationStatusIcon(document, provider) {
+      if (!document || document.languageId !== "plaintext") return;
+
+      const activeTab = vscode.window.tabGroups.activeTabGroup.tabs.find(
+        (tab) => tab.input.uri?.fsPath === document.uri.fsPath
+      );
+
+      if (!activeTab) return;
+
+      // Clear any existing decorations
+      if (activeTab._iconDecorations) {
+        activeTab._iconDecorations.forEach((d) => d.dispose());
+        activeTab._iconDecorations = [];
+      }
+
+      // Check if all documentation references are set to done or not implemented
+      const allReferencesDone = checkDocumentationReferences(
+        document,
+        provider
+      );
+
+      if (allReferencesDone) {
+        updateTabIcon(activeTab, "done-icon");
+      } else {
+        updateTabIcon(activeTab, "default-icon");
+      }
+    }
+
+    // Register a file decoration provider to show documentation status in file explorer
+    const fileDecorationProvider = {
+      onDidChangeFileDecorations: fileDecorationEventEmitter.event,
+      provideFileDecoration: (uri) => {
+        // Skip if not a plaintext file
+        if (path.extname(uri.fsPath) !== ".txt") return null;
+
+        // Check if file has documentation references and if they are all done
+        try {
+          const content = fs.readFileSync(uri.fsPath, "utf8");
+          const refs = fileReferenceProvider._findDocumentationReferences(
+            content,
+            uri.fsPath
+          );
+
+          if (refs.length === 0) return null;
+
+          const allDone = refs.every((ref) => ref.done || ref.notImplemented);
+
+          if (allDone) {
+            return {
+              badge: "✓",
+              tooltip: "All documentation references completed",
+              color: new vscode.ThemeColor("charts.green"),
+            };
+          } else {
+            return {
+              badge: "⏳",
+              tooltip: "Documentation references in progress",
+              color: new vscode.ThemeColor("charts.blue"),
+            };
+          }
+        } catch (error) {
+          console.error("Error providing file decoration:", error);
+          return null;
+        }
+      },
+    };
+
+    context.subscriptions.push(
+      vscode.window.registerFileDecorationProvider(fileDecorationProvider)
+    );
+
+    // Then update your updateTabIcon function to be simpler:
+    function updateTabIcon(tab, iconType) {
+      if (!tab || !tab.input.uri?.fsPath) return;
+
+      const filePath = tab.input.uri.fsPath;
+
+      // Dispose existing status bar item for this file if it exists
+      if (globalStatusBarItems[filePath]) {
+        globalStatusBarItems[filePath].dispose();
+      }
+
+      const statusBarItem = vscode.window.createStatusBarItem(
+        vscode.StatusBarAlignment.Right,
+        100
+      );
+
+      if (iconType === "done-icon") {
+        statusBarItem.text = "$(check) Docs Complete";
+        statusBarItem.backgroundColor = new vscode.ThemeColor(
+          "statusBarItem.warningBackground"
+        );
+        statusBarItem.color = new vscode.ThemeColor(
+          "statusBarItem.warningForeground"
+        );
+        statusBarItem.tooltip = "All documentation references are completed";
+      } else {
+        statusBarItem.text = "$(warning) Docs In Progress";
+        statusBarItem.backgroundColor = new vscode.ThemeColor(
+          "statusBarItem.errorBackground"
+        );
+        statusBarItem.color = new vscode.ThemeColor(
+          "statusBarItem.errorForeground"
+        );
+        statusBarItem.tooltip =
+          "Documentation references are still in progress";
+      }
+
+      // Command to jump to next incomplete reference (you can implement this separately)
+      statusBarItem.command = "bc-al-upgradeassistant.jumpToNextIncompleteRef";
+
+      // Show the status bar item
+      statusBarItem.show();
+
+      // Store in our global tracker instead of on the tab
+      globalStatusBarItems[filePath] = statusBarItem;
+    }
+
+    // Add a subscription to detect when files are saved
+    context.subscriptions.push(
+      vscode.workspace.onDidSaveTextDocument((document) => {
+        if (document.languageId === "plaintext") {
+          // When a document is saved, recheck its documentation status
+          updateAllTabsForFile(document.uri.fsPath, fileReferenceProvider);
+        }
+      })
+    );
+
+    // Implement a refresh command
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.refreshDocumentationStatus",
+        () => {
+          // Update all open tabs
+          vscode.window.tabGroups.all.forEach((group) => {
+            group.tabs.forEach((tab) => {
+              if (tab.input.uri) {
+                updateAllTabsForFile(
+                  tab.input.uri.fsPath,
+                  fileReferenceProvider
+                );
+              }
+            });
+          });
+
+          // Force refresh file explorer
+          vscode.commands.executeCommand(
+            "workbench.files.action.refreshFilesExplorer"
+          );
         }
       )
     );
@@ -380,6 +581,14 @@ async function initializeSymbolCache(context, force = false) {
  */
 function deactivate() {
   console.log(`${EXTENSION_ID} extension deactivated`);
+
+  // Clean up all status bar items
+  for (const filePath in globalStatusBarItems) {
+    if (globalStatusBarItems[filePath]) {
+      globalStatusBarItems[filePath].dispose();
+    }
+  }
+  globalStatusBarItems = {};
 }
 
 function findDocRefAtLine(provider, document, line) {
@@ -392,44 +601,82 @@ function findDocRefAtLine(provider, document, line) {
 }
 
 function toggleDocRefDone(provider, item) {
+  if (!item || !item.filePath || !item.docId || item.lineNumber === undefined)
+    return;
+
   const newState = provider.toggleDocumentationReferenceDone(
     item.filePath,
     item.docId,
     item.lineNumber
   );
+
   const statusText = newState ? "marked as done" : "marked as not done";
   vscode.window.setStatusBarMessage(
     `Documentation reference ${item.docId} ${statusText}`,
     3000
   );
+
+  // Update icons for all tabs showing this file
+  updateAllTabsForFile(item.filePath, provider);
+
+  return newState;
 }
 
-/**
- * Check if document has documentation references and set context
- * @param {vscode.TextDocument} document The document to check
- * @param {Object} provider The file reference provider
- */
-function checkForDocumentationRefs(document, provider) {
+// Add this new function to update all tabs for a specific file
+function updateAllTabsForFile(filePath, provider) {
+  if (!filePath) return;
+
   try {
-    const refs = provider._findDocumentationReferences(
-      document.getText(),
-      document.uri.fsPath
-    );
+    // Update all tabs in all tab groups
+    for (const tabGroup of vscode.window.tabGroups.all) {
+      for (const tab of tabGroup.tabs) {
+        if (tab.input.uri?.fsPath === filePath) {
+          // Get or open the document to check status
+          const document = vscode.workspace.textDocuments.find(
+            (doc) => doc.uri.fsPath === filePath
+          );
 
-    const hasRefs = refs.length > 0;
+          if (document) {
+            const allReferencesDone = checkDocumentationReferences(
+              document,
+              provider
+            );
+            updateTabIcon(
+              tab,
+              allReferencesDone ? "done-icon" : "default-icon"
+            );
+          } else {
+            // If document not already open, read file content directly
+            try {
+              const content = fs.readFileSync(filePath, "utf8");
+              const refs = provider._findDocumentationReferences(
+                content,
+                filePath
+              );
+              const allDone =
+                refs.length > 0 &&
+                refs.every((ref) => ref.done || ref.notImplemented);
+              updateTabIcon(tab, allDone ? "done-icon" : "default-icon");
+            } catch (err) {
+              console.error(`Error reading file ${filePath}:`, err);
+            }
+          }
+        }
+      }
+    }
 
-    vscode.commands.executeCommand(
-      "setContext",
-      "editorHasDocumentationRef",
-      hasRefs
-    );
+    // Notify VS Code that file decorations have changed for this file
+    // This forces the file explorer to re-evaluate this file's decoration
+    fileDecorationEventEmitter.fire(vscode.Uri.file(filePath));
+
+    // Also trigger a manual refresh of the file explorer
+    setTimeout(() => {
+      vscode.commands.executeCommand(
+        "workbench.files.action.refreshFilesExplorer"
+      );
+    }, 100);
   } catch (error) {
-    console.error("Error checking for documentation refs:", error);
-    vscode.commands.executeCommand(
-      "setContext",
-      "editorHasDocumentationRef",
-      false
-    );
+    console.error("Error updating tabs for file:", error);
   }
 }
 
@@ -687,6 +934,83 @@ function getCompoundStatus(refs) {
     return "❌ Not Implemented";
   } else {
     return "Mixed";
+  }
+}
+
+function checkDocumentationReferences(document, provider) {
+  if (!document || !provider) return false;
+
+  try {
+    const refs = provider._findDocumentationReferences(
+      document.getText(),
+      document.uri.fsPath
+    );
+
+    // If no references, return false
+    if (refs.length === 0) return false;
+
+    // Return true if all references are either done or not implemented
+    return refs.every((ref) => ref.done || ref.notImplemented);
+  } catch (error) {
+    console.error("Error checking documentation references:", error);
+    return false;
+  }
+}
+
+function updateTabIcon(tab, iconType) {
+  if (!tab || !tab.input.uri?.fsPath) return;
+
+  const filePath = tab.input.uri.fsPath;
+
+  // Dispose existing status bar item for this file if it exists
+  if (globalStatusBarItems[filePath]) {
+    globalStatusBarItems[filePath].dispose();
+  }
+
+  const statusBarItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Right,
+    100
+  );
+
+  if (iconType === "done-icon") {
+    statusBarItem.text = "$(check) Docs Complete";
+    statusBarItem.backgroundColor = new vscode.ThemeColor(
+      "statusBarItem.warningBackground"
+    );
+    statusBarItem.color = new vscode.ThemeColor(
+      "statusBarItem.warningForeground"
+    );
+    statusBarItem.tooltip = "All documentation references are completed";
+  } else {
+    statusBarItem.text = "$(warning) Docs In Progress";
+    statusBarItem.backgroundColor = new vscode.ThemeColor(
+      "statusBarItem.errorBackground"
+    );
+    statusBarItem.color = new vscode.ThemeColor(
+      "statusBarItem.errorForeground"
+    );
+    statusBarItem.tooltip = "Documentation references are still in progress";
+  }
+
+  // Command to jump to next incomplete reference (you can implement this separately)
+  statusBarItem.command = "bc-al-upgradeassistant.jumpToNextIncompleteRef";
+
+  // Show the status bar item
+  statusBarItem.show();
+
+  // Store in our global tracker instead of on the tab
+  globalStatusBarItems[filePath] = statusBarItem;
+}
+
+function cleanupStatusBarItems() {
+  // Dispose all status bar items except for the current file
+  const currentFilePath = vscode.window.activeTextEditor?.document.uri.fsPath;
+
+  for (const filePath in globalStatusBarItems) {
+    if (filePath !== currentFilePath) {
+      globalStatusBarItems[filePath].dispose();
+      delete globalStatusBarItems[filePath];
+    }
   }
 }
 
