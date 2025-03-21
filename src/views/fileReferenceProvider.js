@@ -43,6 +43,7 @@ class FileReferenceProvider {
       gutterIconPath: path.join(__dirname, "..", "..", "media", "check.svg"),
       gutterIconSize: "100%",
       fontWeight: "normal",
+      color: new vscode.ThemeColor("editorGutter.addedBackground"),
       isWholeLine: true,
       // before: {
       //   contentText: "✓",
@@ -77,6 +78,7 @@ class FileReferenceProvider {
         ),
         gutterIconSize: "100%",
         fontWeight: "normal",
+        color: new vscode.ThemeColor("editorGutter.deletedBackground"),
         isWholeLine: true,
         opacity: "0.7",
       });
