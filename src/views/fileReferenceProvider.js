@@ -1029,11 +1029,53 @@ class DocumentationRefsItem extends TreeItem {
       ),
     ];
 
+    // Parse content for procedures, triggers, actions, and fields
+    const content = fs.readFileSync(filePath, "utf8");
+    this.procedures = documentationHelper.findProcedures(content);
+    this.triggers = documentationHelper.findTriggers(content);
+    this.actions = documentationHelper.findActions(content);
+    this.fields = documentationHelper.findFields(content);
+
+    // Filter items to only include those with documentation references
+    this.proceduresWithRefs = this._filterItemsWithDocRefs(
+      this.procedures,
+      docRefs
+    );
+    this.triggersWithRefs = this._filterItemsWithDocRefs(
+      this.triggers,
+      docRefs
+    );
+    this.actionsWithRefs = this._filterItemsWithDocRefs(this.actions, docRefs);
+    this.fieldsWithRefs = this._filterItemsWithDocRefs(this.fields, docRefs);
+
     // Set a unique ID so we can remember expanded state
     this.id = `docRefs-${filePath}`;
   }
 
+  /**
+   * Filter items to only include those that contain documentation references
+   * @param {Array<{startLine: number, endLine: number}>} items Items to filter
+   * @param {Array<{lineNumber: number}>} docRefs Documentation references
+   * @returns {Array} Filtered items
+   */
+  _filterItemsWithDocRefs(items, docRefs) {
+    if (!items || items.length === 0) return [];
+
+    return items.filter((item) => {
+      if (!item.startLine || !item.endLine) return false;
+
+      // Check if any docRef falls within this item's range
+      return docRefs.some((ref) => {
+        const line = ref.lineNumber;
+        return line >= item.startLine && line <= item.endLine;
+      });
+    });
+  }
+
   getChildren() {
+    // Create an array to hold all groups
+    const groups = [];
+
     // If only one type of documentation ID or just a few references, return flat list
     if (this.distinctIds.length <= 1 && this.docRefs.length <= 3) {
       return this.docRefs.map((ref) => {
@@ -1041,11 +1083,44 @@ class DocumentationRefsItem extends TreeItem {
       });
     }
 
-    // If we have task IDs, group by task ID first
-    if (this.distinctTaskIds.length > 0) {
-      // Create an array to hold all groups
-      const groups = [];
+    // Add procedure references group if we have any
+    if (this.proceduresWithRefs.length > 0) {
+      groups.push(
+        new ProceduresGroupItem(
+          this.proceduresWithRefs,
+          this.docRefs,
+          this.filePath
+        )
+      );
+    }
 
+    // Add trigger references group if we have any
+    if (this.triggersWithRefs.length > 0) {
+      groups.push(
+        new TriggersGroupItem(
+          this.triggersWithRefs,
+          this.docRefs,
+          this.filePath
+        )
+      );
+    }
+
+    // Add action references group if we have any
+    if (this.actionsWithRefs.length > 0) {
+      groups.push(
+        new ActionsGroupItem(this.actionsWithRefs, this.docRefs, this.filePath)
+      );
+    }
+
+    // Add field references group if we have any
+    if (this.fieldsWithRefs.length > 0) {
+      groups.push(
+        new FieldsGroupItem(this.fieldsWithRefs, this.docRefs, this.filePath)
+      );
+    }
+
+    // If we have task IDs, group by task ID
+    if (this.distinctTaskIds.length > 0) {
       // Group references by task ID
       this.distinctTaskIds.forEach((taskId) => {
         const refsWithTaskId = this.docRefs.filter(
@@ -1087,6 +1162,298 @@ class DocumentationRefsItem extends TreeItem {
       const refsForId = this.docRefs.filter((ref) => ref.id === id);
       return new DocumentationRefGroupItem(id, refsForId, this.filePath);
     });
+  }
+}
+
+/**
+ * Base class for code element groupings (procedures, triggers, etc.)
+ */
+class CodeElementGroupItem extends TreeItem {
+  constructor(label, elements, docRefs, filePath, iconName = "symbol-method") {
+    // Only auto-expand if not too many elements
+    const shouldStartExpanded = elements.length <= 8;
+
+    super(
+      label,
+      shouldStartExpanded
+        ? vscode.TreeItemCollapsibleState.Expanded
+        : vscode.TreeItemCollapsibleState.Collapsed
+    );
+
+    this.elements = elements;
+    this.docRefs = docRefs;
+    this.filePath = filePath;
+    this.description = `(${elements.length} items)`;
+    this.contextValue = "codeElementGroup";
+    this.iconPath = new vscode.ThemeIcon(iconName);
+
+    // Set a unique ID so we can remember expanded state
+    this.id = `codeElemGroup-${filePath}-${label}`;
+  }
+
+  /**
+   * Find documentation references within this element
+   * @param {Object} element The code element
+   * @returns {Array} Documentation references within this element
+   */
+  findRefsInElement(element) {
+    if (!element.startLine || !element.endLine) return [];
+
+    return this.docRefs.filter((ref) => {
+      const line = ref.lineNumber;
+      return line >= element.startLine && line <= element.endLine;
+    });
+  }
+}
+
+/**
+ * Tree item for procedures group
+ */
+class ProceduresGroupItem extends CodeElementGroupItem {
+  constructor(procedures, docRefs, filePath) {
+    super("Procedures", procedures, docRefs, filePath, "symbol-method");
+  }
+
+  getChildren() {
+    return this.elements.map((proc) => {
+      const refsInProc = this.findRefsInElement(proc);
+      return new ProcedureItem(proc, refsInProc, this.filePath);
+    });
+  }
+}
+
+/**
+ * Tree item for triggers group
+ */
+class TriggersGroupItem extends CodeElementGroupItem {
+  constructor(triggers, docRefs, filePath) {
+    super("Triggers", triggers, docRefs, filePath, "symbol-event");
+  }
+
+  getChildren() {
+    return this.elements.map((trigger) => {
+      const refsInTrigger = this.findRefsInElement(trigger);
+      return new TriggerItem(trigger, refsInTrigger, this.filePath);
+    });
+  }
+}
+
+/**
+ * Tree item for actions group
+ */
+class ActionsGroupItem extends CodeElementGroupItem {
+  constructor(actions, docRefs, filePath) {
+    super("Actions", actions, docRefs, filePath, "run");
+  }
+
+  getChildren() {
+    return this.elements.map((action) => {
+      const refsInAction = this.findRefsInElement(action);
+      return new ActionItem(action, refsInAction, this.filePath);
+    });
+  }
+}
+
+/**
+ * Tree item for fields group
+ */
+class FieldsGroupItem extends CodeElementGroupItem {
+  constructor(fields, docRefs, filePath) {
+    super("Fields", fields, docRefs, filePath, "symbol-field");
+  }
+
+  getChildren() {
+    return this.elements.map((field) => {
+      const refsInField = this.findRefsInElement(field);
+      return new FieldItem(field, refsInField, this.filePath);
+    });
+  }
+}
+
+/**
+ * Tree item for a single procedure
+ */
+class ProcedureItem extends TreeItem {
+  constructor(procedure, docRefs, filePath) {
+    // Use procedure name as label
+    const isLocal = procedure.isLocal ? "LOCAL " : "";
+    super(
+      `${isLocal}${procedure.name}`,
+      docRefs.length > 1
+        ? vscode.TreeItemCollapsibleState.Collapsed
+        : vscode.TreeItemCollapsibleState.None
+    );
+
+    this.procedure = procedure;
+    this.docRefs = docRefs;
+    this.filePath = filePath;
+    this.description = `(line ${procedure.lineNumber})`;
+    this.contextValue = "procedureItem";
+    this.iconPath = new vscode.ThemeIcon("symbol-method");
+
+    // Set a unique ID so we can remember expanded state
+    this.id = `proc-${filePath}-${procedure.name}-${procedure.lineNumber}`;
+
+    // Command to jump to the procedure
+    this.command = {
+      command: "bc-al-upgradeassistant.openDocumentationReference",
+      title: "Open Procedure Location",
+      arguments: [filePath, procedure.lineNumber],
+    };
+
+    // Include the context in the tooltip
+    this.tooltip = `${procedure.context}\n\nLine: ${procedure.lineNumber}\n\nClick to open file at procedure location`;
+  }
+
+  getChildren() {
+    // If only one doc ref, we don't need children as the item itself
+    // jumps to the line location
+    if (this.docRefs.length <= 1) return [];
+
+    // Otherwise, show all doc refs within this procedure
+    return this.docRefs.map(
+      (ref) => new DocumentationRefItem(ref, this.filePath)
+    );
+  }
+}
+
+/**
+ * Tree item for a single trigger
+ */
+class TriggerItem extends TreeItem {
+  constructor(trigger, docRefs, filePath) {
+    // Use trigger name as label
+    super(
+      trigger.name,
+      docRefs.length > 1
+        ? vscode.TreeItemCollapsibleState.Collapsed
+        : vscode.TreeItemCollapsibleState.None
+    );
+
+    this.trigger = trigger;
+    this.docRefs = docRefs;
+    this.filePath = filePath;
+    this.description = `(line ${trigger.lineNumber})`;
+    this.contextValue = "triggerItem";
+    this.iconPath = new vscode.ThemeIcon("symbol-event");
+
+    // Set a unique ID so we can remember expanded state
+    this.id = `trigger-${filePath}-${trigger.name}-${trigger.lineNumber}`;
+
+    // Command to jump to the trigger
+    this.command = {
+      command: "bc-al-upgradeassistant.openDocumentationReference",
+      title: "Open Trigger Location",
+      arguments: [filePath, trigger.lineNumber],
+    };
+
+    // Include the context in the tooltip
+    this.tooltip = `${trigger.context}\n\nLine: ${trigger.lineNumber}\n\nClick to open file at trigger location`;
+  }
+
+  getChildren() {
+    // If only one doc ref, we don't need children as the item itself
+    // jumps to the line location
+    if (this.docRefs.length <= 1) return [];
+
+    // Otherwise, show all doc refs within this trigger
+    return this.docRefs.map(
+      (ref) => new DocumentationRefItem(ref, this.filePath)
+    );
+  }
+}
+
+/**
+ * Tree item for a single action
+ */
+class ActionItem extends TreeItem {
+  constructor(action, docRefs, filePath) {
+    // Use action name as label
+    super(
+      action.name,
+      docRefs.length > 1
+        ? vscode.TreeItemCollapsibleState.Collapsed
+        : vscode.TreeItemCollapsibleState.None
+    );
+
+    this.action = action;
+    this.docRefs = docRefs;
+    this.filePath = filePath;
+    this.description = `(line ${action.lineNumber})`;
+    this.contextValue = "actionItem";
+    this.iconPath = new vscode.ThemeIcon("run");
+
+    // Set a unique ID so we can remember expanded state
+    this.id = `action-${filePath}-${action.name}-${action.lineNumber}`;
+
+    // Command to jump to the action
+    this.command = {
+      command: "bc-al-upgradeassistant.openDocumentationReference",
+      title: "Open Action Location",
+      arguments: [filePath, action.lineNumber],
+    };
+
+    // Include the context in the tooltip
+    this.tooltip = `${action.context}\n\nLine: ${action.lineNumber}\n\nClick to open file at action location`;
+  }
+
+  getChildren() {
+    // If only one doc ref, we don't need children as the item itself
+    // jumps to the line location
+    if (this.docRefs.length <= 1) return [];
+
+    // Otherwise, show all doc refs within this action
+    return this.docRefs.map(
+      (ref) => new DocumentationRefItem(ref, this.filePath)
+    );
+  }
+}
+
+/**
+ * Tree item for a single field
+ */
+class FieldItem extends TreeItem {
+  constructor(field, docRefs, filePath) {
+    // Use field name as label, include ID if available
+    const label = field.id ? `${field.name} (${field.id})` : field.name;
+
+    super(
+      label,
+      docRefs.length > 1
+        ? vscode.TreeItemCollapsibleState.Collapsed
+        : vscode.TreeItemCollapsibleState.None
+    );
+
+    this.field = field;
+    this.docRefs = docRefs;
+    this.filePath = filePath;
+    this.description = `(line ${field.lineNumber})`;
+    this.contextValue = "fieldItem";
+    this.iconPath = new vscode.ThemeIcon("symbol-field");
+
+    // Set a unique ID so we can remember expanded state
+    this.id = `field-${filePath}-${field.name}-${field.lineNumber}`;
+
+    // Command to jump to the field
+    this.command = {
+      command: "bc-al-upgradeassistant.openDocumentationReference",
+      title: "Open Field Location",
+      arguments: [filePath, field.lineNumber],
+    };
+
+    // Include the context in the tooltip
+    this.tooltip = `${field.context}\n\nLine: ${field.lineNumber}\n\nClick to open file at field location`;
+  }
+
+  getChildren() {
+    // If only one doc ref, we don't need children as the item itself
+    // jumps to the line location
+    if (this.docRefs.length <= 1) return [];
+
+    // Otherwise, show all doc refs within this field
+    return this.docRefs.map(
+      (ref) => new DocumentationRefItem(ref, this.filePath)
+    );
   }
 }
 

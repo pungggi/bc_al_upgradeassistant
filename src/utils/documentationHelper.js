@@ -136,10 +136,198 @@ function normalizePathForStorage(filePath) {
   return filePath.replace(/\\/g, "/");
 }
 
+/**
+ * Find all procedures in the content
+ * @param {string} content - The content to search in
+ * @returns {Array<{name: string, isLocal: boolean, lineNumber: number, context: string}>} Found procedures
+ */
+function findProcedures(content) {
+  if (!content) return [];
+
+  const procedures = [];
+  const lines = content.split("\n");
+  const procRegex = /^\s*(LOCAL\s+)?PROCEDURE\s+(\w+)@\d+\s*\(/i;
+  let currentProc = null;
+
+  lines.forEach((line, index) => {
+    const trimmedLine = line.trim().toLowerCase();
+    const match = line.match(procRegex);
+
+    if (match) {
+      if (currentProc) {
+        currentProc.endLine = index;
+      }
+      currentProc = {
+        name: match[2],
+        isLocal: !!match[1],
+        lineNumber: index + 1,
+        startLine: index + 1,
+        context: line.trim(),
+      };
+      procedures.push(currentProc);
+    } else if (trimmedLine === "end;" && currentProc) {
+      currentProc.endLine = index + 1;
+      currentProc = null;
+    }
+  });
+
+  // Handle the last procedure if it hasn't been closed
+  if (currentProc && !currentProc.endLine) {
+    currentProc.endLine = lines.length;
+  }
+
+  return procedures;
+}
+
+/**
+ * Find all triggers in the content
+ * @param {string} content - The content to search in
+ * @returns {Array<{name: string, lineNumber: number, context: string}>} Found triggers
+ */
+function findTriggers(content) {
+  if (!content) return [];
+
+  const triggers = [];
+  const lines = content.split("\n");
+  let inProperties = false;
+  let currentTrigger = null;
+  const triggerRegex = /^\s*(On\w+)\s*=/i;
+
+  lines.forEach((line, index) => {
+    const trimmedLine = line.trim();
+
+    if (trimmedLine === "PROPERTIES") {
+      inProperties = true;
+    } else if (inProperties) {
+      if (trimmedLine === "ActionList=ACTIONS" || trimmedLine === "}") {
+        if (currentTrigger) {
+          currentTrigger.endLine = index;
+          currentTrigger = null;
+        }
+        inProperties = false;
+      } else {
+        const match = trimmedLine.match(triggerRegex);
+        if (match) {
+          if (currentTrigger) {
+            currentTrigger.endLine = index;
+          }
+          currentTrigger = {
+            name: match[1],
+            lineNumber: index + 1,
+            startLine: index + 1,
+            context: line.trim(),
+          };
+          triggers.push(currentTrigger);
+        } else if (currentTrigger && trimmedLine === "BEGIN") {
+          // The actual trigger code starts after BEGIN
+          currentTrigger.startLine = index + 1;
+        } else if (currentTrigger && trimmedLine === "END") {
+          currentTrigger.endLine = index + 1;
+          currentTrigger = null;
+        }
+      }
+    }
+  });
+
+  // Handle unclosed trigger
+  if (currentTrigger && !currentTrigger.endLine) {
+    currentTrigger.endLine = lines.length;
+  }
+
+  return triggers;
+}
+
+/**
+ * Find all actions in the content
+ * @param {string} content - The content to search in
+ * @returns {Array<{name: string, lineNumber: number, context: string}>} Found actions
+ */
+function findActions(content) {
+  if (!content) return [];
+
+  const actions = [];
+  const lines = content.split("\n");
+  const actionRegex = /^\s*Name\s*=\s*(\w+)\s*;/i;
+  let currentAction = null;
+
+  lines.forEach((line, index) => {
+    const trimmedLine = line.trim();
+    const match = line.match(actionRegex);
+
+    if (match) {
+      if (currentAction) {
+        currentAction.endLine = index;
+      }
+      currentAction = {
+        name: match[1],
+        lineNumber: index + 1,
+        startLine: index + 1,
+        context: line.trim(),
+      };
+      actions.push(currentAction);
+    } else if (currentAction && trimmedLine === "{") {
+      // Action code block starts
+      currentAction.startLine = index + 1;
+    } else if (currentAction && trimmedLine === "}") {
+      currentAction.endLine = index + 1;
+      currentAction = null;
+    }
+  });
+
+  // Handle unclosed action
+  if (currentAction && !currentAction.endLine) {
+    currentAction.endLine = lines.length;
+  }
+
+  return actions;
+}
+
+/**
+ * Find all fields in the content
+ * @param {string} content - The content to search in
+ * @returns {Array<{id: string, name: string, lineNumber: number, context: string}>} Found fields
+ */
+function findFields(content) {
+  if (!content) return [];
+
+  const fields = [];
+  const lines = content.split("\n");
+  const fieldRegex = /^\s*{\s*(\d+)\s*;\s*;([^;]+);/;
+  let currentField = null;
+
+  lines.forEach((line, index) => {
+    const match = line.match(fieldRegex);
+
+    if (match) {
+      if (currentField) {
+        currentField.endLine = index;
+      }
+      currentField = {
+        id: match[1],
+        name: match[2].trim(),
+        lineNumber: index + 1,
+        startLine: index + 1,
+        endLine: index + 1, // Single line for basic fields
+        context: line.trim(),
+      };
+      fields.push(currentField);
+    } else if (currentField && line.trim().startsWith("{")) {
+      // Field definitions can span multiple lines
+      currentField.endLine = index + 1;
+    }
+  });
+
+  return fields;
+}
+
 module.exports = {
   createDocumentationRegex,
   findDocumentationReferences,
   filterContentByDocumentationIds,
   getDocumentationStorageFile,
   normalizePathForStorage,
+  findProcedures,
+  findTriggers,
+  findActions,
+  findFields,
 };

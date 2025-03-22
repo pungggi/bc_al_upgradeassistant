@@ -1,10 +1,14 @@
 # Change Log
 
-## [Upcoming Changes]
+## [0.0.82]
+
+- Added new grouping options in Documentation References view:
+  - Group by Procedures
+  - Group by Triggers
+  - Group by Actions
+  - Group by Fields
 
 ## [0.0.75]
-
-### Added
 
 - Added grouping by task ID in Documentation References view if applicable
 - Enhance toggleDocumentationReferenceNotImplemented to prompt for user description
