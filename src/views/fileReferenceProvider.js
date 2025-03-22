@@ -816,6 +816,284 @@ class FileReferenceProvider {
     }
   }
 
+  /**
+   * Toggle the "done" state of all documentation references in a procedure
+   * @param {string} filePath File path
+   * @param {number} startLine Procedure start line
+   * @param {number} endLine Procedure end line
+   * @returns {boolean} Operation success
+   */
+  toggleProcedureReferencesDone(filePath, startLine, endLine) {
+    try {
+      // Find all documentation references in this procedure
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      const docRefs = this._findDocumentationReferences(fileContent, filePath);
+
+      // Filter to references within the procedure's range
+      const refsInProcedure = docRefs.filter(
+        (ref) => ref.lineNumber >= startLine && ref.lineNumber <= endLine
+      );
+
+      if (refsInProcedure.length === 0) {
+        return false;
+      }
+
+      // Determine the target state (opposite of majority current state)
+      const doneCount = refsInProcedure.filter((ref) => ref.done).length;
+      const targetState = doneCount <= refsInProcedure.length / 2;
+
+      // Get storage file and data
+      const storageFile = this._getDocumentationStorageFile();
+
+      // Read existing data or create new
+      let storageData = {};
+      if (fs.existsSync(storageFile)) {
+        storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
+      }
+
+      const fileKey = this._normalizePathForStorage(filePath);
+      const config = vscode.workspace.getConfiguration(
+        "bc-al-upgradeassistant"
+      );
+      const userId = config.get("userId");
+
+      // Initialize file entry if needed
+      if (!storageData[fileKey]) {
+        storageData[fileKey] = { references: [] };
+      }
+
+      // Toggle state for each reference
+      for (const ref of refsInProcedure) {
+        // Find existing reference or add new one
+        let refData = storageData[fileKey].references.find(
+          (r) => r.id === ref.id && r.lineNumber === ref.lineNumber
+        );
+
+        if (refData) {
+          // Update state
+          refData.done = targetState;
+          // If marked as done, it can't be not implemented
+          if (targetState && refData.notImplemented) {
+            refData.notImplemented = false;
+          }
+          // Silently add/update userId
+          if (userId) {
+            refData.userId = userId;
+            refData.lastModified = new Date().toISOString();
+          }
+        } else {
+          // Add new entry
+          refData = {
+            id: ref.id,
+            lineNumber: ref.lineNumber,
+            done: targetState,
+            userId: userId || undefined,
+            lastModified: new Date().toISOString(),
+          };
+          storageData[fileKey].references.push(refData);
+        }
+      }
+
+      // Save updated data
+      fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
+
+      // Fire change event to refresh tree
+      this.refresh();
+
+      // Update decorations
+      this.updateDecorations();
+
+      return true;
+    } catch (error) {
+      console.error("Error toggling procedure references state:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Toggle the "not implemented" state of all documentation references in a procedure
+   * @param {string} filePath File path
+   * @param {number} startLine Procedure start line
+   * @param {number} endLine Procedure end line
+   * @returns {boolean} Operation success
+   */
+  toggleProcedureReferencesNotImplemented(filePath, startLine, endLine) {
+    try {
+      // Find all documentation references in this procedure
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      const docRefs = this._findDocumentationReferences(fileContent, filePath);
+
+      // Filter to references within the procedure's range
+      const refsInProcedure = docRefs.filter(
+        (ref) => ref.lineNumber >= startLine && ref.lineNumber <= endLine
+      );
+
+      if (refsInProcedure.length === 0) {
+        return false;
+      }
+
+      // Determine the target state (opposite of majority current state)
+      const notImplCount = refsInProcedure.filter(
+        (ref) => ref.notImplemented
+      ).length;
+      const targetState = notImplCount <= refsInProcedure.length / 2;
+
+      // Get storage file and data
+      const storageFile = this._getDocumentationStorageFile();
+
+      // Read existing data or create new
+      let storageData = {};
+      if (fs.existsSync(storageFile)) {
+        storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
+      }
+
+      const fileKey = this._normalizePathForStorage(filePath);
+      const config = vscode.workspace.getConfiguration(
+        "bc-al-upgradeassistant"
+      );
+      const userId = config.get("userId");
+
+      // Initialize file entry if needed
+      if (!storageData[fileKey]) {
+        storageData[fileKey] = { references: [] };
+      }
+
+      // Toggle state for each reference
+      for (const ref of refsInProcedure) {
+        // Find existing reference or add new one
+        let refData = storageData[fileKey].references.find(
+          (r) => r.id === ref.id && r.lineNumber === ref.lineNumber
+        );
+
+        if (refData) {
+          // Update state
+          refData.notImplemented = targetState;
+          // If marked as not implemented, it can't be done
+          if (targetState && refData.done) {
+            refData.done = false;
+          }
+          // Silently add/update userId
+          if (userId) {
+            refData.userId = userId;
+            refData.lastModified = new Date().toISOString();
+          }
+        } else {
+          // Add new entry
+          refData = {
+            id: ref.id,
+            lineNumber: ref.lineNumber,
+            done: false,
+            notImplemented: targetState,
+            userId: userId || undefined,
+            lastModified: new Date().toISOString(),
+          };
+          storageData[fileKey].references.push(refData);
+        }
+      }
+
+      // Save updated data
+      fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
+
+      // Fire change event to refresh tree
+      this.refresh();
+
+      // Update decorations
+      this.updateDecorations();
+
+      return true;
+    } catch (error) {
+      console.error(
+        "Error toggling procedure references not implemented state:",
+        error
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Set description for all documentation references in a procedure
+   * @param {string} filePath File path
+   * @param {number} startLine Procedure start line
+   * @param {number} endLine Procedure end line
+   * @param {string} description User-provided description
+   * @returns {boolean} Success status
+   */
+  setProcedureReferencesDescription(filePath, startLine, endLine, description) {
+    try {
+      // Find all documentation references in this procedure
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      const docRefs = this._findDocumentationReferences(fileContent, filePath);
+
+      // Filter to references within the procedure's range
+      const refsInProcedure = docRefs.filter(
+        (ref) => ref.lineNumber >= startLine && ref.lineNumber <= endLine
+      );
+
+      if (refsInProcedure.length === 0) {
+        return false;
+      }
+
+      // Get storage file and data
+      const storageFile = this._getDocumentationStorageFile();
+
+      // Read existing data or create new
+      let storageData = {};
+      if (fs.existsSync(storageFile)) {
+        storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
+      }
+
+      const fileKey = this._normalizePathForStorage(filePath);
+      const config = vscode.workspace.getConfiguration(
+        "bc-al-upgradeassistant"
+      );
+      const userId = config.get("userId");
+
+      // Initialize file entry if needed
+      if (!storageData[fileKey]) {
+        storageData[fileKey] = { references: [] };
+      }
+
+      // Set description for each reference
+      for (const ref of refsInProcedure) {
+        // Find existing reference or add new one
+        let refData = storageData[fileKey].references.find(
+          (r) => r.id === ref.id && r.lineNumber === ref.lineNumber
+        );
+
+        if (refData) {
+          // Update description
+          refData.userDescription = description;
+          // Silently add/update userId
+          if (userId) {
+            refData.userId = userId;
+            refData.lastModified = new Date().toISOString();
+          }
+        } else {
+          // Add new entry
+          refData = {
+            id: ref.id,
+            lineNumber: ref.lineNumber,
+            userDescription: description,
+            userId: userId || undefined,
+            lastModified: new Date().toISOString(),
+          };
+          storageData[fileKey].references.push(refData);
+        }
+      }
+
+      // Save updated data
+      fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
+
+      // Fire change event to refresh tree
+      this.refresh();
+
+      return true;
+    } catch (error) {
+      console.error("Error setting procedure references description:", error);
+      return false;
+    }
+  }
+
   updateDecorations() {
     if (!this.currentEditor) {
       return;
@@ -1303,14 +1581,15 @@ class ProcedureItem extends TreeItem {
 
     // Include the context in the tooltip
     this.tooltip = `${procedure.context}\n\nLine: ${procedure.lineNumber}\n\nClick to open file at procedure location`;
+
+    // Add properties for bulk operations
+    this.startLine = procedure.startLine;
+    this.endLine = procedure.endLine;
   }
 
   getChildren() {
-    // If only one doc ref, we don't need children as the item itself
-    // jumps to the line location
-    if (this.docRefs.length <= 1) return [];
-
-    // Otherwise, show all doc refs within this procedure
+    // If only one doc ref, we still need to show it as a child
+    // so the user can interact with individual references
     return this.docRefs.map(
       (ref) => new DocumentationRefItem(ref, this.filePath)
     );

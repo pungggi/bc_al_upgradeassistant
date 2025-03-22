@@ -582,6 +582,98 @@ async function activate(context) {
       )
     );
 
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.toggleProcedureReferencesDone",
+        async (item) => {
+          if (item && item.filePath && item.startLine && item.endLine) {
+            const success = fileReferenceProvider.toggleProcedureReferencesDone(
+              item.filePath,
+              item.startLine,
+              item.endLine
+            );
+
+            if (success) {
+              const targetState = true; // We don't know the exact state but it was toggled
+              vscode.window.showInformationMessage(
+                `All references in procedure ${
+                  targetState ? "marked as done" : "marked as not done"
+                }`
+              );
+            } else {
+              vscode.window.showInformationMessage(
+                "No documentation references found in procedure"
+              );
+            }
+          }
+        }
+      )
+    );
+
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.toggleProcedureReferencesNotImplemented",
+        async (item) => {
+          if (item && item.filePath && item.startLine && item.endLine) {
+            const success =
+              fileReferenceProvider.toggleProcedureReferencesNotImplemented(
+                item.filePath,
+                item.startLine,
+                item.endLine
+              );
+
+            if (success) {
+              vscode.window.showInformationMessage(
+                "All references in procedure updated"
+              );
+            } else {
+              vscode.window.showInformationMessage(
+                "No documentation references found in procedure"
+              );
+            }
+          }
+        }
+      )
+    );
+
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.setProcedureReferencesDescription",
+        async (item) => {
+          if (item && item.filePath && item.startLine && item.endLine) {
+            // Prompt for description
+            const description = await vscode.window.showInputBox({
+              prompt: "Enter note to apply to all references in this procedure",
+              placeHolder: "Note text",
+              value: "",
+            });
+
+            if (description === undefined) {
+              return; // User cancelled
+            }
+
+            const success =
+              fileReferenceProvider.setProcedureReferencesDescription(
+                item.filePath,
+                item.startLine,
+                item.endLine,
+                description
+              );
+
+            if (success) {
+              vscode.window.showInformationMessage(
+                "Note added to all references in procedure"
+              );
+            } else {
+              vscode.window.showInformationMessage(
+                "No documentation references found in procedure"
+              );
+            }
+          }
+        }
+      )
+    );
+
     console.log(`${EXTENSION_ID} extension activated successfully`);
   } catch (error) {
     console.error("Error during extension activation:", error);

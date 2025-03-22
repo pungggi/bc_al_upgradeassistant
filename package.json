@@ -103,6 +103,24 @@
         "title": "Add Reference",
         "category": "BC/AL Upgrade Assistant",
         "icon": "$(add)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.toggleProcedureReferencesDone",
+        "title": "Toggle All References as Done/Not Done",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.toggleProcedureReferencesNotImplemented",
+        "title": "Toggle All References as Not Implemented",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.setProcedureReferencesDescription",
+        "title": "Add/Edit Note for All References",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(edit)"
       }
     ],
     "menus": {
@@ -233,6 +251,31 @@
           "command": "bc-al-upgradeassistant.addReference",
           "when": "view == bc-al-references && viewItem == referencedObjectsGroup || view == bc-al-file-info && viewItem == referencedObjectsGroup",
           "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleProcedureReferencesDone",
+          "when": "view == bc-al-references && viewItem == procedureItem || view == bc-al-file-info && viewItem == procedureItem",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleProcedureReferencesNotImplemented",
+          "when": "view == bc-al-references && viewItem == procedureItem || view == bc-al-file-info && viewItem == procedureItem",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.setProcedureReferencesDescription",
+          "when": "view == bc-al-references && viewItem == procedureItem || view == bc-al-file-info && viewItem == procedureItem",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleProcedureReferencesDone",
+          "when": "view == bc-al-references && viewItem == procedureItem || view == bc-al-file-info && viewItem == procedureItem",
+          "group": "inline"
+        },
+        {
+          "command": "bc-al-upgradeassistant.setProcedureReferencesDescription",
+          "when": "view == bc-al-references && viewItem == procedureItem || view == bc-al-file-info && viewItem == procedureItem",
+          "group": "inline"
         }
       ]
     },
