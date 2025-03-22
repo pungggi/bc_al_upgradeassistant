@@ -2,7 +2,7 @@
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
   "description": "Assists you in transforming old C/AL and more",
-  "version": "0.0.80",
+  "version": "0.0.81",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
@@ -97,6 +97,12 @@
         "title": "Delete Referenced Object",
         "category": "BC/AL Upgrade Assistant",
         "icon": "$(trash)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.addReference",
+        "title": "Add Reference",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(add)"
       }
     ],
     "menus": {
@@ -221,6 +227,11 @@
         {
           "command": "bc-al-upgradeassistant.deleteReferencedObject",
           "when": "view == bc-al-file-info && viewItem == referencedObject",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.addReference",
+          "when": "view == bc-al-references && viewItem == referencedObjectsGroup || view == bc-al-file-info && viewItem == referencedObjectsGroup",
           "group": "1_modification"
         }
       ]

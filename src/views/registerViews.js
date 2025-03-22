@@ -186,7 +186,6 @@ function registerViews(context) {
                   const activeEditor = vscode.window.activeTextEditor;
                   if (!activeEditor) return;
 
-                  const filePath = activeEditor.document.uri.fsPath;
                   // Create an item object with the necessary properties for deletion
                   const item = { type, id, indexFolder };
 

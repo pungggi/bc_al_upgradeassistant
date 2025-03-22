@@ -467,6 +467,86 @@ async function activate(context) {
       )
     );
 
+    // Register command to add a reference
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.addReference",
+        async (objectsGroup) => {
+          if (!objectsGroup) return;
+
+          // Get active text editor's file path
+          const activeEditor = vscode.window.activeTextEditor;
+          if (!activeEditor) {
+            vscode.window.showErrorMessage("No active file open");
+            return;
+          }
+
+          const filePath = activeEditor.document.uri.fsPath;
+          if (!filePath) return;
+
+          // Get all AL files in workspace
+          const alFiles = await findAlFiles();
+          if (!alFiles || alFiles.length === 0) {
+            vscode.window.showInformationMessage(
+              "No AL files found in the workspace"
+            );
+            return;
+          }
+
+          // Extract object info from AL files
+          const objects = [];
+          for (const file of alFiles) {
+            try {
+              const objectInfo = extractAlObjectInfo(file.fsPath);
+              if (objectInfo) {
+                objects.push({
+                  label: `${objectInfo.type} ${objectInfo.id}: ${objectInfo.name}`,
+                  // Remove file path from display to make it less verbose
+                  objectInfo,
+                });
+              }
+            } catch (err) {
+              console.error(`Error processing AL file ${file.fsPath}:`, err);
+            }
+          }
+
+          if (objects.length === 0) {
+            vscode.window.showInformationMessage(
+              "No AL objects found in the workspace"
+            );
+            return;
+          }
+
+          // Let user pick an object
+          const selected = await vscode.window.showQuickPick(objects, {
+            placeHolder: "Select an object to add as reference",
+          });
+
+          if (!selected) return;
+
+          // Add reference to the JSON file
+          try {
+            const result = await addReferenceToFile(
+              filePath,
+              selected.objectInfo,
+              fileReferenceProvider
+            );
+
+            if (result) {
+              fileReferenceProvider.refresh();
+            } else {
+              vscode.window.showErrorMessage(
+                `Failed to add reference to ${selected.objectInfo.type} ${selected.objectInfo.id}`
+              );
+            }
+          } catch (error) {
+            console.error("Error adding reference:", error);
+            vscode.window.showErrorMessage(`Error: ${error.message}`);
+          }
+        }
+      )
+    );
+
     // Add a subscription to detect when files are saved
     context.subscriptions.push(
       vscode.workspace.onDidSaveTextDocument((document) => {
@@ -882,9 +962,7 @@ async function generateDocumentationSummary(provider) {
 
     // ID-based report with userId
     let idContent = `# Documentation References by ID\n\n${statsSection}`;
-
     const idGroups = groupBy(allRefs, (ref) => extractFullId(ref.context));
-
     for (const [id, refs] of Object.entries(idGroups)) {
       const groupStatus = getCompoundStatus(refs);
       idContent += `### ${id} (${groupStatus})\n\n`;
@@ -918,7 +996,6 @@ async function generateDocumentationSummary(provider) {
       content: idContent,
       language: "markdown",
     });
-
     await vscode.window.showTextDocument(fileDoc, {
       viewColumn: vscode.ViewColumn.One,
     });
@@ -1035,7 +1112,6 @@ function updateTabIcon(tab, iconType) {
 function cleanupStatusBarItems() {
   // Dispose all status bar items except for the current file
   const currentFilePath = vscode.window.activeTextEditor?.document.uri.fsPath;
-
   for (const filePath in globalStatusBarItems) {
     if (filePath !== currentFilePath) {
       globalStatusBarItems[filePath].dispose();
@@ -1062,10 +1138,9 @@ async function deleteReferencedObject(item, provider) {
   const referenceFileName = fileName.replace(/\.txt$/, ".json");
   const referenceFilePath = path.join(indexFolder, referenceFileName);
 
-  if (!fs.existsSync(referenceFilePath)) return false;
-
   try {
     // Read the reference file
+    if (!fs.existsSync(referenceFilePath)) return false;
     const referenceData = JSON.parse(
       fs.readFileSync(referenceFilePath, "utf8")
     );
@@ -1082,17 +1157,176 @@ async function deleteReferencedObject(item, provider) {
       (ref) => ref.type === item.type && ref.number.toString() === item.id
     );
 
-    if (index === -1) return false;
-
     // Remove the object
+    if (index === -1) return false;
     referenceData.referencedWorkingObjects.splice(index, 1);
 
     // Write the updated file
     fs.writeFileSync(referenceFilePath, JSON.stringify(referenceData, null, 2));
-
     return true;
   } catch (error) {
     console.error("Error deleting referenced object:", error);
+    return false;
+  }
+}
+
+/**
+ * Find all AL files in the workspace
+ * @returns {Promise<vscode.Uri[]>} The AL files
+ */
+async function findAlFiles() {
+  return vscode.workspace.findFiles("**/*.al", "**/node_modules/**");
+}
+
+/**
+ * Extract AL object info from file
+ * @param {string} filePath Path to the AL file
+ * @returns {{type: string, id: string, name: string}|null} Object info or null
+ */
+function extractAlObjectInfo(filePath) {
+  try {
+    const content = fs.readFileSync(filePath, "utf8");
+
+    // Look for object declarations
+    const patterns = [
+      // tableextension, pageextension, etc.
+      /\b(tableextension|pageextension|reportextension|codeunitextension)\s+(\d+)\s+["']([^"']+)["']/i,
+      // table, page, report, codeunit, etc.
+      /\b(table|page|report|codeunit|query|xmlport|enum|profile|interface)\s+(\d+)\s+["']([^"']+)["']/i,
+      // permissionset
+      /\b(permissionset)\s+(\w+)\s+/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = content.match(pattern);
+      if (match) {
+        return {
+          type: match[1],
+          id: match[2],
+          name: match[3] || match[2], // For permissionsets with no numeric ID
+        };
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Error extracting AL object info:", error);
+    return null;
+  }
+}
+
+/**
+ * Add a reference to a file
+ * @param {string} filePath The file to add the reference to
+ * @param {Object} objectInfo The object information
+ * @param {FileReferenceProvider} provider The file reference provider
+ * @returns {Promise<boolean>} Whether the addition was successful
+ */
+async function addReferenceToFile(filePath, objectInfo, provider) {
+  if (!filePath || !objectInfo || !provider) return false;
+
+  // Find the .index folder
+  const indexFolder = provider._findIndexFolder();
+  if (!indexFolder) return false;
+
+  // Get reference file path
+  const fileName = path.basename(filePath);
+  const referenceFileName = fileName.replace(/\.txt$/, ".json");
+  const referenceFilePath = path.join(indexFolder, referenceFileName);
+
+  try {
+    // Read existing reference file if it exists
+    let referenceData = {};
+    if (fs.existsSync(referenceFilePath)) {
+      referenceData = JSON.parse(fs.readFileSync(referenceFilePath, "utf8"));
+    }
+
+    // Initialize referencedWorkingObjects array if it doesn't exist
+    if (!referenceData.referencedWorkingObjects) {
+      referenceData.referencedWorkingObjects = [];
+    }
+
+    // Check if reference already exists
+    const exists = referenceData.referencedWorkingObjects.some(
+      (ref) =>
+        ref.type === objectInfo.type && ref.number.toString() === objectInfo.id
+    );
+    if (exists) {
+      vscode.window.showInformationMessage(
+        `Reference to ${objectInfo.type} ${objectInfo.id} already exists`
+      );
+      return true;
+    }
+
+    // Add new reference
+    referenceData.referencedWorkingObjects.push({
+      type: objectInfo.type,
+      number: parseInt(objectInfo.id),
+    });
+
+    // Write updated file
+    fs.writeFileSync(referenceFilePath, JSON.stringify(referenceData, null, 2));
+
+    // Also create object folder and info.json in the .index structure
+    const objectTypeFolder = path.join(
+      indexFolder,
+      objectInfo.type.toLowerCase()
+    );
+    const objectIdFolder = path.join(objectTypeFolder, objectInfo.id);
+
+    // Create folders if they don't exist
+    if (!fs.existsSync(objectTypeFolder)) {
+      fs.mkdirSync(objectTypeFolder, { recursive: true });
+    }
+
+    if (!fs.existsSync(objectIdFolder)) {
+      fs.mkdirSync(objectIdFolder, { recursive: true });
+    }
+
+    // Get the original AL file path - update this to use the full fsPath from the selected file
+    // Instead of depending on objectInfo.detail which might not be populated
+    let originalPath = "";
+    if (objectInfo.fsPath) {
+      originalPath = objectInfo.fsPath;
+    } else {
+      // Try to find the AL file in the workspace by object type and ID
+      const alFiles = await findAlFiles();
+
+      for (const file of alFiles) {
+        try {
+          const fileContent = fs.readFileSync(file.fsPath, "utf8");
+          const regex = new RegExp(
+            `\\b${objectInfo.type}\\s+${objectInfo.id}\\b`,
+            "i"
+          );
+
+          if (regex.test(fileContent)) {
+            originalPath = file.fsPath;
+            break;
+          }
+        } catch (err) {
+          // Continue to next file if there's an error
+          console.error(`Error reading file ${file.fsPath}:`, err);
+        }
+      }
+    }
+
+    // Create or update info.json file with all required fields
+    const infoFilePath = path.join(objectIdFolder, "info.json");
+    const infoData = {
+      originalPath: originalPath,
+      fileName: path.basename(originalPath || ""),
+      objectType: objectInfo.type.toLowerCase(),
+      objectNumber: objectInfo.id,
+      indexedAt: new Date().toISOString(),
+      referencedMigrationFiles: [filePath], // Include current file as a referenced migration file
+    };
+
+    fs.writeFileSync(infoFilePath, JSON.stringify(infoData, null, 2));
+
+    return true;
+  } catch (error) {
+    console.error("Error adding reference:", error);
     return false;
   }
 }
