@@ -437,6 +437,39 @@ async function activate(context) {
       globalStatusBarItems[filePath] = statusBarItem;
     }
 
+    // Register command to delete a referenced object
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.deleteReferencedObject",
+        async (item) => {
+          if (!item || !item.type || !item.id || !item.indexFolder) {
+            return;
+          }
+
+          try {
+            const result = await deleteReferencedObject(
+              item,
+              fileReferenceProvider
+            );
+            if (result) {
+              vscode.window.showInformationMessage(
+                `Deleted reference to ${item.type} ${item.id}`
+              );
+              // Refresh the view
+              fileReferenceProvider.refresh();
+            } else {
+              vscode.window.showErrorMessage(
+                `Failed to delete reference to ${item.type} ${item.id}`
+              );
+            }
+          } catch (error) {
+            console.error("Error deleting referenced object:", error);
+            vscode.window.showErrorMessage(`Error: ${error.message}`);
+          }
+        }
+      )
+    );
+
     // Add a subscription to detect when files are saved
     context.subscriptions.push(
       vscode.workspace.onDidSaveTextDocument((document) => {
@@ -1011,6 +1044,59 @@ function cleanupStatusBarItems() {
       globalStatusBarItems[filePath].dispose();
       delete globalStatusBarItems[filePath];
     }
+  }
+}
+
+/**
+ * Delete a referenced object from the JSON file
+ * @param {Object} item The referenced object item
+ * @param {FileReferenceProvider} provider The file reference provider
+ * @returns {Promise<boolean>} Whether the deletion was successful
+ */
+async function deleteReferencedObject(item, provider) {
+  if (!provider || !provider.activeEditor) return false;
+
+  const filePath = provider.activeEditor.document.uri.fsPath;
+  if (!filePath) return false;
+
+  // Get the reference file path
+  const indexFolder = item.indexFolder;
+  const fileName = path.basename(filePath);
+  const referenceFileName = fileName.replace(/\.txt$/, ".json");
+  const referenceFilePath = path.join(indexFolder, referenceFileName);
+
+  if (!fs.existsSync(referenceFilePath)) return false;
+
+  try {
+    // Read the reference file
+    const referenceData = JSON.parse(
+      fs.readFileSync(referenceFilePath, "utf8")
+    );
+
+    if (
+      !referenceData.referencedWorkingObjects ||
+      !Array.isArray(referenceData.referencedWorkingObjects)
+    ) {
+      return false;
+    }
+
+    // Find the object to delete
+    const index = referenceData.referencedWorkingObjects.findIndex(
+      (ref) => ref.type === item.type && ref.number.toString() === item.id
+    );
+
+    if (index === -1) return false;
+
+    // Remove the object
+    referenceData.referencedWorkingObjects.splice(index, 1);
+
+    // Write the updated file
+    fs.writeFileSync(referenceFilePath, JSON.stringify(referenceData, null, 2));
+
+    return true;
+  } catch (error) {
+    console.error("Error deleting referenced object:", error);
+    return false;
   }
 }
 

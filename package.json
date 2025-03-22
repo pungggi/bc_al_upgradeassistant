@@ -91,6 +91,12 @@
         "title": "Generate Documentation References Summary",
         "category": "BC/AL Upgrade Assistant",
         "icon": "$(notebook)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.deleteReferencedObject",
+        "title": "Delete Referenced Object",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
@@ -206,6 +212,16 @@
           "when": "view == bc-al-references && viewItem == migrationFile || view == bc-al-file-info && viewItem == migrationFile",
           "group": "inline@1",
           "title": "Open"
+        },
+        {
+          "command": "bc-al-upgradeassistant.deleteReferencedObject",
+          "when": "view == bc-al-references && viewItem == referencedObject",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.deleteReferencedObject",
+          "when": "view == bc-al-file-info && viewItem == referencedObject",
+          "group": "1_modification"
         }
       ]
     },

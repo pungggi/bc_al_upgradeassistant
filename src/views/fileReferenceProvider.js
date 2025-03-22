@@ -949,6 +949,11 @@ class ReferencedObjectItem extends TreeItem {
     };
     this.iconPath = new vscode.ThemeIcon("file-code");
 
+    // Store these properties for use with the delete command
+    this.type = type;
+    this.id = id;
+    this.indexFolder = indexFolder;
+
     // Try to get object name
     const objectFolder = path.join(indexFolder, type.toLowerCase(), id);
     const infoFilePath = path.join(objectFolder, "info.json");
@@ -961,6 +966,11 @@ class ReferencedObjectItem extends TreeItem {
           this.description = fileNameMatch[1].replace(/_/g, " ");
         }
       }
+    } else {
+      // No info file found
+      this.description = "No info file found";
+      this.iconPath = new vscode.ThemeIcon("warning");
+      this.tooltip = `No info file found for ${type} ${id}. You can delete this reference if needed.`;
     }
   }
 }
