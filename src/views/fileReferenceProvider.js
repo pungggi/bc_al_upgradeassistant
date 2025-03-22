@@ -290,53 +290,45 @@ class FileReferenceProvider {
         filePath
       );
 
+      // Check for reference file
+      if (fs.existsSync(referenceFilePath)) {
+        try {
+          const referenceData = JSON.parse(
+            fs.readFileSync(referenceFilePath, "utf8")
+          );
+
+          if (referenceData.referencedWorkingObjects?.length > 0) {
+            const referencedObjects =
+              referenceData.referencedWorkingObjects.map((ref) => {
+                return new ReferencedObjectItem(
+                  ref.type,
+                  ref.number.toString(),
+                  indexFolder
+                );
+              });
+            result.push(new ReferencedObjectsGroup(referencedObjects));
+          }
+        } catch (parseError) {
+          console.error("Error parsing reference file:", parseError);
+          result.push(
+            new TreeItem(
+              `Error reading references: ${parseError.message}`,
+              vscode.TreeItemCollapsibleState.None
+            )
+          );
+        }
+      }
+
+      // Add documentation references after referenced objects
       if (documentationRefs.length > 0) {
         result.push(new DocumentationRefsItem(documentationRefs, filePath));
       }
 
-      // Check for reference file
-      if (!fs.existsSync(referenceFilePath)) {
-        if (result.length === 0) {
-          result.push(
-            new TreeItem(
-              "No references found for this file",
-              vscode.TreeItemCollapsibleState.None
-            )
-          );
-        }
-        this.updateDecorations();
-        return result;
-      }
-
-      try {
-        const referenceData = JSON.parse(
-          fs.readFileSync(referenceFilePath, "utf8")
-        );
-
-        if (referenceData.referencedWorkingObjects?.length > 0) {
-          const referencedObjects = referenceData.referencedWorkingObjects.map(
-            (ref) => {
-              return new ReferencedObjectItem(
-                ref.type,
-                ref.number.toString(),
-                indexFolder
-              );
-            }
-          );
-          result.push(new ReferencedObjectsGroup(referencedObjects));
-        } else if (result.length === 0) {
-          result.push(
-            new TreeItem(
-              "No referenced objects found",
-              vscode.TreeItemCollapsibleState.None
-            )
-          );
-        }
-      } catch (parseError) {
-        console.error("Error parsing reference file:", parseError);
+      // If no items added, show a message
+      if (result.length === 0) {
         result.push(
           new TreeItem(
-            `Error reading references: ${parseError.message}`,
+            "No references found for this file",
             vscode.TreeItemCollapsibleState.None
           )
         );
