@@ -452,9 +452,6 @@ async function activate(context) {
               fileReferenceProvider
             );
             if (result) {
-              vscode.window.showInformationMessage(
-                `Deleted reference to ${item.type} ${item.id}`
-              );
               // Refresh the view
               fileReferenceProvider.refresh();
             } else {

@@ -173,9 +173,30 @@ function registerViews(context) {
           const infoFilePath = path.join(objectFolder, "info.json");
 
           if (!fs.existsSync(infoFilePath)) {
-            vscode.window.showErrorMessage(
-              `No info file found for ${type} ${id}`
-            );
+            // Show error message with a delete button
+            vscode.window
+              .showErrorMessage(
+                `No info file found for ${type} ${id}`,
+                { modal: false },
+                { title: "Delete Reference", isCloseAffordance: false }
+              )
+              .then((selection) => {
+                if (selection && selection.title === "Delete Reference") {
+                  // Get the active editor file path to find the reference file
+                  const activeEditor = vscode.window.activeTextEditor;
+                  if (!activeEditor) return;
+
+                  const filePath = activeEditor.document.uri.fsPath;
+                  // Create an item object with the necessary properties for deletion
+                  const item = { type, id, indexFolder };
+
+                  // Execute the delete command
+                  vscode.commands.executeCommand(
+                    "bc-al-upgradeassistant.deleteReferencedObject",
+                    item
+                  );
+                }
+              });
             return;
           }
 
