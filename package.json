@@ -2,7 +2,7 @@
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
   "description": "Assists you in transforming old C/AL and more",
-  "version": "0.0.82",
+  "version": "0.0.83",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
@@ -118,6 +118,60 @@
       },
       {
         "command": "bc-al-upgradeassistant.setProcedureReferencesDescription",
+        "title": "Add/Edit Note for All References",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.toggleTriggerReferencesDone",
+        "title": "Toggle All References as Done/Not Done",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.toggleTriggerReferencesNotImplemented",
+        "title": "Toggle All References as Not Implemented",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.setTriggerReferencesDescription",
+        "title": "Add/Edit Note for All References",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.toggleActionReferencesDone",
+        "title": "Toggle All References as Done/Not Done",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.toggleActionReferencesNotImplemented",
+        "title": "Toggle All References as Not Implemented",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.setActionReferencesDescription",
+        "title": "Add/Edit Note for All References",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.toggleFieldReferencesDone",
+        "title": "Toggle All References as Done/Not Done",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.toggleFieldReferencesNotImplemented",
+        "title": "Toggle All References as Not Implemented",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.setFieldReferencesDescription",
         "title": "Add/Edit Note for All References",
         "category": "BC/AL Upgrade Assistant",
         "icon": "$(edit)"
@@ -275,6 +329,81 @@
         {
           "command": "bc-al-upgradeassistant.setProcedureReferencesDescription",
           "when": "view == bc-al-references && viewItem == procedureItem || view == bc-al-file-info && viewItem == procedureItem",
+          "group": "inline"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleTriggerReferencesDone",
+          "when": "view == bc-al-references && viewItem == triggerItem || view == bc-al-file-info && viewItem == triggerItem",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleTriggerReferencesNotImplemented",
+          "when": "view == bc-al-references && viewItem == triggerItem || view == bc-al-file-info && viewItem == triggerItem",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.setTriggerReferencesDescription",
+          "when": "view == bc-al-references && viewItem == triggerItem || view == bc-al-file-info && viewItem == triggerItem",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleTriggerReferencesDone",
+          "when": "view == bc-al-references && viewItem == triggerItem || view == bc-al-file-info && viewItem == triggerItem",
+          "group": "inline"
+        },
+        {
+          "command": "bc-al-upgradeassistant.setTriggerReferencesDescription",
+          "when": "view == bc-al-references && viewItem == triggerItem || view == bc-al-file-info && viewItem == triggerItem",
+          "group": "inline"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleActionReferencesDone",
+          "when": "view == bc-al-references && viewItem == actionItem || view == bc-al-file-info && viewItem == actionItem",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleActionReferencesNotImplemented",
+          "when": "view == bc-al-references && viewItem == actionItem || view == bc-al-file-info && viewItem == actionItem",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.setActionReferencesDescription",
+          "when": "view == bc-al-references && viewItem == actionItem || view == bc-al-file-info && viewItem == actionItem",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleActionReferencesDone",
+          "when": "view == bc-al-references && viewItem == actionItem || view == bc-al-file-info && viewItem == actionItem",
+          "group": "inline"
+        },
+        {
+          "command": "bc-al-upgradeassistant.setActionReferencesDescription",
+          "when": "view == bc-al-references && viewItem == actionItem || view == bc-al-file-info && viewItem == actionItem",
+          "group": "inline"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleFieldReferencesDone",
+          "when": "view == bc-al-references && viewItem == fieldItem || view == bc-al-file-info && viewItem == fieldItem",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleFieldReferencesNotImplemented",
+          "when": "view == bc-al-references && viewItem == fieldItem || view == bc-al-file-info && viewItem == fieldItem",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.setFieldReferencesDescription",
+          "when": "view == bc-al-references && viewItem == fieldItem || view == bc-al-file-info && viewItem == fieldItem",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleFieldReferencesDone",
+          "when": "view == bc-al-references && viewItem == fieldItem || view == bc-al-file-info && viewItem == fieldItem",
+          "group": "inline"
+        },
+        {
+          "command": "bc-al-upgradeassistant.setFieldReferencesDescription",
+          "when": "view == bc-al-references && viewItem == fieldItem || view == bc-al-file-info && viewItem == fieldItem",
           "group": "inline"
         }
       ]

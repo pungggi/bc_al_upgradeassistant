@@ -53,18 +53,21 @@ class FileReferenceProvider {
     });
 
     // Create decoration type for undone references
-    this.undoneDecorationType = vscode.window.createTextEditorDecorationType({
-      gutterIconPath: path.join(
-        __dirname,
-        "..",
-        "..",
-        "media",
-        "unchecked.svg"
-      ),
-      gutterIconSize: "100%",
-      fontWeight: "bold",
-      isWholeLine: true,
-    });
+    this.uncheckedDecorationType = vscode.window.createTextEditorDecorationType(
+      {
+        gutterIconPath: path.join(
+          __dirname,
+          "..",
+          "..",
+          "media",
+          "unchecked.svg"
+        ),
+        gutterIconSize: "100%",
+        fontWeight: "normal",
+        color: new vscode.ThemeColor("editorGutter.modifiedBackground"),
+        isWholeLine: true,
+      }
+    );
 
     // Create decoration type for not implemented references
     this.notImplementedDecorationType =
@@ -680,9 +683,15 @@ class FileReferenceProvider {
    * @param {string} filePath File path
    * @param {string} id Documentation ID
    * @param {number} lineNumber Line number
+   * @param {string} [userDescription] Optional user description when toggling to not implemented
    * @returns {boolean} New "not implemented" state
    */
-  toggleDocumentationReferenceNotImplemented(filePath, id, lineNumber) {
+  toggleDocumentationReferenceNotImplemented(
+    filePath,
+    id,
+    lineNumber,
+    userDescription
+  ) {
     const result = (() => {
       try {
         const storageFile = this._getDocumentationStorageFile();
@@ -714,6 +723,12 @@ class FileReferenceProvider {
         if (ref) {
           // Toggle not implemented state
           ref.notImplemented = !ref.notImplemented;
+
+          // If toggling TO not implemented and we have a description, add it
+          if (ref.notImplemented && userDescription !== undefined) {
+            ref.userDescription = userDescription;
+          }
+
           // Silently add/update userId
           if (userId) {
             ref.userId = userId;
@@ -725,12 +740,13 @@ class FileReferenceProvider {
             ref.done = false;
           }
         } else {
-          // Add new entry
+          // Add new entry (initially not implemented)
           ref = {
             id,
             lineNumber,
             done: false,
             notImplemented: true,
+            userDescription: userDescription || "",
             userId: userId || undefined,
             lastModified: new Date().toISOString(),
           };
@@ -915,9 +931,15 @@ class FileReferenceProvider {
    * @param {string} filePath File path
    * @param {number} startLine Procedure start line
    * @param {number} endLine Procedure end line
+   * @param {string} [userDescription] Optional user description when toggling to not implemented
    * @returns {boolean} Operation success
    */
-  toggleProcedureReferencesNotImplemented(filePath, startLine, endLine) {
+  toggleProcedureReferencesNotImplemented(
+    filePath,
+    startLine,
+    endLine,
+    userDescription
+  ) {
     try {
       // Find all documentation references in this procedure
       const fileContent = fs.readFileSync(filePath, "utf8");
@@ -937,6 +959,116 @@ class FileReferenceProvider {
         (ref) => ref.notImplemented
       ).length;
       const targetState = notImplCount <= refsInProcedure.length / 2;
+
+      // If not toggling to not implemented state, we don't need a description
+      if (!targetState) {
+        return this._toggleGroupReferencesNotImplemented(
+          filePath,
+          refsInProcedure,
+          targetState
+        );
+      }
+
+      // Only apply the description if we're toggling TO not implemented
+      return this._toggleGroupReferencesNotImplemented(
+        filePath,
+        refsInProcedure,
+        targetState,
+        userDescription
+      );
+    } catch (error) {
+      console.error(
+        "Error toggling procedure references not implemented state:",
+        error
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Toggle the "not implemented" state of all documentation references in a trigger
+   * @param {string} filePath File path
+   * @param {number} startLine Trigger start line
+   * @param {number} endLine Trigger end line
+   * @param {string} [userDescription] Optional user description when toggling to not implemented
+   * @returns {boolean} Operation success
+   */
+  toggleTriggerReferencesNotImplemented(
+    filePath,
+    startLine,
+    endLine,
+    userDescription
+  ) {
+    try {
+      // Find all documentation references in this trigger
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      const docRefs = this._findDocumentationReferences(fileContent, filePath);
+
+      // Filter to references within the trigger's range
+      const refsInTrigger = docRefs.filter(
+        (ref) => ref.lineNumber >= startLine && ref.lineNumber <= endLine
+      );
+
+      if (refsInTrigger.length === 0) {
+        return false;
+      }
+
+      // Determine the target state (opposite of majority current state)
+      const notImplCount = refsInTrigger.filter(
+        (ref) => ref.notImplemented
+      ).length;
+      const targetState = notImplCount <= refsInTrigger.length / 2;
+
+      // If not toggling to not implemented state, we don't need a description
+      if (!targetState) {
+        return this._toggleGroupReferencesNotImplemented(
+          filePath,
+          refsInTrigger,
+          targetState
+        );
+      }
+
+      // Only apply the description if we're toggling TO not implemented
+      return this._toggleGroupReferencesNotImplemented(
+        filePath,
+        refsInTrigger,
+        targetState,
+        userDescription
+      );
+    } catch (error) {
+      console.error(
+        "Error toggling trigger references not implemented state:",
+        error
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Toggle the "done" state of all documentation references in a trigger
+   * @param {string} filePath File path
+   * @param {number} startLine Trigger start line
+   * @param {number} endLine Trigger end line
+   * @returns {boolean} Operation success
+   */
+  toggleTriggerReferencesDone(filePath, startLine, endLine) {
+    try {
+      // Find all documentation references in this trigger
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      const docRefs = this._findDocumentationReferences(fileContent, filePath);
+
+      // Filter to references within the trigger's range
+      const refsInTrigger = docRefs.filter(
+        (ref) => ref.lineNumber >= startLine && ref.lineNumber <= endLine
+      );
+
+      if (refsInTrigger.length === 0) {
+        return false;
+      }
+
+      // Determine the target state (opposite of majority current state)
+      const doneCount = refsInTrigger.filter((ref) => ref.done).length;
+      const targetState = doneCount <= refsInTrigger.length / 2;
 
       // Get storage file and data
       const storageFile = this._getDocumentationStorageFile();
@@ -959,7 +1091,7 @@ class FileReferenceProvider {
       }
 
       // Toggle state for each reference
-      for (const ref of refsInProcedure) {
+      for (const ref of refsInTrigger) {
         // Find existing reference or add new one
         let refData = storageData[fileKey].references.find(
           (r) => r.id === ref.id && r.lineNumber === ref.lineNumber
@@ -967,10 +1099,10 @@ class FileReferenceProvider {
 
         if (refData) {
           // Update state
-          refData.notImplemented = targetState;
-          // If marked as not implemented, it can't be done
-          if (targetState && refData.done) {
-            refData.done = false;
+          refData.done = targetState;
+          // If marked as done, it can't be not implemented
+          if (targetState && refData.notImplemented) {
+            refData.notImplemented = false;
           }
           // Silently add/update userId
           if (userId) {
@@ -982,8 +1114,7 @@ class FileReferenceProvider {
           refData = {
             id: ref.id,
             lineNumber: ref.lineNumber,
-            done: false,
-            notImplemented: targetState,
+            done: targetState,
             userId: userId || undefined,
             lastModified: new Date().toISOString(),
           };
@@ -1002,10 +1133,7 @@ class FileReferenceProvider {
 
       return true;
     } catch (error) {
-      console.error(
-        "Error toggling procedure references not implemented state:",
-        error
-      );
+      console.error("Error toggling trigger references state:", error);
       return false;
     }
   }
@@ -1094,6 +1222,658 @@ class FileReferenceProvider {
     }
   }
 
+  /**
+   * Set description for all documentation references in a trigger
+   * @param {string} filePath File path
+   * @param {number} startLine Trigger start line
+   * @param {number} endLine Trigger end line
+   * @param {string} description User-provided description
+   * @returns {boolean} Success status
+   */
+  setTriggerReferencesDescription(filePath, startLine, endLine, description) {
+    try {
+      // Find all documentation references in this trigger
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      const docRefs = this._findDocumentationReferences(fileContent, filePath);
+
+      // Filter to references within the trigger's range
+      const refsInTrigger = docRefs.filter(
+        (ref) => ref.lineNumber >= startLine && ref.lineNumber <= endLine
+      );
+
+      if (refsInTrigger.length === 0) {
+        return false;
+      }
+
+      // Get storage file and data
+      const storageFile = this._getDocumentationStorageFile();
+
+      // Read existing data or create new
+      let storageData = {};
+      if (fs.existsSync(storageFile)) {
+        storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
+      }
+
+      const fileKey = this._normalizePathForStorage(filePath);
+      const config = vscode.workspace.getConfiguration(
+        "bc-al-upgradeassistant"
+      );
+      const userId = config.get("userId");
+
+      // Initialize file entry if needed
+      if (!storageData[fileKey]) {
+        storageData[fileKey] = { references: [] };
+      }
+
+      // Set description for each reference
+      for (const ref of refsInTrigger) {
+        // Find existing reference or add new one
+        let refData = storageData[fileKey].references.find(
+          (r) => r.id === ref.id && r.lineNumber === ref.lineNumber
+        );
+
+        if (refData) {
+          // Update description
+          refData.userDescription = description;
+          // Silently add/update userId
+          if (userId) {
+            refData.userId = userId;
+            refData.lastModified = new Date().toISOString();
+          }
+        } else {
+          // Add new entry
+          refData = {
+            id: ref.id,
+            lineNumber: ref.lineNumber,
+            userDescription: description,
+            userId: userId || undefined,
+            lastModified: new Date().toISOString(),
+          };
+          storageData[fileKey].references.push(refData);
+        }
+      }
+
+      // Save updated data
+      fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
+
+      // Fire change event to refresh tree
+      this.refresh();
+
+      return true;
+    } catch (error) {
+      console.error("Error setting trigger references description:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Toggle the "done" state of all documentation references in an action
+   * @param {string} filePath File path
+   * @param {number} startLine Action start line
+   * @param {number} endLine Action end line
+   * @returns {boolean} Operation success
+   */
+  toggleActionReferencesDone(filePath, startLine, endLine) {
+    try {
+      // Find all documentation references in this action
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      const docRefs = this._findDocumentationReferences(fileContent, filePath);
+
+      // Filter to references within the action's range
+      const refsInAction = docRefs.filter(
+        (ref) => ref.lineNumber >= startLine && ref.lineNumber <= endLine
+      );
+
+      if (refsInAction.length === 0) {
+        return false;
+      }
+
+      // Determine the target state (opposite of majority current state)
+      const doneCount = refsInAction.filter((ref) => ref.done).length;
+      const targetState = doneCount <= refsInAction.length / 2;
+
+      // Get storage file and data
+      const storageFile = this._getDocumentationStorageFile();
+
+      // Read existing data or create new
+      let storageData = {};
+      if (fs.existsSync(storageFile)) {
+        storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
+      }
+
+      const fileKey = this._normalizePathForStorage(filePath);
+      const config = vscode.workspace.getConfiguration(
+        "bc-al-upgradeassistant"
+      );
+      const userId = config.get("userId");
+
+      // Initialize file entry if needed
+      if (!storageData[fileKey]) {
+        storageData[fileKey] = { references: [] };
+      }
+
+      // Toggle state for each reference
+      for (const ref of refsInAction) {
+        // Find existing reference or add new one
+        let refData = storageData[fileKey].references.find(
+          (r) => r.id === ref.id && r.lineNumber === ref.lineNumber
+        );
+
+        if (refData) {
+          // Update state
+          refData.done = targetState;
+          // If marked as done, it can't be not implemented
+          if (targetState && refData.notImplemented) {
+            refData.notImplemented = false;
+          }
+          // Silently add/update userId
+          if (userId) {
+            refData.userId = userId;
+            refData.lastModified = new Date().toISOString();
+          }
+        } else {
+          // Add new entry
+          refData = {
+            id: ref.id,
+            lineNumber: ref.lineNumber,
+            done: targetState,
+            userId: userId || undefined,
+            lastModified: new Date().toISOString(),
+          };
+          storageData[fileKey].references.push(refData);
+        }
+      }
+
+      // Save updated data
+      fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
+
+      // Fire change event to refresh tree
+      this.refresh();
+
+      // Update decorations
+      this.updateDecorations();
+
+      return true;
+    } catch (error) {
+      console.error("Error toggling action references state:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Toggle the "not implemented" state of all documentation references in an action
+   * @param {string} filePath File path
+   * @param {number} startLine Action start line
+   * @param {number} endLine Action end line
+   * @param {string} [userDescription] Optional user description when toggling to not implemented
+   * @returns {boolean} Operation success
+   */
+  toggleActionReferencesNotImplemented(
+    filePath,
+    startLine,
+    endLine,
+    userDescription
+  ) {
+    try {
+      // Find all documentation references in this action
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      const docRefs = this._findDocumentationReferences(fileContent, filePath);
+
+      // Filter to references within the action's range
+      const refsInAction = docRefs.filter(
+        (ref) => ref.lineNumber >= startLine && ref.lineNumber <= endLine
+      );
+
+      if (refsInAction.length === 0) {
+        return false;
+      }
+
+      // Determine the target state (opposite of majority current state)
+      const notImplCount = refsInAction.filter(
+        (ref) => ref.notImplemented
+      ).length;
+      const targetState = notImplCount <= refsInAction.length / 2;
+
+      // If not toggling to not implemented state, we don't need a description
+      if (!targetState) {
+        return this._toggleGroupReferencesNotImplemented(
+          filePath,
+          refsInAction,
+          targetState
+        );
+      }
+
+      // Only apply the description if we're toggling TO not implemented
+      return this._toggleGroupReferencesNotImplemented(
+        filePath,
+        refsInAction,
+        targetState,
+        userDescription
+      );
+    } catch (error) {
+      console.error(
+        "Error toggling action references not implemented state:",
+        error
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Set description for all documentation references in an action
+   * @param {string} filePath File path
+   * @param {number} startLine Action start line
+   * @param {number} endLine Action end line
+   * @param {string} description User-provided description
+   * @returns {boolean} Success status
+   */
+  setActionReferencesDescription(filePath, startLine, endLine, description) {
+    try {
+      // Find all documentation references in this action
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      const docRefs = this._findDocumentationReferences(fileContent, filePath);
+
+      // Filter to references within the action's range
+      const refsInAction = docRefs.filter(
+        (ref) => ref.lineNumber >= startLine && ref.lineNumber <= endLine
+      );
+
+      if (refsInAction.length === 0) {
+        return false;
+      }
+
+      // Get storage file and data
+      const storageFile = this._getDocumentationStorageFile();
+
+      // Read existing data or create new
+      let storageData = {};
+      if (fs.existsSync(storageFile)) {
+        storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
+      }
+
+      const fileKey = this._normalizePathForStorage(filePath);
+      const config = vscode.workspace.getConfiguration(
+        "bc-al-upgradeassistant"
+      );
+      const userId = config.get("userId");
+
+      // Initialize file entry if needed
+      if (!storageData[fileKey]) {
+        storageData[fileKey] = { references: [] };
+      }
+
+      // Set description for each reference
+      for (const ref of refsInAction) {
+        // Find existing reference or add new one
+        let refData = storageData[fileKey].references.find(
+          (r) => r.id === ref.id && r.lineNumber === ref.lineNumber
+        );
+
+        if (refData) {
+          // Update description
+          refData.userDescription = description;
+          // Silently add/update userId
+          if (userId) {
+            refData.userId = userId;
+            refData.lastModified = new Date().toISOString();
+          }
+        } else {
+          // Add new entry
+          refData = {
+            id: ref.id,
+            lineNumber: ref.lineNumber,
+            userDescription: description,
+            userId: userId || undefined,
+            lastModified: new Date().toISOString(),
+          };
+          storageData[fileKey].references.push(refData);
+        }
+      }
+
+      // Save updated data
+      fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
+
+      // Fire change event to refresh tree
+      this.refresh();
+
+      return true;
+    } catch (error) {
+      console.error("Error setting action references description:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Toggle the "done" state of all documentation references in a field
+   * @param {string} filePath File path
+   * @param {number} startLine Field start line
+   * @param {number} endLine Field end line
+   * @returns {boolean} Operation success
+   */
+  toggleFieldReferencesDone(filePath, startLine, endLine) {
+    try {
+      // Find all documentation references in this field
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      const docRefs = this._findDocumentationReferences(fileContent, filePath);
+
+      // Filter to references within the field's range
+      const refsInField = docRefs.filter(
+        (ref) => ref.lineNumber >= startLine && ref.lineNumber <= endLine
+      );
+
+      if (refsInField.length === 0) {
+        return false;
+      }
+
+      // Determine the target state (opposite of majority current state)
+      const doneCount = refsInField.filter((ref) => ref.done).length;
+      const targetState = doneCount <= refsInField.length / 2;
+
+      // Get storage file and data
+      const storageFile = this._getDocumentationStorageFile();
+
+      // Read existing data or create new
+      let storageData = {};
+      if (fs.existsSync(storageFile)) {
+        storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
+      }
+
+      const fileKey = this._normalizePathForStorage(filePath);
+      const config = vscode.workspace.getConfiguration(
+        "bc-al-upgradeassistant"
+      );
+      const userId = config.get("userId");
+
+      // Initialize file entry if needed
+      if (!storageData[fileKey]) {
+        storageData[fileKey] = { references: [] };
+      }
+
+      // Toggle state for each reference
+      for (const ref of refsInField) {
+        // Find existing reference or add new one
+        let refData = storageData[fileKey].references.find(
+          (r) => r.id === ref.id && r.lineNumber === ref.lineNumber
+        );
+
+        if (refData) {
+          // Update state
+          refData.done = targetState;
+          // If marked as done, it can't be not implemented
+          if (targetState && refData.notImplemented) {
+            refData.notImplemented = false;
+          }
+          // Silently add/update userId
+          if (userId) {
+            refData.userId = userId;
+            refData.lastModified = new Date().toISOString();
+          }
+        } else {
+          // Add new entry
+          refData = {
+            id: ref.id,
+            lineNumber: ref.lineNumber,
+            done: targetState,
+            userId: userId || undefined,
+            lastModified: new Date().toISOString(),
+          };
+          storageData[fileKey].references.push(refData);
+        }
+      }
+
+      // Save updated data
+      fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
+
+      // Fire change event to refresh tree
+      this.refresh();
+
+      // Update decorations
+      this.updateDecorations();
+
+      return true;
+    } catch (error) {
+      console.error("Error toggling field references state:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Toggle the "not implemented" state of all documentation references in a field
+   * @param {string} filePath File path
+   * @param {number} startLine Field start line
+   * @param {number} endLine Field end line
+   * @param {string} [userDescription] Optional user description when toggling to not implemented
+   * @returns {boolean} Operation success
+   */
+  toggleFieldReferencesNotImplemented(
+    filePath,
+    startLine,
+    endLine,
+    userDescription
+  ) {
+    try {
+      // Find all documentation references in this field
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      const docRefs = this._findDocumentationReferences(fileContent, filePath);
+
+      // Filter to references within the field's range
+      const refsInField = docRefs.filter(
+        (ref) => ref.lineNumber >= startLine && ref.lineNumber <= endLine
+      );
+
+      if (refsInField.length === 0) {
+        return false;
+      }
+
+      // Determine the target state (opposite of majority current state)
+      const notImplCount = refsInField.filter(
+        (ref) => ref.notImplemented
+      ).length;
+      const targetState = notImplCount <= refsInField.length / 2;
+
+      // If not toggling to not implemented state, we don't need a description
+      if (!targetState) {
+        return this._toggleGroupReferencesNotImplemented(
+          filePath,
+          refsInField,
+          targetState
+        );
+      }
+
+      // Only apply the description if we're toggling TO not implemented
+      return this._toggleGroupReferencesNotImplemented(
+        filePath,
+        refsInField,
+        targetState,
+        userDescription
+      );
+    } catch (error) {
+      console.error(
+        "Error toggling field references not implemented state:",
+        error
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Set description for all documentation references in a field
+   * @param {string} filePath File path
+   * @param {number} startLine Field start line
+   * @param {number} endLine Field end line
+   * @param {string} description User-provided description
+   * @returns {boolean} Success status
+   */
+  setFieldReferencesDescription(filePath, startLine, endLine, description) {
+    try {
+      // Find all documentation references in this field
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      const docRefs = this._findDocumentationReferences(fileContent, filePath);
+
+      // Filter to references within the field's range
+      const refsInField = docRefs.filter(
+        (ref) => ref.lineNumber >= startLine && ref.lineNumber <= endLine
+      );
+
+      if (refsInField.length === 0) {
+        return false;
+      }
+
+      // Get storage file and data
+      const storageFile = this._getDocumentationStorageFile();
+
+      // Read existing data or create new
+      let storageData = {};
+      if (fs.existsSync(storageFile)) {
+        storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
+      }
+
+      const fileKey = this._normalizePathForStorage(filePath);
+      const config = vscode.workspace.getConfiguration(
+        "bc-al-upgradeassistant"
+      );
+      const userId = config.get("userId");
+
+      // Initialize file entry if needed
+      if (!storageData[fileKey]) {
+        storageData[fileKey] = { references: [] };
+      }
+
+      // Set description for each reference
+      for (const ref of refsInField) {
+        // Find existing reference or add new one
+        let refData = storageData[fileKey].references.find(
+          (r) => r.id === ref.id && r.lineNumber === ref.lineNumber
+        );
+
+        if (refData) {
+          // Update description
+          refData.userDescription = description;
+          // Silently add/update userId
+          if (userId) {
+            refData.userId = userId;
+            refData.lastModified = new Date().toISOString();
+          }
+        } else {
+          // Add new entry
+          refData = {
+            id: ref.id,
+            lineNumber: ref.lineNumber,
+            userDescription: description,
+            userId: userId || undefined,
+            lastModified: new Date().toISOString(),
+          };
+          storageData[fileKey].references.push(refData);
+        }
+      }
+
+      // Save updated data
+      fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
+
+      // Fire change event to refresh tree
+      this.refresh();
+
+      return true;
+    } catch (error) {
+      console.error("Error setting field references description:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Helper method to toggle not implemented state for a group of references
+   * @param {string} filePath File path
+   * @param {Array} refs References to update
+   * @param {boolean} targetState Target state
+   * @param {string} [userDescription] Optional user description
+   * @returns {boolean} Success status
+   * @private
+   */
+  _toggleGroupReferencesNotImplemented(
+    filePath,
+    refs,
+    targetState,
+    userDescription
+  ) {
+    try {
+      // Get storage file and data
+      const storageFile = this._getDocumentationStorageFile();
+
+      // Read existing data or create new
+      let storageData = {};
+      if (fs.existsSync(storageFile)) {
+        storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
+      }
+
+      const fileKey = this._normalizePathForStorage(filePath);
+      const config = vscode.workspace.getConfiguration(
+        "bc-al-upgradeassistant"
+      );
+      const userId = config.get("userId");
+
+      // Initialize file entry if needed
+      if (!storageData[fileKey]) {
+        storageData[fileKey] = { references: [] };
+      }
+
+      // Toggle state for each reference
+      for (const ref of refs) {
+        // Find existing reference or add new one
+        let refData = storageData[fileKey].references.find(
+          (r) => r.id === ref.id && r.lineNumber === ref.lineNumber
+        );
+
+        if (refData) {
+          // Update state
+          refData.notImplemented = targetState;
+
+          // If toggling TO not implemented and we have a description, set it
+          if (targetState && userDescription !== undefined) {
+            refData.userDescription = userDescription;
+          }
+
+          // If marked as not implemented, it can't be done
+          if (targetState && refData.done) {
+            refData.done = false;
+          }
+
+          // Silently add/update userId
+          if (userId) {
+            refData.userId = userId;
+            refData.lastModified = new Date().toISOString();
+          }
+        } else {
+          // Add new entry
+          refData = {
+            id: ref.id,
+            lineNumber: ref.lineNumber,
+            done: false,
+            notImplemented: targetState,
+            userDescription:
+              targetState && userDescription ? userDescription : "",
+            userId: userId || undefined,
+            lastModified: new Date().toISOString(),
+          };
+          storageData[fileKey].references.push(refData);
+        }
+      }
+
+      // Save updated data
+      fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
+
+      // Fire change event to refresh tree
+      this.refresh();
+
+      // Update decorations
+      this.updateDecorations();
+
+      return true;
+    } catch (error) {
+      console.error("Error in _toggleGroupReferencesNotImplemented:", error);
+      return false;
+    }
+  }
+
   updateDecorations() {
     if (!this.currentEditor) {
       return;
@@ -1137,7 +1917,7 @@ class FileReferenceProvider {
         doneDecorations
       );
       this.currentEditor.setDecorations(
-        this.undoneDecorationType,
+        this.uncheckedDecorationType,
         undoneDecorations
       );
       this.currentEditor.setDecorations(
@@ -1168,7 +1948,7 @@ class FileReferenceProvider {
       this.editorChangeDisposable.forEach((d) => d.dispose());
     }
     this.doneDecorationType.dispose();
-    this.undoneDecorationType.dispose();
+    this.uncheckedDecorationType.dispose();
     this.notImplementedDecorationType.dispose();
   }
 }
@@ -1628,14 +2408,14 @@ class TriggerItem extends TreeItem {
 
     // Include the context in the tooltip
     this.tooltip = `${trigger.context}\n\nLine: ${trigger.lineNumber}\n\nClick to open file at trigger location`;
+
+    // Add properties for bulk operations
+    this.startLine = trigger.startLine;
+    this.endLine = trigger.endLine;
   }
 
   getChildren() {
-    // If only one doc ref, we don't need children as the item itself
-    // jumps to the line location
-    if (this.docRefs.length <= 1) return [];
-
-    // Otherwise, show all doc refs within this trigger
+    // Always return all doc refs to enable individual operations
     return this.docRefs.map(
       (ref) => new DocumentationRefItem(ref, this.filePath)
     );
@@ -1674,14 +2454,14 @@ class ActionItem extends TreeItem {
 
     // Include the context in the tooltip
     this.tooltip = `${action.context}\n\nLine: ${action.lineNumber}\n\nClick to open file at action location`;
+
+    // Add properties for bulk operations
+    this.startLine = action.startLine;
+    this.endLine = action.endLine;
   }
 
   getChildren() {
-    // If only one doc ref, we don't need children as the item itself
-    // jumps to the line location
-    if (this.docRefs.length <= 1) return [];
-
-    // Otherwise, show all doc refs within this action
+    // Always return all doc refs to enable individual operations
     return this.docRefs.map(
       (ref) => new DocumentationRefItem(ref, this.filePath)
     );
@@ -1694,7 +2474,7 @@ class ActionItem extends TreeItem {
 class FieldItem extends TreeItem {
   constructor(field, docRefs, filePath) {
     // Use field name as label, include ID if available
-    const label = field.id ? `${field.name} (${field.id})` : field.name;
+    const label = field.id ? `(${field.id}) ${field.name}` : field.name;
 
     super(
       label,
@@ -1722,14 +2502,14 @@ class FieldItem extends TreeItem {
 
     // Include the context in the tooltip
     this.tooltip = `${field.context}\n\nLine: ${field.lineNumber}\n\nClick to open file at field location`;
+
+    // Add properties for bulk operations
+    this.startLine = field.startLine;
+    this.endLine = field.endLine;
   }
 
   getChildren() {
-    // If only one doc ref, we don't need children as the item itself
-    // jumps to the line location
-    if (this.docRefs.length <= 1) return [];
-
-    // Otherwise, show all doc refs within this field
+    // Always return all doc refs to enable individual operations
     return this.docRefs.map(
       (ref) => new DocumentationRefItem(ref, this.filePath)
     );

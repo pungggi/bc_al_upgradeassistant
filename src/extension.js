@@ -54,7 +54,7 @@ async function activate(context) {
     context.subscriptions.push(
       vscode.commands.registerCommand(
         "bc-al-upgradeassistant.toggleDocumentationReferenceNotImplemented",
-        (item) => {
+        async (item) => {
           // Handle direct item click
           if (
             item &&
@@ -62,18 +62,37 @@ async function activate(context) {
             item.docId &&
             item.lineNumber !== undefined
           ) {
-            const newState =
-              fileReferenceProvider.toggleDocumentationReferenceNotImplemented(
-                item.filePath,
-                item.docId,
-                item.lineNumber
-              );
-            const statusText = newState
-              ? "marked as not implemented"
-              : "marked as to be implemented";
-            vscode.window.setStatusBarMessage(
-              `Documentation reference ${item.docId} ${statusText}`,
-              2200
+            // Check the current state
+            const refs = fileReferenceProvider._findDocumentationReferences(
+              fs.readFileSync(item.filePath, "utf8"),
+              item.filePath
+            );
+
+            const docRef = refs.find(
+              (ref) =>
+                ref.id === item.docId && ref.lineNumber === item.lineNumber
+            );
+
+            // If not currently marked as not implemented, ask for a description
+            let userDescription;
+            if (docRef && !docRef.notImplemented) {
+              userDescription = await vscode.window.showInputBox({
+                prompt: `Enter a reason why it cannot be implemented`,
+                placeHolder: "Reason for not implementing",
+                value: docRef.userDescription || "",
+              });
+
+              // User cancelled
+              if (userDescription === undefined) {
+                return;
+              }
+            }
+
+            fileReferenceProvider.toggleDocumentationReferenceNotImplemented(
+              item.filePath,
+              item.docId,
+              item.lineNumber,
+              userDescription
             );
 
             // Update all tabs showing this file
@@ -94,18 +113,26 @@ async function activate(context) {
           );
           if (!docRef) return;
 
-          const newState =
-            fileReferenceProvider.toggleDocumentationReferenceNotImplemented(
-              editor.document.uri.fsPath,
-              docRef.id,
-              docRef.lineNumber
-            );
-          const statusText = newState
-            ? "marked as not implemented"
-            : "marked as to be implemented";
-          vscode.window.setStatusBarMessage(
-            `Documentation reference ${docRef.id} ${statusText}`,
-            2200
+          // If not currently marked as not implemented, ask for a description
+          let userDescription;
+          if (!docRef.notImplemented) {
+            userDescription = await vscode.window.showInputBox({
+              prompt: `Enter a reason why it cannot be implemented`,
+              placeHolder: "Reason for not implementing",
+              value: docRef.userDescription || "",
+            });
+
+            // User cancelled
+            if (userDescription === undefined) {
+              return;
+            }
+          }
+
+          fileReferenceProvider.toggleDocumentationReferenceNotImplemented(
+            editor.document.uri.fsPath,
+            docRef.id,
+            docRef.lineNumber,
+            userDescription
           );
         }
       )
@@ -615,11 +642,56 @@ async function activate(context) {
         "bc-al-upgradeassistant.toggleProcedureReferencesNotImplemented",
         async (item) => {
           if (item && item.filePath && item.startLine && item.endLine) {
+            // Determine if this toggle would set references to "not implemented"
+            const fileContent = fs.readFileSync(item.filePath, "utf8");
+            const docRefs = fileReferenceProvider._findDocumentationReferences(
+              fileContent,
+              item.filePath
+            );
+
+            // Filter to the procedure's range
+            const refsInProcedure = docRefs.filter(
+              (ref) =>
+                ref.lineNumber >= item.startLine &&
+                ref.lineNumber <= item.endLine
+            );
+
+            if (refsInProcedure.length === 0) {
+              vscode.window.showInformationMessage(
+                "No documentation references found in procedure"
+              );
+              return;
+            }
+
+            // Check current state - would we be toggling TO not implemented?
+            const notImplCount = refsInProcedure.filter(
+              (ref) => ref.notImplemented
+            ).length;
+            const togglingToNotImplemented =
+              notImplCount <= refsInProcedure.length / 2;
+
+            // Only prompt for reason if toggling TO not implemented
+            let userDescription;
+            if (togglingToNotImplemented) {
+              userDescription = await vscode.window.showInputBox({
+                prompt:
+                  "Enter reason why these references cannot be implemented",
+                placeHolder: "Reason for not implementing",
+                value: "",
+              });
+
+              // User cancelled
+              if (userDescription === undefined) {
+                return;
+              }
+            }
+
             const success =
               fileReferenceProvider.toggleProcedureReferencesNotImplemented(
                 item.filePath,
                 item.startLine,
-                item.endLine
+                item.endLine,
+                userDescription
               );
 
             if (success) {
@@ -667,6 +739,389 @@ async function activate(context) {
             } else {
               vscode.window.showInformationMessage(
                 "No documentation references found in procedure"
+              );
+            }
+          }
+        }
+      )
+    );
+
+    // Register commands for Triggers
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.toggleTriggerReferencesDone",
+        async (item) => {
+          if (item && item.filePath && item.startLine && item.endLine) {
+            const success = fileReferenceProvider.toggleTriggerReferencesDone(
+              item.filePath,
+              item.startLine,
+              item.endLine
+            );
+
+            if (success) {
+              vscode.window.showInformationMessage(
+                "All references in trigger updated"
+              );
+            } else {
+              vscode.window.showInformationMessage(
+                "No documentation references found in trigger"
+              );
+            }
+          }
+        }
+      )
+    );
+
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.toggleTriggerReferencesNotImplemented",
+        async (item) => {
+          if (item && item.filePath && item.startLine && item.endLine) {
+            // Determine if this toggle would set references to "not implemented"
+            const fileContent = fs.readFileSync(item.filePath, "utf8");
+            const docRefs = fileReferenceProvider._findDocumentationReferences(
+              fileContent,
+              item.filePath
+            );
+
+            // Filter to the trigger's range
+            const refsInTrigger = docRefs.filter(
+              (ref) =>
+                ref.lineNumber >= item.startLine &&
+                ref.lineNumber <= item.endLine
+            );
+
+            if (refsInTrigger.length === 0) {
+              vscode.window.showInformationMessage(
+                "No documentation references found in trigger"
+              );
+              return;
+            }
+
+            // Check current state - would we be toggling TO not implemented?
+            const notImplCount = refsInTrigger.filter(
+              (ref) => ref.notImplemented
+            ).length;
+            const togglingToNotImplemented =
+              notImplCount <= refsInTrigger.length / 2;
+
+            // Only prompt for reason if toggling TO not implemented
+            let userDescription;
+            if (togglingToNotImplemented) {
+              userDescription = await vscode.window.showInputBox({
+                prompt:
+                  "Enter reason why these references cannot be implemented",
+                placeHolder: "Reason for not implementing",
+                value: "",
+              });
+
+              // User cancelled
+              if (userDescription === undefined) {
+                return;
+              }
+            }
+
+            const success =
+              fileReferenceProvider.toggleTriggerReferencesNotImplemented(
+                item.filePath,
+                item.startLine,
+                item.endLine,
+                userDescription
+              );
+
+            if (success) {
+              vscode.window.showInformationMessage(
+                "All references in trigger updated"
+              );
+            } else {
+              vscode.window.showInformationMessage(
+                "No documentation references found in trigger"
+              );
+            }
+          }
+        }
+      )
+    );
+
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.setTriggerReferencesDescription",
+        async (item) => {
+          if (item && item.filePath && item.startLine && item.endLine) {
+            // Prompt for description
+            const description = await vscode.window.showInputBox({
+              prompt: "Enter note to apply to all references in this trigger",
+              placeHolder: "Note text",
+              value: "",
+            });
+
+            if (description === undefined) {
+              return; // User cancelled
+            }
+
+            const success =
+              fileReferenceProvider.setTriggerReferencesDescription(
+                item.filePath,
+                item.startLine,
+                item.endLine,
+                description
+              );
+
+            if (success) {
+              vscode.window.showInformationMessage(
+                "Note added to all references in trigger"
+              );
+            } else {
+              vscode.window.showInformationMessage(
+                "No documentation references found in trigger"
+              );
+            }
+          }
+        }
+      )
+    );
+
+    // Register commands for Actions
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.toggleActionReferencesDone",
+        async (item) => {
+          if (item && item.filePath && item.startLine && item.endLine) {
+            const success = fileReferenceProvider.toggleActionReferencesDone(
+              item.filePath,
+              item.startLine,
+              item.endLine
+            );
+
+            if (success) {
+              vscode.window.showInformationMessage(
+                "All references in action updated"
+              );
+            } else {
+              vscode.window.showInformationMessage(
+                "No documentation references found in action"
+              );
+            }
+          }
+        }
+      )
+    );
+
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.toggleActionReferencesNotImplemented",
+        async (item) => {
+          if (item && item.filePath && item.startLine && item.endLine) {
+            // Determine if this toggle would set references to "not implemented"
+            const fileContent = fs.readFileSync(item.filePath, "utf8");
+            const docRefs = fileReferenceProvider._findDocumentationReferences(
+              fileContent,
+              item.filePath
+            );
+
+            // Filter to the action's range
+            const refsInAction = docRefs.filter(
+              (ref) =>
+                ref.lineNumber >= item.startLine &&
+                ref.lineNumber <= item.endLine
+            );
+
+            if (refsInAction.length === 0) {
+              vscode.window.showInformationMessage(
+                "No documentation references found in action"
+              );
+              return;
+            }
+
+            // Check current state - would we be toggling TO not implemented?
+            const notImplCount = refsInAction.filter(
+              (ref) => ref.notImplemented
+            ).length;
+            const togglingToNotImplemented =
+              notImplCount <= refsInAction.length / 2;
+
+            // Only prompt for reason if toggling TO not implemented
+            let userDescription;
+            if (togglingToNotImplemented) {
+              userDescription = await vscode.window.showInputBox({
+                prompt:
+                  "Enter reason why these references cannot be implemented",
+                placeHolder: "Reason for not implementing",
+                value: "",
+              });
+
+              // User cancelled
+              if (userDescription === undefined) {
+                return;
+              }
+            }
+
+            const success =
+              fileReferenceProvider.toggleActionReferencesNotImplemented(
+                item.filePath,
+                item.startLine,
+                item.endLine,
+                userDescription
+              );
+
+            if (success) {
+              vscode.window.showInformationMessage(
+                "All references in action updated"
+              );
+            } else {
+              vscode.window.showInformationMessage(
+                "No documentation references found in action"
+              );
+            }
+          }
+        }
+      )
+    );
+
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.setActionReferencesDescription",
+        async (item) => {
+          if (item && item.filePath && item.startLine && item.endLine) {
+            // Prompt for description
+            const description = await vscode.window.showInputBox({
+              prompt: "Enter note to apply to all references in this action",
+              placeHolder: "Note text",
+              value: "",
+            });
+
+            if (description === undefined) {
+              return; // User cancelled
+            }
+
+            const success =
+              fileReferenceProvider.setActionReferencesDescription(
+                item.filePath,
+                item.startLine,
+                item.endLine,
+                description
+              );
+
+            if (success) {
+              vscode.window.showInformationMessage(
+                "Note added to all references in action"
+              );
+            } else {
+              vscode.window.showInformationMessage(
+                "No documentation references found in action"
+              );
+            }
+          }
+        }
+      )
+    );
+
+    // Register commands for Fields
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.toggleFieldReferencesDone",
+        async (item) => {
+          if (item && item.filePath && item.startLine && item.endLine) {
+            fileReferenceProvider.toggleFieldReferencesDone(
+              item.filePath,
+              item.startLine,
+              item.endLine
+            );
+          }
+        }
+      )
+    );
+
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.toggleFieldReferencesNotImplemented",
+        async (item) => {
+          if (item && item.filePath && item.startLine && item.endLine) {
+            // Determine if this toggle would set references to "not implemented"
+            const fileContent = fs.readFileSync(item.filePath, "utf8");
+            const docRefs = fileReferenceProvider._findDocumentationReferences(
+              fileContent,
+              item.filePath
+            );
+
+            // Filter to the field's range
+            const refsInField = docRefs.filter(
+              (ref) =>
+                ref.lineNumber >= item.startLine &&
+                ref.lineNumber <= item.endLine
+            );
+
+            if (refsInField.length === 0) {
+              vscode.window.showInformationMessage(
+                "No documentation references found in field"
+              );
+              return;
+            }
+
+            // Check current state - would we be toggling TO not implemented?
+            const notImplCount = refsInField.filter(
+              (ref) => ref.notImplemented
+            ).length;
+            const togglingToNotImplemented =
+              notImplCount <= refsInField.length / 2;
+
+            // Only prompt for reason if toggling TO not implemented
+            let userDescription;
+            if (togglingToNotImplemented) {
+              userDescription = await vscode.window.showInputBox({
+                prompt:
+                  "Enter reason why these references cannot be implemented",
+                placeHolder: "Reason for not implementing",
+                value: "",
+              });
+
+              // User cancelled
+              if (userDescription === undefined) {
+                return;
+              }
+            }
+
+            fileReferenceProvider.toggleFieldReferencesNotImplemented(
+              item.filePath,
+              item.startLine,
+              item.endLine,
+              userDescription
+            );
+          }
+        }
+      )
+    );
+
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.setFieldReferencesDescription",
+        async (item) => {
+          if (item && item.filePath && item.startLine && item.endLine) {
+            // Prompt for description
+            const description = await vscode.window.showInputBox({
+              prompt: "Enter note to apply to all references in this field",
+              placeHolder: "Note text",
+              value: "",
+            });
+
+            if (description === undefined) {
+              return; // User cancelled
+            }
+
+            const success = fileReferenceProvider.setFieldReferencesDescription(
+              item.filePath,
+              item.startLine,
+              item.endLine,
+              description
+            );
+
+            if (success) {
+              vscode.window.showInformationMessage(
+                "Note added to all references in field"
+              );
+            } else {
+              vscode.window.showInformationMessage(
+                "No documentation references found in field"
               );
             }
           }
