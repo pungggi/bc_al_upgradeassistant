@@ -32,6 +32,9 @@ async function activate(context) {
     // Initialize symbol cache
     await initializeSymbolCache(context, false);
 
+    // Set up watchers for symbol downloads
+    setupSymbolsWatchers(context);
+
     // Register command to generate documentation reference summary
     context.subscriptions.push(
       vscode.commands.registerCommand(
@@ -1135,6 +1138,85 @@ async function activate(context) {
     vscode.window.showErrorMessage(
       `Error activating extension: ${error.message}`
     );
+  }
+}
+
+/**
+ * Set up watchers for downloaded symbols files
+ * @param {vscode.ExtensionContext} context Extension context
+ */
+function setupSymbolsWatchers(context) {
+  if (!vscode.workspace.workspaceFolders) return;
+
+  // We can't directly listen for command execution
+  // Instead, we'll watch for file changes in the .alpackages directories
+
+  // Create file system watchers for each workspace folder
+  for (const folder of vscode.workspace.workspaceFolders) {
+    // Try to find the appropriate symbols folder
+    let packagePath = null;
+
+    // Check for al.packageCachePath in settings
+    try {
+      const settingsPath = path.join(
+        folder.uri.fsPath,
+        ".vscode",
+        "settings.json"
+      );
+      if (fs.existsSync(settingsPath)) {
+        const settings = readJsonFile(settingsPath);
+        if (settings && settings["al.packageCachePath"]) {
+          packagePath = settings["al.packageCachePath"];
+          if (!path.isAbsolute(packagePath)) {
+            packagePath = path.join(folder.uri.fsPath, packagePath);
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`Error reading settings.json:`, err);
+    }
+
+    // If no path found, check for app.json and use .alpackages
+    if (!packagePath) {
+      try {
+        const appJsonPath = path.join(folder.uri.fsPath, "app.json");
+        if (fs.existsSync(appJsonPath)) {
+          packagePath = path.join(folder.uri.fsPath, ".alpackages");
+        }
+      } catch (err) {
+        console.error(`Error checking for app.json:`, err);
+      }
+    }
+
+    if (packagePath) {
+      const symbolsFolderWatcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(vscode.Uri.file(packagePath), "**/*.app")
+      );
+
+      // Handle new symbol files
+      symbolsFolderWatcher.onDidCreate(async (uri) => {
+        console.log("New symbols file detected:", uri.fsPath);
+        // Refresh symbol cache when new app files are detected
+        setTimeout(async () => {
+          try {
+            const symbolsCount = await initializeSymbolCache(context, true);
+            if (symbolsCount > 0) {
+              vscode.window.showInformationMessage(
+                `Symbol cache updated with ${symbolsCount} files after new symbols detected`
+              );
+            }
+          } catch (error) {
+            console.error("Error updating symbol cache:", error);
+            vscode.window.showErrorMessage(
+              `Failed to update symbol cache: ${error.message}`
+            );
+          }
+        }, 1000); // Small delay to make sure file is completely written
+      });
+
+      context.subscriptions.push(symbolsFolderWatcher);
+      console.log(`Watching for symbol changes in: ${packagePath}`);
+    }
   }
 }
 

@@ -1,15 +1,13 @@
 # Change Log
 
-## [0.0.84]
+## [0.0.85]
 
+- Added source extraction for app files
 - Enhance toggleDocumentationReferenceNotImplemented to prompt for user description
 
 ## [0.0.83]
 
 - Added bulk operations for references in procedures, triggers, actions, and fields
-
-## [0.0.82]
-
 - Added new grouping options in Documentation References view
 
 ## [0.0.75]

@@ -3,6 +3,8 @@ const path = require("path");
 const util = require("util");
 const os = require("os");
 const JSZip = require("jszip");
+const vscode = require("vscode");
+const configManager = require("./utils/configManager");
 
 const readFile = util.promisify(fs.readFile);
 const writeFile = util.promisify(fs.writeFile);
@@ -67,7 +69,7 @@ class SymbolCache {
     }
   }
 
-  async extractSymbolsFromApp(appPath) {
+  async extractFromApp(appPath) {
     try {
       // Create a unique temp directory for this extraction
       const appFileName = path.basename(appPath);
@@ -100,6 +102,9 @@ class SymbolCache {
 
         console.log(`Extracted ${appPath} to ${extractDir}`);
 
+        // Extract source files if enabled
+        await this.extractSourceFiles(appPath, zip);
+
         // Search for SymbolReference.json in the extracted files
         const symbolFilePath = await this.findSymbolReferenceFile(extractDir);
 
@@ -126,7 +131,7 @@ class SymbolCache {
             try {
               symbolData = JSON.parse(content);
             } catch (initialParseError) {
-              console.warn(
+              console.info(
                 `Initial JSON parsing failed: ${initialParseError.message}`
               );
 
@@ -213,6 +218,122 @@ class SymbolCache {
     return false;
   }
 
+  async extractSourceFiles(appPath, zip) {
+    // Check if source extraction is enabled
+    const srcExtractionEnabled = configManager.getConfigValue(
+      "enableSrcExtraction",
+      false
+    );
+    if (!srcExtractionEnabled) {
+      return false;
+    }
+
+    try {
+      // Get base path for source extraction
+      let basePath = configManager.getConfigValue("srcExtractionPath", "");
+
+      // If not set, ask user where to save
+      if (!basePath) {
+        basePath = await this.promptForSrcPath();
+        if (!basePath) return false; // User cancelled
+
+        // Save the path in settings
+        await configManager.setConfigValue("srcExtractionPath", basePath);
+      }
+
+      // First, try to get executing app info (the app running this extension)
+      let executingAppName = "";
+      // Look for app.json in the current directory or workspace roots
+      try {
+        const workspaceFolders = vscode.workspace.workspaceFolders || [];
+        for (const folder of workspaceFolders) {
+          const appJsonPath = path.join(folder.uri.fsPath, "app.json");
+          if (fs.existsSync(appJsonPath)) {
+            const appJsonContent = await readFile(appJsonPath, "utf8");
+            const appJson = JSON.parse(appJsonContent);
+            if (appJson && appJson.name) {
+              executingAppName = appJson.name;
+              break;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`Failed to get executing app name: ${err.message}`);
+        // Use fallback name
+        executingAppName = "ExtensionApp";
+      }
+
+      // Now get info from the app being extracted
+      let extractedAppName = path.parse(appPath).name.split("_")[1];
+      let extractedAppVersion = path.parse(appPath).name.split("_")[2];
+
+      // Sanitize names for filesystem
+      executingAppName = executingAppName.replace(/[<>:"/\\|?*]/g, "_");
+      extractedAppName = extractedAppName.replace(/[<>:"/\\|?*]/g, "_");
+
+      // Create the NEW folder structure:
+      // basePath/ExecutingAppName/VersionOfExtractedApp/ExtractedAppName
+      const extractDir = path.join(
+        basePath,
+        executingAppName,
+        extractedAppName,
+        extractedAppVersion
+      );
+
+      // Make sure the extraction directory exists
+      await mkdir(extractDir, { recursive: true });
+
+      // Extract files - but don't use the "src" prefix anymore
+      let filesFound = false;
+      for (const filename of Object.keys(zip.files)) {
+        // Check if it's a source file (in "src" directory)
+        if (filename.startsWith("src/") || filename === "src") {
+          filesFound = true;
+          const file = zip.files[filename];
+          // Remove "src/" prefix for the target path - files will go directly in extractDir
+          const targetPath = path.join(
+            extractDir,
+            filename.replace(/^src\/?/, "")
+          );
+
+          if (file.dir) {
+            await mkdir(targetPath, { recursive: true });
+          } else {
+            await mkdir(path.dirname(targetPath), { recursive: true });
+            const content = await file.async("nodebuffer");
+            await writeFile(targetPath, content);
+          }
+        }
+      }
+
+      if (filesFound) {
+        console.log(`Source files extracted to ${extractDir}`);
+        return true;
+      } else {
+        console.warn(`No source files found in ${appPath}`);
+        return false;
+      }
+    } catch (error) {
+      console.error(`Failed to extract source files from ${appPath}:`, error);
+      return false;
+    }
+  }
+
+  async promptForSrcPath() {
+    const options = {
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: "Select folder for source extraction",
+    };
+
+    const result = await vscode.window.showOpenDialog(options);
+    if (result && result.length > 0) {
+      return result[0].fsPath;
+    }
+    return null;
+  }
+
   // Helper function to find SymbolReference.json in extracted directory
   async findSymbolReferenceFile(dir) {
     const entries = await readdir(dir, { withFileTypes: true });
@@ -252,7 +373,7 @@ class SymbolCache {
   async processAppFiles() {
     let processed = 0;
     for (const appPath of this.appPaths) {
-      if (await this.extractSymbolsFromApp(appPath)) {
+      if (await this.extractFromApp(appPath)) {
         processed++;
       }
     }

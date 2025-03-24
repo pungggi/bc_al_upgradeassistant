@@ -136,6 +136,13 @@ When working with complex prompts, you can enable the debug mode to review exact
 2. Run any Claude prompt
 3. A new document will open showing the system prompt, user prompt with your code inserted, and configuration details
 
+## Upgrade specific analysis and code suggestions
+
+The extension supports extracting source files from compiled Business Central app (.app) files for upgrade specific analysis and code suggestions:
+To use this feature enable source extraction in settings:
+
+- **Enable Source Extraction**: Turn on/off the source extraction capability through `bc-al-upgradeassistant.enableSrcExtraction` setting
+
 ## Commands
 
 ### General
