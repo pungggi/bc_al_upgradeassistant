@@ -10,6 +10,10 @@ const { readJsonFile } = require("./jsonUtils");
 const ExtendedObjectHoverProvider = require("./hover/extendedObjectHoverProvider");
 const { EXTENSION_ID } = require("./constants");
 const { registerViews } = require("./views/registerViews");
+const {
+  FieldSuggestionActionProvider,
+} = require("./providers/fieldSuggestionProvider");
+const fieldCollector = require("./utils/fieldCollector");
 
 let globalStatusBarItems = {};
 
@@ -1131,6 +1135,25 @@ async function activate(context) {
         }
       )
     );
+
+    // Register field suggestion provider
+    const config = vscode.workspace.getConfiguration("bc-al-upgradeassistant");
+    if (config.get("fieldSuggestion.enabled", true)) {
+      context.subscriptions.push(
+        vscode.languages.registerCodeActionsProvider(
+          { scheme: "file", language: "al" },
+          new FieldSuggestionActionProvider(),
+          {
+            providedCodeActionKinds: [vscode.CodeActionKind.QuickFix],
+          }
+        )
+      );
+
+      // Initialize field cache in the background
+      fieldCollector.updateFieldsCache().catch((err) => {
+        console.error("Failed to initialize field cache:", err);
+      });
+    }
 
     console.log(`${EXTENSION_ID} extension activated successfully`);
   } catch (error) {

@@ -1,5 +1,9 @@
 # Change Log
 
+## [Unreleased]
+
+- Added field name suggestion feature
+
 ## [0.0.85]
 
 - Added source extraction for app files

@@ -6,6 +6,7 @@ const configManager = require("./utils/configManager");
 const { registerCommandOnce } = require("./utils/commandHelper");
 const { EXTENSION_ID } = require("./constants");
 const { registerClipboardMonitor } = require("./clipboardMonitor");
+const { suggestFieldNames } = require("./commands/fieldSuggestionCommand");
 
 function registerCommands(context) {
   registerRefreshSymbolCacheCommand(context);
@@ -13,6 +14,13 @@ function registerCommands(context) {
   registerPromptClaudeCommand(context);
   registerModelCommands(context);
   registerClipboardMonitor(context);
+
+  // Field name suggestion command
+  registerCommandOnce(
+    context,
+    "bc-al-upgradeassistant.suggestFieldNames",
+    suggestFieldNames
+  );
 }
 
 function registerRefreshSymbolCacheCommand(context) {

@@ -175,6 +175,11 @@
         "title": "Add/Edit Note for All References",
         "category": "BC/AL Upgrade Assistant",
         "icon": "$(edit)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.suggestFieldNames",
+        "title": "Suggest Field Names",
+        "category": "BC/AL Upgrade Assistant"
       }
     ],
     "menus": {
@@ -193,6 +198,11 @@
           "command": "bc-al-upgradeassistant.setDocumentationReferenceDescription",
           "when": "resourceExtname == .txt && editorHasDocumentationRef",
           "group": "bc-al-references@3"
+        },
+        {
+          "command": "bc-al-upgradeassistant.suggestFieldNames",
+          "when": "editorLangId == al",
+          "group": "bc-al-references@4"
         }
       ],
       "view/title": [
@@ -677,6 +687,16 @@
           "type": "string",
           "default": "",
           "description": "Path where extracted source files will be saved"
+        },
+        "bc-al-upgradeassistant.fieldSuggestion.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable field name suggestions for unknown fields"
+        },
+        "bc-al-upgradeassistant.fieldSuggestion.cacheTimeout": {
+          "type": "number",
+          "default": 600,
+          "description": "Field cache timeout in seconds (how often to refresh the field definitions)"
         }
       }
     },
@@ -720,6 +740,7 @@
     "7zip-bin": "^5.1.1",
     "axios": "^1.6.0",
     "glob": "^7.2.3",
-    "jszip": "^3.10.0"
+    "jszip": "^3.10.0",
+    "fastest-levenshtein": "^1.0.16"
   }
 }
