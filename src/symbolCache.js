@@ -224,70 +224,110 @@ class SymbolCache {
       "enableSrcExtraction",
       false
     );
-    if (!srcExtractionEnabled) {
-      return false;
-    }
+    if (!srcExtractionEnabled) return false;
 
     try {
       // Get base path for source extraction
       let basePath = configManager.getConfigValue("srcExtractionPath", "");
-
-      // If not set, ask user where to save
       if (!basePath) {
         basePath = await this.promptForSrcPath();
         if (!basePath) return false; // User cancelled
 
-        // Save the path in settings
-        await configManager.setConfigValue("srcExtractionPath", basePath);
-      }
-
-      // Now get info from the app being extracted
-      let extractedAppName = path.parse(appPath).name.split("_")[1];
-      let extractedAppVersion = path.parse(appPath).name.split("_")[2];
-
-      // Sanitize names for filesystem
-      extractedAppName = extractedAppName.replace(/[<>:"/\\|?*]/g, "_");
-
-      // basePath/ExecutingAppName/VersionOfExtractedApp/ExtractedAppName
-      const extractDir = path.join(
-        basePath,
-        extractedAppName,
-        extractedAppVersion
-      );
-
-      // Make sure the extraction directory exists
-      await mkdir(extractDir, { recursive: true });
-
-      // Extract files - but don't use the "src" prefix anymore
-      let filesFound = false;
-      for (const filename of Object.keys(zip.files)) {
-        // Check if it's a source file (in "src" directory)
-        if (filename.startsWith("src/") || filename === "src") {
-          filesFound = true;
-          const file = zip.files[filename];
-          // Remove "src/" prefix for the target path - files will go directly in extractDir
-          const targetPath = path.join(
-            extractDir,
-            filename.replace(/^src\/?/, "")
+        try {
+          await configManager.setConfigValue(
+            "srcExtractionPath",
+            basePath,
+            "user" // Changed from "global" to "user"
           );
-
-          if (file.dir) {
-            await mkdir(targetPath, { recursive: true });
-          } else {
-            await mkdir(path.dirname(targetPath), { recursive: true });
-            const content = await file.async("nodebuffer");
-            await writeFile(targetPath, content);
-          }
+        } catch (err) {
+          console.warn(`Failed to save setting: ${err.message}`);
+          // Continue even if setting save fails
         }
       }
 
-      if (filesFound) {
-        console.log(`Source files extracted to ${extractDir}`);
-        return true;
-      } else {
+      // Safely extract app name/version with early returns for invalid paths
+      const fileName = path.parse(appPath).name;
+      if (!fileName) {
+        console.warn(`Invalid app path: ${appPath}`);
+        return false;
+      }
+
+      const nameParts = fileName.split("_");
+
+      // Use safe defaults when expected format isn't found
+      const extractedAppName =
+        nameParts.length > 1 ? nameParts[1] || "Unknown" : fileName;
+      const extractedAppVersion =
+        nameParts.length > 2 ? nameParts[2] || "1.0" : "1.0";
+
+      // Create sanitized path
+      const sanitizedAppName = extractedAppName.replace(/[<>:"/\\|?*]/g, "_");
+      const extractDir = path.join(
+        basePath,
+        sanitizedAppName,
+        extractedAppVersion
+      );
+
+      // Skip if target already has AL files
+      if (fs.existsSync(extractDir)) {
+        try {
+          const files = await readdir(extractDir);
+          if (files.some((file) => file.endsWith(".al"))) {
+            console.log(
+              `Skipping extraction: ${extractDir} already has AL files`
+            );
+            return true;
+          }
+        } catch (err) {
+          console.warn(`Error reading directory ${extractDir}: ${err.message}`);
+        }
+      }
+
+      await mkdir(extractDir, { recursive: true });
+
+      // Extract relevant source files
+      let filesFound = false;
+      for (const filename of Object.keys(zip.files)) {
+        if (!filename.startsWith("src/") && filename !== "src") continue;
+
+        filesFound = true;
+        const file = zip.files[filename];
+
+        // Extract path safely
+        let relativePath = filename.replace(/^src\/?/, "");
+        let decodedPath = relativePath
+          .split("/")
+          .map((part) => {
+            try {
+              return decodeURIComponent(decodeURIComponent(part));
+            } catch (e) {
+              try {
+                return decodeURIComponent(part);
+              } catch (e2) {
+                return part;
+              }
+            }
+          })
+          .join(path.sep);
+
+        const targetPath = path.join(extractDir, decodedPath);
+
+        if (file.dir) {
+          await mkdir(targetPath, { recursive: true });
+        } else {
+          await mkdir(path.dirname(targetPath), { recursive: true });
+          const content = await file.async("nodebuffer");
+          await writeFile(targetPath, content);
+        }
+      }
+
+      if (!filesFound) {
         console.warn(`No source files found in ${appPath}`);
         return false;
       }
+
+      console.log(`Source files extracted to ${extractDir}`);
+      return true;
     } catch (error) {
       console.error(`Failed to extract source files from ${appPath}:`, error);
       return false;
