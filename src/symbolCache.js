@@ -241,41 +241,16 @@ class SymbolCache {
         await configManager.setConfigValue("srcExtractionPath", basePath);
       }
 
-      // First, try to get executing app info (the app running this extension)
-      let executingAppName = "";
-      // Look for app.json in the current directory or workspace roots
-      try {
-        const workspaceFolders = vscode.workspace.workspaceFolders || [];
-        for (const folder of workspaceFolders) {
-          const appJsonPath = path.join(folder.uri.fsPath, "app.json");
-          if (fs.existsSync(appJsonPath)) {
-            const appJsonContent = await readFile(appJsonPath, "utf8");
-            const appJson = JSON.parse(appJsonContent);
-            if (appJson && appJson.name) {
-              executingAppName = appJson.name;
-              break;
-            }
-          }
-        }
-      } catch (err) {
-        console.warn(`Failed to get executing app name: ${err.message}`);
-        // Use fallback name
-        executingAppName = "ExtensionApp";
-      }
-
       // Now get info from the app being extracted
       let extractedAppName = path.parse(appPath).name.split("_")[1];
       let extractedAppVersion = path.parse(appPath).name.split("_")[2];
 
       // Sanitize names for filesystem
-      executingAppName = executingAppName.replace(/[<>:"/\\|?*]/g, "_");
       extractedAppName = extractedAppName.replace(/[<>:"/\\|?*]/g, "_");
 
-      // Create the NEW folder structure:
       // basePath/ExecutingAppName/VersionOfExtractedApp/ExtractedAppName
       const extractDir = path.join(
         basePath,
-        executingAppName,
         extractedAppName,
         extractedAppVersion
       );

@@ -676,7 +676,7 @@
         "bc-al-upgradeassistant.srcExtractionPath": {
           "type": "string",
           "default": "",
-          "description": "Path where extracted source files will be saved"
+          "description": "Centralized Path where extracted source files will be saved by version"
         },
         "bc-al-upgradeassistant.fieldSuggestion.enabled": {
           "type": "boolean",

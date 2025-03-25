@@ -1203,7 +1203,7 @@ function setupSymbolsWatchers(context) {
     if (!packagePath) {
       try {
         const appJsonPath = path.join(folder.uri.fsPath, "app.json");
-        if (fs.exists(appJsonPath)) {
+        if (fs.existsSync(appJsonPath)) {
           packagePath = path.join(folder.uri.fsPath, ".alpackages");
         }
       } catch (err) {
