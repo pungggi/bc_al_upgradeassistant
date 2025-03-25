@@ -175,11 +175,6 @@
         "title": "Add/Edit Note for All References",
         "category": "BC/AL Upgrade Assistant",
         "icon": "$(edit)"
-      },
-      {
-        "command": "bc-al-upgradeassistant.suggestFieldNames",
-        "title": "Suggest Field Names",
-        "category": "BC/AL Upgrade Assistant"
       }
     ],
     "menus": {
@@ -198,11 +193,6 @@
           "command": "bc-al-upgradeassistant.setDocumentationReferenceDescription",
           "when": "resourceExtname == .txt && editorHasDocumentationRef",
           "group": "bc-al-references@3"
-        },
-        {
-          "command": "bc-al-upgradeassistant.suggestFieldNames",
-          "when": "editorLangId == al",
-          "group": "bc-al-references@4"
         }
       ],
       "view/title": [

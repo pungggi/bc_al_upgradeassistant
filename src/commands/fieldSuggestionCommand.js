@@ -28,8 +28,8 @@ async function suggestFieldNames(recordName, fieldName) {
     const recordFieldPattern =
       /(\w+)\.(?:"([^"]+)"|'([^']+)'|([^\s.,;()[\]{}]+))/g;
 
-    let bestMatch = null;
-    let bestMatchDistance = Infinity;
+    // let bestMatch = null;
+    // let bestMatchDistance = Infinity;
     let match;
 
     // Find the record.field pattern closest to the cursor position
@@ -40,28 +40,28 @@ async function suggestFieldNames(recordName, fieldName) {
       // Check if cursor is within or near this match
       if (position.character >= matchStart && position.character <= matchEnd) {
         // Cursor is inside the match - perfect!
-        bestMatch = match;
+        // bestMatch = match;
         break;
       }
 
       // Calculate distance from cursor to this match
-      const distance = Math.min(
-        Math.abs(position.character - matchStart),
-        Math.abs(position.character - matchEnd)
-      );
+      //   const distance = Math.min(
+      //     Math.abs(position.character - matchStart),
+      //     Math.abs(position.character - matchEnd)
+      //   );
 
-      if (distance < bestMatchDistance) {
-        bestMatchDistance = distance;
-        bestMatch = match;
-      }
+      //   if (distance < bestMatchDistance) {
+      //     bestMatchDistance = distance;
+      //     bestMatch = match;
+      //   }
     }
 
-    if (bestMatch && bestMatchDistance < 50) {
-      // Only use matches reasonably close to cursor
-      recordName = bestMatch[1]; // Variable name
-      // Get the field name from whichever capturing group matched (quoted or unquoted)
-      fieldName = bestMatch[2] || bestMatch[3] || bestMatch[4];
-    }
+    // if (bestMatch && bestMatchDistance < 50) {
+    // Only use matches reasonably close to cursor
+    recordName = match[1]; // Variable name
+    // Get the field name from whichever capturing group matched (quoted or unquoted)
+    fieldName = match[2] || match[3] || match[4];
+    // }
   }
 
   // Get the document text for variable lookup

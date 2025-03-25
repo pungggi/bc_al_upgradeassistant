@@ -16,25 +16,69 @@ function extractFieldInfo(document, range) {
   // Get the line text
   const lineText = document.lineAt(range.start.line).text;
 
-  // Find pattern like "RecordVar.FieldName" at or around the error position
-  const recordFieldPattern = /(\w+)\.(["'])?([^"'\s.,;()[\]{}]+)(["'])?/g;
+  // Get the context around the error
+  const errorStart = Math.max(0, range.start.character - 20);
+  const errorEnd = Math.min(lineText.length, range.end.character + 20);
+  const errorContext = lineText.substring(errorStart, errorEnd);
+
+  // More inclusive pattern for record.field, handling various formats
+  // This will catch Record.Field, Record."Field with spaces", etc.
+  const recordFieldPattern = /(\w+)\.(?:["']([^"']+)["']|([.\w]+))/g;
   let match;
+  let bestMatch = null;
+  let bestDistance = Infinity;
 
   while ((match = recordFieldPattern.exec(lineText)) !== null) {
-    // Check if this match contains our position
+    const recordVariableName = match[1];
+    const fieldName = match[2] || match[3]; // Either quoted or unquoted field
     const matchStart = match.index;
     const matchEnd = match.index + match[0].length;
 
+    // Check if this match overlaps with our error range
     if (
-      matchStart <= range.start.character &&
-      matchEnd >= range.end.character
+      matchStart <= range.end.character &&
+      matchEnd >= range.start.character
     ) {
-      const recordName = match[1];
-      const fieldName = match[3];
+      // This match directly overlaps with the error - best possible match
+      return {
+        recordVariableName,
+        fieldName,
+        range: new vscode.Range(
+          new vscode.Position(range.start.line, matchStart),
+          new vscode.Position(range.start.line, matchEnd)
+        ),
+      };
+    }
 
-      return { recordName, fieldName };
+    // If not directly overlapping, keep track of the closest match
+    const distance = Math.min(
+      Math.abs(matchStart - range.start.character),
+      Math.abs(matchEnd - range.end.character)
+    );
+
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestMatch = {
+        recordVariableName,
+        fieldName,
+        range: new vscode.Range(
+          new vscode.Position(range.start.line, matchStart),
+          new vscode.Position(range.start.line, matchEnd)
+        ),
+      };
     }
   }
+
+  // If we found any match within a reasonable distance, return it
+  if (bestMatch && bestDistance < 50) {
+    return bestMatch;
+  }
+
+  // Try to extract from the error message itself as a last resort
+  const document_error_message = document.getText(range);
+  console.log(
+    `Error context: ${errorContext}, Error message: ${document_error_message}`
+  );
 
   return null;
 }
@@ -60,31 +104,58 @@ class FieldSuggestionActionProvider {
       return [];
     }
 
-    // Find diagnostics that match our pattern
-    const matchingDiagnostics = context.diagnostics.filter((d) =>
-      d.message.includes("does not contain a definition for")
+    // Debug: Log diagnostic information to help troubleshoot
+    console.log(
+      `Found ${context.diagnostics.length} diagnostics at line ${
+        range.start.line + 1
+      }`
     );
+    context.diagnostics.forEach((d, idx) => {
+      console.log(
+        `Diagnostic ${idx + 1}: ${d.message}, code: ${d.code}, severity: ${
+          d.severity
+        }`
+      );
+    });
+
+    // Find diagnostics that match any common field error patterns
+    const matchingDiagnostics = context.diagnostics.filter((d) => {
+      const message = d.message.toLowerCase();
+      return (
+        message.includes("does not contain a definition for") ||
+        (message.includes("field") && message.includes("does not exist")) ||
+        message.includes("unknown field") ||
+        message.includes("field not found") ||
+        message.includes("cannot be resolved") ||
+        message.includes("is not found") ||
+        message.includes("is inaccessible") ||
+        message.includes("identifier not found")
+      );
+    });
 
     if (matchingDiagnostics.length === 0) {
+      console.log("No matching diagnostics found for field suggestion");
       return [];
     }
 
     const actions = [];
 
     for (const diagnostic of matchingDiagnostics) {
+      // Try to extract field info from the diagnostic
       const fieldInfo = extractFieldInfo(document, diagnostic.range);
 
       if (!fieldInfo) {
+        console.log("Could not extract field info from diagnostic");
         continue;
       }
 
-      const { recordName, fieldName } = fieldInfo;
+      const { recordVariableName, fieldName } = fieldInfo;
 
       // Try to determine the table type for this record
       // Make sure to properly await the Promise
       const tableType = await fieldCollector.guessTableType(
         document.getText(),
-        recordName
+        recordVariableName
       );
 
       if (!tableType) {
@@ -96,8 +167,9 @@ class FieldSuggestionActionProvider {
         manualAction.command = {
           command: "bc-al-upgradeassistant.suggestFieldNames",
           title: "Find similar fields",
-          arguments: [recordName, fieldName],
+          arguments: [recordVariableName, fieldName],
         };
+        manualAction.diagnostics = [diagnostic]; // Associate with the diagnostic
         actions.push(manualAction);
         continue;
       }
@@ -106,6 +178,7 @@ class FieldSuggestionActionProvider {
       const validFields = await fieldCollector.getFieldsForTable(tableType);
 
       if (!validFields || validFields.length === 0) {
+        console.log(`No fields found for table '${tableType}'`);
         continue;
       }
 
@@ -114,6 +187,9 @@ class FieldSuggestionActionProvider {
         fieldName,
         validFields
       );
+
+      // Use fieldInfo.range instead of diagnostic.range for more accurate replacement
+      const replacementRange = fieldInfo.range || diagnostic.range;
 
       // Create a code action for each suggestion
       for (const suggestion of suggestions) {
@@ -131,10 +207,24 @@ class FieldSuggestionActionProvider {
         // Determine if we need to add quotes
         const needsQuotes =
           suggestion.includes(" ") || suggestion.includes("-");
-        const replacement = needsQuotes ? `"${suggestion}"` : suggestion;
 
-        edit.replace(document.uri, diagnostic.range, replacement);
+        // Only replace the field part, not the record name
+        const originalText = document.getText(replacementRange);
+        const dotIndex = originalText.indexOf(".");
+
+        let replacement;
+        if (dotIndex !== -1) {
+          const recordPart = originalText.substring(0, dotIndex + 1);
+          replacement =
+            recordPart + (needsQuotes ? `"${suggestion}"` : suggestion);
+        } else {
+          // Fallback if we can't find the dot
+          replacement = needsQuotes ? `"${suggestion}"` : suggestion;
+        }
+
+        edit.replace(document.uri, replacementRange, replacement);
         action.edit = edit;
+        action.isPreferred = true; // Make first suggestion preferred
 
         actions.push(action);
       }
@@ -147,8 +237,9 @@ class FieldSuggestionActionProvider {
       moreAction.command = {
         command: "bc-al-upgradeassistant.suggestFieldNames",
         title: "More field suggestions",
-        arguments: [recordName, fieldName],
+        arguments: [recordVariableName, fieldName],
       };
+      moreAction.diagnostics = [diagnostic]; // Associate with the diagnostic
       actions.push(moreAction);
     }
 
