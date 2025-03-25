@@ -143,6 +143,10 @@ To use this feature enable source extraction in settings:
 
 - **Enable Source Extraction**: Turn on/off the source extraction capability through `bc-al-upgradeassistant.enableSrcExtraction` setting
 
+## Field Name Suggestion
+
+When an unknown or misspelled field is used, the extension will show quick fix suggestions. Similar field names are detected using string similarity, allowing you to easily replace the invalid field with a valid one.
+
 ## Commands
 
 ### General
