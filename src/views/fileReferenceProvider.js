@@ -285,6 +285,7 @@ class FileReferenceProvider {
       const referenceFilePath = path.join(indexFolder, referenceFileName);
 
       const result = [];
+      let referencedObjects = [];
 
       // Read file content and look for documentation IDs
       const fileContent = fs.readFileSync(filePath, "utf8");
@@ -301,15 +302,15 @@ class FileReferenceProvider {
           );
 
           if (referenceData.referencedWorkingObjects?.length > 0) {
-            const referencedObjects =
-              referenceData.referencedWorkingObjects.map((ref) => {
+            referencedObjects = referenceData.referencedWorkingObjects.map(
+              (ref) => {
                 return new ReferencedObjectItem(
                   ref.type,
                   ref.number.toString(),
                   indexFolder
                 );
-              });
-            result.push(new ReferencedObjectsGroup(referencedObjects));
+              }
+            );
           }
         } catch (parseError) {
           console.error("Error parsing reference file:", parseError);
@@ -322,19 +323,12 @@ class FileReferenceProvider {
         }
       }
 
+      // Always add Referenced Objects group, even if empty
+      result.push(new ReferencedObjectsGroup(referencedObjects));
+
       // Add documentation references after referenced objects
       if (documentationRefs.length > 0) {
         result.push(new DocumentationRefsItem(documentationRefs, filePath));
-      }
-
-      // If no items added, show a message
-      if (result.length === 0) {
-        result.push(
-          new TreeItem(
-            "No references found for this file",
-            vscode.TreeItemCollapsibleState.None
-          )
-        );
       }
 
       this.updateDecorations();
@@ -2011,18 +2005,43 @@ class ReferencedObjectItem extends TreeItem {
     this.type = type;
     this.id = id;
     this.indexFolder = indexFolder;
+    let objectName = "";
 
     // Try to get object name
     const objectFolder = path.join(indexFolder, type.toLowerCase(), id);
     const infoFilePath = path.join(objectFolder, "info.json");
 
     if (fs.existsSync(infoFilePath)) {
-      const infoData = JSON.parse(fs.readFileSync(infoFilePath, "utf8"));
-      if (infoData.fileName) {
-        const fileNameMatch = infoData.fileName.match(/_(.+)\.al$/);
-        if (fileNameMatch) {
-          this.description = fileNameMatch[1].replace(/_/g, " ");
+      try {
+        const infoData = JSON.parse(fs.readFileSync(infoFilePath, "utf8"));
+        if (infoData.originalPath) {
+          // Extract file name without extension
+          const fileName = path.basename(infoData.originalPath, ".al");
+
+          // For better naming, we need to determine object type pattern
+          if (fileName.includes(type.toLowerCase())) {
+            // Remove type prefix and any trailing dots or underscores
+            objectName = fileName.replace(
+              new RegExp(`^${type.toLowerCase()}\\.`),
+              ""
+            );
+          } else {
+            // Just use the filename directly
+            objectName = fileName;
+          }
+
+          // Clean up name - replace underscores with spaces if configured to do so
+          objectName = objectName.replace(/^[0-9]+_/, ""); // Remove leading numbers/underscores
+
+          // Set the description to the object name
+          this.description = objectName;
+          // Also add it to the tooltip
+          this.tooltip = `${type} ${id}: ${objectName}\n\nClick to open object`;
         }
+      } catch (error) {
+        console.error(`Error reading info file for ${type} ${id}:`, error);
+        this.description = "Error reading object info";
+        this.iconPath = new vscode.ThemeIcon("warning");
       }
     } else {
       // No info file found

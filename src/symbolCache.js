@@ -302,8 +302,10 @@ class SymbolCache {
               return decodeURIComponent(decodeURIComponent(part));
             } catch (e) {
               try {
+                console.log(e);
                 return decodeURIComponent(part);
               } catch (e2) {
+                console.log(e2);
                 return part;
               }
             }
