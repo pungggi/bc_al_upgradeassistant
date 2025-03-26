@@ -280,6 +280,21 @@ function registerModelCommands(context) {
       );
     }
   });
+
+  // Command to set default Claude model
+  registerCommandOnce(
+    context,
+    `${EXTENSION_ID}.setDefaultClaudeModel`,
+    async () => {
+      const selectedModel = await modelHelper.selectModel();
+      if (selectedModel) {
+        await configManager.setConfigValue("claude.model", selectedModel.id);
+        vscode.window.showInformationMessage(
+          `Default Claude model set to ${selectedModel.name}`
+        );
+      }
+    }
+  );
 }
 
 module.exports = {

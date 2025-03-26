@@ -41,13 +41,11 @@
       {
         "command": "bc-al-upgradeassistant.openReferencedObject",
         "title": "Open Referenced Object",
-        "category": "BC/AL Upgrade Assistant",
         "icon": "$(file-code)"
       },
       {
         "command": "bc-al-upgradeassistant.openMigrationFile",
         "title": "Open Migration File",
-        "category": "BC/AL Upgrade Assistant",
         "icon": "$(file-code)"
       },
       {
@@ -59,7 +57,6 @@
       {
         "command": "bc-al-upgradeassistant.openDocumentationReference",
         "title": "Open Documentation Reference Location",
-        "category": "BC/AL Upgrade Assistant",
         "icon": "$(go-to-file)"
       },
       {
@@ -71,7 +68,6 @@
       {
         "command": "bc-al-upgradeassistant.openDocumentationUrl",
         "title": "Open Documentation URL",
-        "category": "BC/AL Upgrade Assistant",
         "icon": "$(link-external)"
       },
       {
