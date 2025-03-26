@@ -1,8 +1,8 @@
 {
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
-  "description": "Assists you in transforming old C/AL and more",
-  "version": "0.0.86",
+  "description": "Assists you in upgrading old or obsolete code and more",
+  "version": "0.0.87",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
@@ -95,85 +95,85 @@
       {
         "command": "bc-al-upgradeassistant.deleteReferencedObject",
         "title": "Delete Referenced Object",
-        "category": "BC/AL Upgrade Assistant",
         "icon": "$(trash)"
       },
       {
         "command": "bc-al-upgradeassistant.addReference",
         "title": "Add Reference",
-        "category": "BC/AL Upgrade Assistant",
         "icon": "$(add)"
       },
       {
         "command": "bc-al-upgradeassistant.toggleProcedureReferencesDone",
         "title": "Toggle All References as Done/Not Done",
-        "category": "BC/AL Upgrade Assistant",
         "icon": "$(check-all)"
       },
       {
         "command": "bc-al-upgradeassistant.toggleProcedureReferencesNotImplemented",
         "title": "Toggle All References as Not Implemented",
-        "category": "BC/AL Upgrade Assistant",
         "icon": "$(circle-slash)"
       },
       {
         "command": "bc-al-upgradeassistant.setProcedureReferencesDescription",
         "title": "Add/Edit Note for All References",
-        "category": "BC/AL Upgrade Assistant",
         "icon": "$(edit)"
       },
       {
         "command": "bc-al-upgradeassistant.toggleTriggerReferencesDone",
         "title": "Toggle All References as Done/Not Done",
-        "category": "BC/AL Upgrade Assistant",
         "icon": "$(check-all)"
       },
       {
         "command": "bc-al-upgradeassistant.toggleTriggerReferencesNotImplemented",
         "title": "Toggle All References as Not Implemented",
-        "category": "BC/AL Upgrade Assistant",
         "icon": "$(circle-slash)"
       },
       {
         "command": "bc-al-upgradeassistant.setTriggerReferencesDescription",
         "title": "Add/Edit Note for All References",
-        "category": "BC/AL Upgrade Assistant",
         "icon": "$(edit)"
       },
       {
         "command": "bc-al-upgradeassistant.toggleActionReferencesDone",
         "title": "Toggle All References as Done/Not Done",
-        "category": "BC/AL Upgrade Assistant",
         "icon": "$(check-all)"
       },
       {
         "command": "bc-al-upgradeassistant.toggleActionReferencesNotImplemented",
         "title": "Toggle All References as Not Implemented",
-        "category": "BC/AL Upgrade Assistant",
         "icon": "$(circle-slash)"
       },
       {
         "command": "bc-al-upgradeassistant.setActionReferencesDescription",
         "title": "Add/Edit Note for All References",
-        "category": "BC/AL Upgrade Assistant",
         "icon": "$(edit)"
       },
       {
         "command": "bc-al-upgradeassistant.toggleFieldReferencesDone",
         "title": "Toggle All References as Done/Not Done",
-        "category": "BC/AL Upgrade Assistant",
         "icon": "$(check-all)"
       },
       {
         "command": "bc-al-upgradeassistant.toggleFieldReferencesNotImplemented",
         "title": "Toggle All References as Not Implemented",
-        "category": "BC/AL Upgrade Assistant",
         "icon": "$(circle-slash)"
       },
       {
         "command": "bc-al-upgradeassistant.setFieldReferencesDescription",
         "title": "Add/Edit Note for All References",
-        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.toggleTaskReferenceDone",
+        "title": "Toggle All References with this Task ID as Done/Undone",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.toggleTaskReferenceNotImplemented",
+        "title": "Toggle All References with this Task ID as Not Implemented/Implemented"
+      },
+      {
+        "command": "bc-al-upgradeassistant.setTaskReferenceDescription",
+        "title": "Set Description for All References with this Task ID",
         "icon": "$(edit)"
       }
     ],
@@ -404,6 +404,41 @@
         {
           "command": "bc-al-upgradeassistant.setFieldReferencesDescription",
           "when": "view == bc-al-references && viewItem == fieldItem || view == bc-al-file-info && viewItem == fieldItem",
+          "group": "inline"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleTaskReferenceDone",
+          "when": "view == bc-al-references && viewItem == documentationRefTaskGroup",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleTaskReferenceDone",
+          "when": "view == bc-al-references && viewItem == documentationRefTaskGroup || view == bc-al-file-info && viewItem == documentationRefTaskGroup",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleTaskReferenceDone",
+          "when": "view == bc-al-references && viewItem == documentationRefTaskGroup || view == bc-al-file-info && viewItem == documentationRefTaskGroup",
+          "group": "inline"
+        },
+        {
+          "command": "bc-al-upgradeassistant.toggleTaskReferenceNotImplemented",
+          "when": "view == bc-al-references && viewItem == documentationRefTaskGroup",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.setTaskReferenceDescription",
+          "when": "view == bc-al-references && viewItem == documentationRefTaskGroup",
+          "group": "2_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.setTaskReferenceDescription",
+          "when": "view == bc-al-references && viewItem == documentationRefTaskGroup || view == bc-al-file-info && viewItem == documentationRefTaskGroup",
+          "group": "1_modification"
+        },
+        {
+          "command": "bc-al-upgradeassistant.setTaskReferenceDescription",
+          "when": "view == bc-al-references && viewItem == documentationRefTaskGroup || view == bc-al-file-info && viewItem == documentationRefTaskGroup",
           "group": "inline"
         }
       ]

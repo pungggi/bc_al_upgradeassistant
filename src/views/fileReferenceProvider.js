@@ -1868,6 +1868,229 @@ class FileReferenceProvider {
     }
   }
 
+  /**
+   * Toggle the "done" state of all documentation references with the same task ID
+   * @param {string} filePath File path
+   * @param {string} taskId Task ID
+   * @returns {boolean} Operation success
+   */
+  toggleTaskReferenceDone(filePath, taskId) {
+    try {
+      // Find all documentation references in this file
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      const docRefs = this._findDocumentationReferences(fileContent, filePath);
+
+      // Filter to references with this task ID
+      const refsWithTaskId = docRefs.filter((ref) => ref.taskId === taskId);
+
+      if (refsWithTaskId.length === 0) {
+        return false;
+      }
+
+      // Determine the target state (opposite of majority current state)
+      const doneCount = refsWithTaskId.filter((ref) => ref.done).length;
+      const targetState = doneCount <= refsWithTaskId.length / 2;
+
+      // Get storage file and data
+      const storageFile = this._getDocumentationStorageFile();
+
+      // Read existing data or create new
+      let storageData = {};
+      if (fs.existsSync(storageFile)) {
+        storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
+      }
+
+      const fileKey = this._normalizePathForStorage(filePath);
+      const config = vscode.workspace.getConfiguration(
+        "bc-al-upgradeassistant"
+      );
+      const userId = config.get("userId");
+
+      // Initialize file entry if needed
+      if (!storageData[fileKey]) {
+        storageData[fileKey] = { references: [] };
+      }
+
+      // Toggle state for each reference
+      for (const ref of refsWithTaskId) {
+        // Find existing reference or add new one
+        let refData = storageData[fileKey].references.find(
+          (r) => r.id === ref.id && r.lineNumber === ref.lineNumber
+        );
+
+        if (refData) {
+          // Update state
+          refData.done = targetState;
+          // If marked as done, it can't be not implemented
+          if (targetState && refData.notImplemented) {
+            refData.notImplemented = false;
+          }
+          // Silently add/update userId
+          if (userId) {
+            refData.userId = userId;
+            refData.lastModified = new Date().toISOString();
+          }
+        } else {
+          // Add new entry
+          refData = {
+            id: ref.id,
+            lineNumber: ref.lineNumber,
+            done: targetState,
+            userId: userId || undefined,
+            lastModified: new Date().toISOString(),
+          };
+          storageData[fileKey].references.push(refData);
+        }
+      }
+
+      // Save updated data
+      fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
+
+      // Fire change event to refresh tree
+      this.refresh();
+
+      // Update decorations
+      this.updateDecorations();
+
+      return true;
+    } catch (error) {
+      console.error("Error toggling task references state:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Toggle the "not implemented" state of all documentation references with the same task ID
+   * @param {string} filePath File path
+   * @param {string} taskId Task ID
+   * @param {string} [userDescription] Optional user description when toggling to not implemented
+   * @returns {boolean} Operation success
+   */
+  toggleTaskReferenceNotImplemented(filePath, taskId, userDescription) {
+    try {
+      // Find all documentation references in this file
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      const docRefs = this._findDocumentationReferences(fileContent, filePath);
+
+      // Filter to references with this task ID
+      const refsWithTaskId = docRefs.filter((ref) => ref.taskId === taskId);
+
+      if (refsWithTaskId.length === 0) {
+        return false;
+      }
+
+      // Determine the target state (opposite of majority current state)
+      const notImplCount = refsWithTaskId.filter(
+        (ref) => ref.notImplemented
+      ).length;
+      const targetState = notImplCount <= refsWithTaskId.length / 2;
+
+      // If not toggling to not implemented state, we don't need a description
+      if (!targetState) {
+        return this._toggleGroupReferencesNotImplemented(
+          filePath,
+          refsWithTaskId,
+          targetState
+        );
+      }
+
+      // Only apply the description if we're toggling TO not implemented
+      return this._toggleGroupReferencesNotImplemented(
+        filePath,
+        refsWithTaskId,
+        targetState,
+        userDescription
+      );
+    } catch (error) {
+      console.error(
+        "Error toggling task references not implemented state:",
+        error
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Set description for all documentation references with the same task ID
+   * @param {string} filePath File path
+   * @param {string} taskId Task ID
+   * @param {string} description User-provided description
+   * @returns {boolean} Success status
+   */
+  setTaskReferenceDescription(filePath, taskId, description) {
+    try {
+      // Find all documentation references in this file
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      const docRefs = this._findDocumentationReferences(fileContent, filePath);
+
+      // Filter to references with this task ID
+      const refsWithTaskId = docRefs.filter((ref) => ref.taskId === taskId);
+
+      if (refsWithTaskId.length === 0) {
+        return false;
+      }
+
+      // Get storage file and data
+      const storageFile = this._getDocumentationStorageFile();
+
+      // Read existing data or create new
+      let storageData = {};
+      if (fs.existsSync(storageFile)) {
+        storageData = JSON.parse(fs.readFileSync(storageFile, "utf8"));
+      }
+
+      const fileKey = this._normalizePathForStorage(filePath);
+      const config = vscode.workspace.getConfiguration(
+        "bc-al-upgradeassistant"
+      );
+      const userId = config.get("userId");
+
+      // Initialize file entry if needed
+      if (!storageData[fileKey]) {
+        storageData[fileKey] = { references: [] };
+      }
+
+      // Set description for each reference
+      for (const ref of refsWithTaskId) {
+        // Find existing reference or add new one
+        let refData = storageData[fileKey].references.find(
+          (r) => r.id === ref.id && r.lineNumber === ref.lineNumber
+        );
+
+        if (refData) {
+          // Update description
+          refData.userDescription = description;
+          // Silently add/update userId
+          if (userId) {
+            refData.userId = userId;
+            refData.lastModified = new Date().toISOString();
+          }
+        } else {
+          // Add new entry
+          refData = {
+            id: ref.id,
+            lineNumber: ref.lineNumber,
+            userDescription: description,
+            userId: userId || undefined,
+            lastModified: new Date().toISOString(),
+          };
+          storageData[fileKey].references.push(refData);
+        }
+      }
+
+      // Save updated data
+      fs.writeFileSync(storageFile, JSON.stringify(storageData, null, 2));
+
+      // Fire change event to refresh tree
+      this.refresh();
+
+      return true;
+    } catch (error) {
+      console.error("Error setting task references description:", error);
+      return false;
+    }
+  }
+
   updateDecorations() {
     if (!this.currentEditor) {
       return;
@@ -2605,11 +2828,39 @@ class DocumentationRefTaskGroupItem extends TreeItem {
     this.filePath = filePath;
     this.contextValue = "documentationRefTaskGroup";
 
+    // Add taskId to allow for batch operations
+    this.taskId = taskId;
+
     // Use a different icon for task groups
     this.iconPath = new vscode.ThemeIcon("tasklist");
 
     // Set a unique ID so we can remember expanded state
     this.id = `docRefTaskGroup-${filePath}-${taskId}`;
+
+    // Add the buttons for toggle done and edit description
+    this.tooltip = "Task ID group - use context menu for bulk operations";
+
+    // Add toolbar buttons for common actions
+    this.buttons = [
+      {
+        iconPath: new vscode.ThemeIcon("check-all"),
+        tooltip: "Mark all references as done/undone",
+        command: {
+          command: "bc-al-upgradeassistant.toggleTaskReferenceDone",
+          title: "Toggle Done Status",
+          arguments: [this],
+        },
+      },
+      {
+        iconPath: new vscode.ThemeIcon("edit"),
+        tooltip: "Add note to all references",
+        command: {
+          command: "bc-al-upgradeassistant.setTaskReferenceDescription",
+          title: "Add Note",
+          arguments: [this],
+        },
+      },
+    ];
   }
 
   getChildren() {
@@ -2657,7 +2908,6 @@ class DocumentationRefItem extends TreeItem {
       contextText.length > 500
         ? contextText.substring(0, 499) + "..."
         : contextText;
-
     super(label, vscode.TreeItemCollapsibleState.None);
     this.docRef = docRef;
     this.filePath = filePath;
@@ -2677,18 +2927,12 @@ class DocumentationRefItem extends TreeItem {
     // Set context value based on status
     if (docRef.notImplemented) {
       this.contextValue = "documentationRefNotImplemented";
-    } else if (docRef.done) {
-      this.contextValue = "documentationRefDone";
-    } else {
-      this.contextValue = "documentationRef";
-    }
-
-    // Set icon based on status
-    if (docRef.notImplemented) {
       this.iconPath = new vscode.ThemeIcon("circle-slash");
     } else if (docRef.done) {
+      this.contextValue = "documentationRefDone";
       this.iconPath = new vscode.ThemeIcon("check");
     } else {
+      this.contextValue = "documentationRef";
       this.iconPath = new vscode.ThemeIcon("book");
     }
 
@@ -2747,13 +2991,11 @@ class EnhancedMigrationFilesItem extends TreeItem {
 
   getChildren() {
     const items = [];
-
     this.files.forEach((file) => {
       const fileRefs = this.migrationFileRefs.find((r) => r.file === file);
       const fileItem = new MigrationFileItem(file, fileRefs?.refs || []);
       items.push(fileItem);
     });
-
     return items;
   }
 }

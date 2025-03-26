@@ -14,9 +14,11 @@ function registerViews(context) {
   fileReferenceProvider.initialize(context);
 
   // Register the tree data provider for BC/AL file references in the activity bar
+  // Add showCollapseAll and canSelectMany options and importantly - add showButtons option
   const referenceView = vscode.window.createTreeView("bc-al-references", {
     treeDataProvider: fileReferenceProvider,
     showCollapseAll: true,
+    showButtons: true,
   });
 
   // Update expanded state when items are expanded/collapsed
@@ -33,9 +35,11 @@ function registerViews(context) {
   });
 
   // Register the tree data provider for BC/AL file references in the explorer sidebar
+  // Also add showButtons option here
   const fileInfoView = vscode.window.createTreeView("bc-al-file-info", {
     treeDataProvider: fileReferenceProvider,
     showCollapseAll: true,
+    showButtons: true,
   });
 
   // Update expanded state when items are expanded/collapsed
@@ -310,6 +314,75 @@ function registerViews(context) {
           vscode.window.showErrorMessage(
             `Error opening migration file: ${error.message}`
           );
+        }
+      }
+    )
+  );
+
+  // Register command to toggle Done status for all references with the same task ID
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "bc-al-upgradeassistant.toggleTaskReferenceDone",
+      (item) => {
+        if (item && item.filePath && item.taskId) {
+          fileReferenceProvider.toggleTaskReferenceDone(
+            item.filePath,
+            item.taskId
+          );
+        }
+      }
+    )
+  );
+
+  // Register command to toggle Not Implemented status for all references with the same task ID
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "bc-al-upgradeassistant.toggleTaskReferenceNotImplemented",
+      (item) => {
+        if (item && item.filePath && item.taskId) {
+          // Show input box for description when marking as not implemented
+          vscode.window
+            .showInputBox({
+              prompt:
+                "Enter a description for why these references are not implemented",
+              placeHolder: "Optional description",
+            })
+            .then((description) => {
+              if (description !== undefined) {
+                // Check for cancel
+                fileReferenceProvider.toggleTaskReferenceNotImplemented(
+                  item.filePath,
+                  item.taskId,
+                  description
+                );
+              }
+            });
+        }
+      }
+    )
+  );
+
+  // Register command to set description for all references with the same task ID
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "bc-al-upgradeassistant.setTaskReferenceDescription",
+      (item) => {
+        if (item && item.filePath && item.taskId) {
+          vscode.window
+            .showInputBox({
+              prompt: "Enter a description for this task group",
+              placeHolder: "Description",
+            })
+            .then((description) => {
+              if (description !== undefined) {
+                // Check for cancel
+                fileReferenceProvider.setTaskReferenceDescription(
+                  item.filePath,
+                  item.taskId,
+                  description
+                );
+              }
+            });
         }
       }
     )
