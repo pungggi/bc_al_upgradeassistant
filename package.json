@@ -758,7 +758,6 @@
     "webpack-obfuscator": "^3.5.1"
   },
   "dependencies": {
-    "7zip-bin": "^5.1.1",
     "axios": "^1.6.0",
     "glob": "^7.2.3",
     "jszip": "^3.10.0",
