@@ -221,7 +221,10 @@ async function findSymbolReferenceFile(dir) {
 }
 
 async function removeDirectory(dir) {
-  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const entries = await readdir(dir, { withFileTypes: true }).catch((err) => {
+    console.error(`Error reading directory ${dir}:`, err);
+    return [];
+  });
 
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
@@ -229,16 +232,54 @@ async function removeDirectory(dir) {
     if (entry.isDirectory()) {
       await removeDirectory(fullPath);
     } else {
-      await fs.promises.unlink(fullPath).catch(() => {});
+      await fs.promises.unlink(fullPath).catch((err) => {
+        console.error(`Error removing file ${fullPath}:`, err);
+      });
     }
   }
 
-  await rmdir(dir).catch(() => {});
+  await rmdir(dir).catch((err) => {
+    console.error(`Error removing directory ${dir}:`, err);
+  });
 }
 
-// Listen for messages from the main process
+// Enhanced error handling for worker process
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught exception in worker:", error);
+  process.send({
+    type: "error",
+    message: `Uncaught exception in worker: ${error.message}`,
+    stack: error.stack,
+  });
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (error) => {
+  console.error("Unhandled promise rejection in worker:", error);
+  process.send({
+    type: "error",
+    message: `Unhandled promise rejection in worker: ${error.message}`,
+    stack: error.stack,
+  });
+  process.exit(1);
+});
+
+// Listen for messages from the main process with enhanced error handling
 process.on("message", async (message) => {
-  if (message.type === "process") {
-    await processAppFile(message.appPath, message.options);
+  try {
+    if (message.type === "process") {
+      await processAppFile(message.appPath, message.options);
+      // Explicit successful exit
+      process.exit(0);
+    }
+  } catch (error) {
+    console.error("Unhandled error in worker:", error);
+    process.send({
+      type: "error",
+      message: `Unhandled error in worker: ${error.message}`,
+      stack: error.stack,
+      appPath: message.appPath,
+    });
+    process.exit(1);
   }
 });

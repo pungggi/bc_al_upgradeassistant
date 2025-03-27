@@ -47,11 +47,8 @@ function getMergedDocumentationIds() {
   const config = vscode.workspace.getConfiguration("bc-al-upgradeassistant");
   const workspaceIds = config.get("documentationIds") || [];
 
-  console.log("Documentation IDs from workspace settings:", workspaceIds);
-
   // Get IDs from local settings.json
   const localIds = getLocalDocumentationIds() || [];
-  console.log("Documentation IDs from local settings:", localIds);
 
   // Create a map to avoid duplicates (by ID)
   const idMap = new Map();

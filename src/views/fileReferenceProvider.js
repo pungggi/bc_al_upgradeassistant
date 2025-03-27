@@ -144,7 +144,6 @@ class FileReferenceProvider {
         state.forEach((id) => this.expandedState.set(id, true));
       }
       this.storageLoaded = true;
-      console.log(`Loaded ${this.expandedState.size} expanded tree items`);
     } catch (error) {
       console.error("Error loading expanded state:", error);
     }

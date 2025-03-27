@@ -1222,7 +1222,7 @@ function setupSymbolsWatchers(context) {
         // Refresh symbol cache when new app files are detected
         setTimeout(async () => {
           try {
-            const symbolsCount = await initializeSymbolCache();
+            const symbolsCount = await initializeSymbolCache(true);
             if (symbolsCount > 0) {
               vscode.window.showInformationMessage(
                 `Symbol cache updated with ${symbolsCount} files after new symbols detected`
@@ -1245,10 +1245,15 @@ function setupSymbolsWatchers(context) {
 
 /**
  * Initialize symbol cache
+ * @param {boolean} force - Whether to force refresh the cache
  * @returns {Promise<number>} Number of processed files
  */
-async function initializeSymbolCache() {
+async function initializeSymbolCache(force = false) {
   try {
+    if (force) {
+      symbolCache.clearCache();
+    }
+
     let appPaths = [];
     const defaultLocations = [];
 

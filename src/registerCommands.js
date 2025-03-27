@@ -30,7 +30,7 @@ function registerRefreshSymbolCacheCommand(context) {
     async () => {
       try {
         const extension = require("./extension");
-        const processed = await extension.initializeSymbolCache();
+        const processed = await extension.initializeSymbolCache(true);
         vscode.window.showInformationMessage(
           `Symbol cache refreshed successfully. Processed ${processed} app files for symbols.`
         );

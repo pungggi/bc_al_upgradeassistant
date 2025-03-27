@@ -76,6 +76,11 @@ class SymbolCache {
     }
   }
 
+  clearCache() {
+    this.symbols = {};
+    this.saveCache();
+  }
+
   async refreshCacheInBackground() {
     if (this.isRefreshing) {
       vscode.window.showInformationMessage(
@@ -130,164 +135,180 @@ class SymbolCache {
       }
     }
 
-    await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: "Refreshing AL Symbol Cache",
-        cancellable: false,
-      },
-      async (progress) => {
-        progress.report({ increment: 0, message: "Starting..." });
+    try {
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Window, // changed from Notification to Window
+          title: "Refreshing AL Symbol Cache",
+          cancellable: false,
+        },
+        async (progress) => {
+          progress.report({ increment: 0, message: "Starting..." });
 
-        const workerPromises = this.appPaths.map((appPath) =>
-          // First check if we can skip this app
-          this.checkIfAppCanBeSkipped(
-            appPath,
-            enableSrcExtraction,
-            srcExtractionPath
-          ).then((skipApp) => {
-            if (skipApp) {
-              processedCount++;
-              successCount++;
-              const increment = (1 / totalApps) * 100;
-              progress.report({
-                increment,
-                message: `Skipped ${path.basename(
-                  appPath
-                )} (already processed)...`,
-              });
-              return Promise.resolve();
-            }
+          const workerPromises = this.appPaths.map((appPath) =>
+            // First check if we can skip this app
+            this.checkIfAppCanBeSkipped(
+              appPath,
+              enableSrcExtraction,
+              srcExtractionPath
+            ).then((skipApp) => {
+              if (skipApp) {
+                processedCount++;
+                successCount++;
+                const increment = (1 / totalApps) * 100;
+                progress.report({
+                  increment,
+                  message: `Skipped ${path.basename(
+                    appPath
+                  )} (already processed)...`,
+                });
+                return Promise.resolve();
+              }
 
-            // If not skipping, create and handle the worker
-            return new Promise((resolve) => {
-              const workerPath = path.join(__dirname, "symbolCacheWorker.js");
+              // If not skipping, create and handle the worker
+              return new Promise((resolve) => {
+                const workerPath = path.join(__dirname, "symbolCacheWorker.js");
 
-              // Create worker with inspector disabled to avoid port conflicts
-              const worker = fork(workerPath, [], {
-                stdio: "pipe",
-                execArgv: [], // Prevent inspector inheritance
-              });
+                // Create worker with inspector disabled to avoid port conflicts
+                const worker = fork(workerPath, [], {
+                  stdio: "pipe",
+                  execArgv: [], // Prevent inspector inheritance
+                });
 
-              // Handle messages from worker
-              worker.on("message", (message) => {
-                switch (message.type) {
-                  case "success":
-                    Object.assign(newSymbols, message.symbols);
-                    successCount++;
-                    break;
-                  case "error":
+                // Handle messages from worker
+                worker.on("message", (message) => {
+                  switch (message.type) {
+                    case "success":
+                      Object.assign(newSymbols, message.symbols);
+                      successCount++;
+                      break;
+                    case "error":
+                      errorCount++;
+                      console.error(
+                        `Worker error for ${message.appPath}: ${message.message}`,
+                        message.stack
+                      );
+                      vscode.window.showErrorMessage(
+                        `Error processing ${path.basename(message.appPath)}: ${
+                          message.message
+                        }`
+                      );
+                      break;
+                    case "progress":
+                      progress.report({
+                        message: `Processing ${path.basename(appPath)}: ${
+                          message.message
+                        }`,
+                      });
+                      break;
+                    case "warning":
+                      console.warn(
+                        `Worker warning for ${appPath}: ${message.message}`
+                      );
+                      vscode.window.showWarningMessage(
+                        `Warning processing ${path.basename(appPath)}: ${
+                          message.message
+                        }`
+                      );
+                      break;
+                  }
+                });
+
+                // Handle worker exit
+                worker.on("exit", (code) => {
+                  processedCount++;
+                  const increment = (1 / totalApps) * 100;
+                  progress.report({
+                    increment,
+                    message: `Processed ${processedCount}/${totalApps} apps...`,
+                  });
+                  if (code !== 0) {
                     errorCount++;
                     console.error(
-                      `Worker error for ${message.appPath}: ${message.message}`,
-                      message.stack
+                      `Worker for ${appPath} exited with code ${code}`
                     );
                     vscode.window.showErrorMessage(
-                      `Error processing ${path.basename(message.appPath)}: ${
-                        message.message
-                      }`
+                      `Worker for ${path.basename(
+                        appPath
+                      )} exited unexpectedly.`
                     );
-                    break;
-                  case "progress":
-                    progress.report({
-                      message: `Processing ${path.basename(appPath)}: ${
-                        message.message
-                      }`,
-                    });
-                    break;
-                  case "warning":
-                    console.warn(
-                      `Worker warning for ${appPath}: ${message.message}`
-                    );
-                    vscode.window.showWarningMessage(
-                      `Warning processing ${path.basename(appPath)}: ${
-                        message.message
-                      }`
-                    );
-                    break;
-                }
-              });
-
-              // Handle worker exit
-              worker.on("exit", (code) => {
-                processedCount++;
-                const increment = (1 / totalApps) * 100;
-                progress.report({
-                  increment,
-                  message: `Processed ${processedCount}/${totalApps} apps...`,
+                  }
+                  resolve();
                 });
-                if (code !== 0) {
+
+                // Handle worker errors
+                worker.on("error", (err) => {
+                  processedCount++;
                   errorCount++;
-                  console.error(
-                    `Worker for ${appPath} exited with code ${code}`
-                  );
+                  console.error(`Failed to start worker for ${appPath}:`, err);
                   vscode.window.showErrorMessage(
-                    `Worker for ${path.basename(appPath)} exited unexpectedly.`
+                    `Failed to start worker for ${path.basename(appPath)}: ${
+                      err.message
+                    }`
                   );
-                }
-                resolve();
-              });
-
-              // Handle worker errors
-              worker.on("error", (err) => {
-                processedCount++;
-                errorCount++;
-                console.error(`Failed to start worker for ${appPath}:`, err);
-                vscode.window.showErrorMessage(
-                  `Failed to start worker for ${path.basename(appPath)}: ${
-                    err.message
-                  }`
-                );
-                const increment = (1 / totalApps) * 100;
-                progress.report({
-                  increment,
-                  message: `Processed ${processedCount}/${totalApps} apps...`,
+                  const increment = (1 / totalApps) * 100;
+                  progress.report({
+                    increment,
+                    message: `Processed ${processedCount}/${totalApps} apps...`,
+                  });
+                  resolve();
                 });
-                resolve();
+
+                // Handle worker stdout/stderr
+                worker.stdout.on("data", (data) =>
+                  console.log(
+                    `Worker stdout (${path.basename(appPath)}): ${data}`
+                  )
+                );
+                worker.stderr.on("data", (data) =>
+                  console.error(
+                    `Worker stderr (${path.basename(appPath)}): ${data}`
+                  )
+                );
+
+                // Send initial message to worker
+                worker.send({
+                  type: "process",
+                  appPath,
+                  options: {
+                    cachePath: this.cachePath,
+                    extractPath: this.extractPath,
+                    enableSrcExtraction,
+                    srcExtractionPath,
+                  },
+                });
               });
+            })
+          );
 
-              // Handle worker stdout/stderr
-              worker.stdout.on("data", (data) =>
-                console.log(
-                  `Worker stdout (${path.basename(appPath)}): ${data}`
-                )
-              );
-              worker.stderr.on("data", (data) =>
-                console.error(
-                  `Worker stderr (${path.basename(appPath)}): ${data}`
-                )
-              );
+          // Wait for all workers to complete
+          await Promise.all(workerPromises);
 
-              // Send initial message to worker
-              worker.send({
-                type: "process",
-                appPath,
-                options: {
-                  cachePath: this.cachePath,
-                  extractPath: this.extractPath,
-                  enableSrcExtraction,
-                  srcExtractionPath,
-                },
-              });
-            });
-          })
-        );
+          // Update main symbols object and save cache
+          this.symbols = newSymbols;
+          await this.saveCache();
 
-        // Wait for all workers to complete
-        await Promise.all(workerPromises);
+          // Report final progress then return immediately
+          progress.report({
+            increment: 100,
+            message: "Cache refresh complete",
+          });
+          return; // removed delay to ensure message disappears promptly
+        }
+      );
 
-        // Update main symbols object and save cache
-        this.symbols = newSymbols;
-        await this.saveCache();
-
-        progress.report({ increment: 100, message: "Cache refresh complete." });
-        vscode.window.showInformationMessage(
-          `Symbol cache refresh finished. Processed: ${processedCount}, Success: ${successCount}, Errors: ${errorCount}.`
-        );
-      }
-    );
-
-    this.isRefreshing = false;
+      // Show completion message after progress notification is closed
+      vscode.window.showInformationMessage(
+        `Symbol cache refresh finished. Processed: ${processedCount}, Success: ${successCount}, Errors: ${errorCount}.`
+      );
+    } catch (error) {
+      console.error("Error refreshing symbol cache:", error);
+      vscode.window.showErrorMessage(
+        `Symbol cache refresh failed: ${error.message}`
+      );
+    } finally {
+      this.isRefreshing = false;
+    }
   }
 
   async checkIfAppCanBeSkipped(

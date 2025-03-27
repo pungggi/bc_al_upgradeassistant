@@ -1,6 +1,10 @@
 # Change Log
 
-## [Unreleased]
+## [0.0.96]
+
+- Fixed progress notification persistence issue
+
+## [0.0.95]
 
 - Added field name suggestion feature
 
