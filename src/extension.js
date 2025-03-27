@@ -34,7 +34,7 @@ async function activate(context) {
     const { fileReferenceProvider } = registerViews(context);
 
     // Initialize symbol cache
-    await initializeSymbolCache(context, false);
+    await initializeSymbolCache();
 
     // Set up watchers for symbol downloads
     setupSymbolsWatchers(context);
@@ -1222,7 +1222,7 @@ function setupSymbolsWatchers(context) {
         // Refresh symbol cache when new app files are detected
         setTimeout(async () => {
           try {
-            const symbolsCount = await initializeSymbolCache(context, true);
+            const symbolsCount = await initializeSymbolCache();
             if (symbolsCount > 0) {
               vscode.window.showInformationMessage(
                 `Symbol cache updated with ${symbolsCount} files after new symbols detected`
@@ -1245,23 +1245,19 @@ function setupSymbolsWatchers(context) {
 
 /**
  * Initialize symbol cache
- * @param {vscode.ExtensionContext} context - Extension context
- * @param {boolean} force - Whether to force refresh
  * @returns {Promise<number>} Number of processed files
  */
-async function initializeSymbolCache(context, force = false) {
+async function initializeSymbolCache() {
   try {
     let appPaths = [];
-
-    // Common locations for .app files
     const defaultLocations = [];
 
-    // Add workspace folders first
+    // Add workspace folders paths
     if (vscode.workspace.workspaceFolders) {
       for (const folder of vscode.workspace.workspaceFolders) {
         const folderPath = folder.uri.fsPath;
 
-        // Try to read .vscode/settings.json to find al.packageCachePath
+        // Check .vscode/settings.json for al.packageCachePath
         try {
           const settingsPath = path.join(
             folderPath,
@@ -1272,20 +1268,19 @@ async function initializeSymbolCache(context, force = false) {
             const settings = readJsonFile(settingsPath);
             if (settings && settings["al.packageCachePath"]) {
               let packagePath = settings["al.packageCachePath"];
-              // Handle relative paths
               if (!path.isAbsolute(packagePath)) {
                 packagePath = path.join(folderPath, packagePath);
               }
               defaultLocations.push(path.join(packagePath, "*.app"));
               console.log(`Using al.packageCachePath: ${packagePath}`);
-              continue; // Skip the default locations for this workspace folder
+              continue;
             }
           }
         } catch (err) {
           console.error(`Error reading settings.json:`, err);
         }
 
-        // If no al.packageCachePath found, try to locate app.json
+        // Check for app.json
         try {
           const appJsonPath = path.join(folderPath, "app.json");
           if (fs.existsSync(appJsonPath)) {
@@ -1299,12 +1294,12 @@ async function initializeSymbolCache(context, force = false) {
           console.error(`Error checking for app.json:`, err);
         }
 
-        // If neither settings.json nor app.json found, use default .alpackages
+        // Default to .alpackages if no other configuration found
         defaultLocations.push(path.join(folderPath, ".alpackages", "*.app"));
       }
     }
 
-    // Process each app file location
+    // Find all app files
     for (const pattern of defaultLocations) {
       try {
         const files = await glob(pattern);
@@ -1314,19 +1309,12 @@ async function initializeSymbolCache(context, force = false) {
       }
     }
 
-    // Initialize the cache
+    // Initialize the cache with found paths
     await symbolCache.initialize(appPaths);
 
-    // If forcing refresh or cache is empty, process the app files
     let processed = 0;
-    if (force || Object.keys(symbolCache.symbols).length === 0) {
-      processed = await symbolCache.processAppFiles();
-      if (!force) {
-        vscode.window.showInformationMessage(
-          `Processed ${processed} app files for symbols`
-        );
-      }
-    }
+    await symbolCache.refreshCacheInBackground();
+    processed = appPaths.length; // Return the number of paths that were processed
 
     return processed;
   } catch (error) {

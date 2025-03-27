@@ -2,15 +2,14 @@ const fs = require("fs");
 const path = require("path");
 const util = require("util");
 const os = require("os");
-const JSZip = require("jszip");
 const vscode = require("vscode");
+const { fork } = require("child_process"); // Added fork
 const configManager = require("./utils/configManager");
 
 const readFile = util.promisify(fs.readFile);
 const writeFile = util.promisify(fs.writeFile);
 const mkdir = util.promisify(fs.mkdir);
-const readdir = util.promisify(fs.readdir);
-const rmdir = util.promisify(fs.rmdir);
+const readdir = util.promisify(fs.readdir); // Re-enabled for checkIfAppCanBeSkipped
 
 class SymbolCache {
   constructor() {
@@ -26,18 +25,23 @@ class SymbolCache {
     );
     this.symbols = {};
     this.appPaths = [];
+    this.isRefreshing = false;
   }
 
   async initialize(appPaths = []) {
     this.appPaths = appPaths;
 
-    // Ensure cache directory exists
+    // Ensure cache directories exist
     try {
       await mkdir(this.cachePath, { recursive: true });
       await mkdir(this.extractPath, { recursive: true });
     } catch (err) {
+      // Ignore EEXIST, log others
       if (err.code !== "EEXIST") {
-        console.error("Error creating directories:", err);
+        console.error("Error creating cache/extract directories:", err);
+        vscode.window.showErrorMessage(
+          `Failed to create cache directories: ${err.message}`
+        );
       }
     }
 
@@ -65,275 +69,264 @@ class SymbolCache {
       return true;
     } catch (error) {
       console.error("Failed to save symbol cache:", error);
+      vscode.window.showErrorMessage(
+        `Failed to save symbol cache: ${error.message}`
+      );
       return false;
     }
   }
 
-  async extractFromApp(appPath) {
-    try {
-      // Create a unique temp directory for this extraction
-      const appFileName = path.basename(appPath);
-      const extractDir = path.join(
-        this.extractPath,
-        appFileName.replace(/\./g, "_")
+  async refreshCacheInBackground() {
+    if (this.isRefreshing) {
+      vscode.window.showInformationMessage(
+        "Symbol cache refresh already in progress."
       );
-
-      try {
-        // Make sure the extraction directory exists and is empty
-        await mkdir(extractDir, { recursive: true });
-
-        // Read the zip file as buffer
-        const zipData = await readFile(appPath);
-        const zip = await JSZip.loadAsync(zipData);
-        // Extract files to extractDir
-        await Promise.all(
-          Object.keys(zip.files).map(async (filename) => {
-            const file = zip.files[filename];
-            const filePath = path.join(extractDir, filename);
-            if (file.dir) {
-              await mkdir(filePath, { recursive: true });
-            } else {
-              await mkdir(path.dirname(filePath), { recursive: true });
-              const content = await file.async("nodebuffer");
-              await writeFile(filePath, content);
-            }
-          })
-        );
-
-        console.log(`Extracted ${appPath} to ${extractDir}`);
-
-        // Extract source files if enabled
-        await this.extractSourceFiles(appPath, zip);
-
-        // Search for SymbolReference.json in the extracted files
-        const symbolFilePath = await this.findSymbolReferenceFile(extractDir);
-
-        if (!symbolFilePath) {
-          console.warn(`No SymbolReference.json found in ${appPath}`);
-          return false;
-        }
-
-        // Read the symbol file with improved error handling
-        try {
-          let symbolData;
-
-          try {
-            // Try again with raw buffer and manually handling BOM
-            const buffer = await readFile(symbolFilePath, "utf8");
-
-            // Check for BOM and skip if present
-            let content = buffer.toString("utf8");
-            if (content.charCodeAt(0) === 0xfeff) {
-              content = content.substring(1);
-            }
-
-            // Attempt to find valid JSON by trimming any extra content
-            try {
-              symbolData = JSON.parse(content);
-            } catch (initialParseError) {
-              console.info(
-                `Initial JSON parsing failed: ${initialParseError.message}`
-              );
-
-              // Try to sanitize the content by finding the outermost valid JSON structure
-              const match = content.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
-              if (match) {
-                try {
-                  symbolData = JSON.parse(match[0]);
-                  console.log(
-                    "Successfully parsed JSON after sanitizing content"
-                  );
-                } catch (sanitizeError) {
-                  console.error(
-                    `Failed to parse sanitized JSON: ${sanitizeError.message}`
-                  );
-                  throw initialParseError; // Rethrow the original error
-                }
-              } else {
-                throw initialParseError; // Rethrow the original error
-              }
-            }
-          } catch (jsonError) {
-            console.warn(`JSON parsing failed: ${jsonError.message}`);
-
-            // Log additional details about the error
-            if (jsonError.message.includes("out of memory")) {
-              console.error(
-                "The symbol file is too large to process in memory. Consider splitting it into smaller files."
-              );
-            } else if (jsonError.message.includes("Unexpected")) {
-              console.error(
-                "The symbol file contains unexpected characters that prevent proper JSON parsing."
-              );
-            }
-            return false;
-          }
-
-          // Process symbol data
-          if (symbolData) {
-            for (const obj of symbolData.Tables) {
-              if (obj.Name) {
-                this.symbols[obj.Name] = obj;
-              }
-            }
-            for (const obj of symbolData.Pages) {
-              if (obj.Name) {
-                this.symbols[obj.Name] = obj;
-              }
-            }
-            for (const obj of symbolData.Reports) {
-              if (obj.Name) {
-                this.symbols[obj.Name] = obj;
-              }
-            }
-            await this.saveCache();
-            return true;
-          } else {
-            console.warn(
-              `Symbol data from ${symbolFilePath} has invalid format`
-            );
-            console.log(
-              `Symbol data keys: ${Object.keys(symbolData || {}).join(", ")}`
-            );
-          }
-        } catch (readError) {
-          console.error(
-            `Error reading symbols file ${symbolFilePath}: ${readError.message}`
-          );
-        }
-      } finally {
-        // Clean up extraction directory
-        try {
-          await this.removeDirectory(extractDir);
-        } catch (cleanupErr) {
-          console.warn(
-            `Failed to clean up extraction directory: ${cleanupErr.message}`
-          );
-        }
-      }
-    } catch (error) {
-      console.error(`Failed to extract symbols from ${appPath}:`, error);
-      console.error(error.stack);
+      return;
     }
-    return false;
-  }
+    if (!this.appPaths || this.appPaths.length === 0) {
+      console.log("No app paths configured for symbol caching.");
+      return;
+    }
 
-  async extractSourceFiles(appPath, zip) {
-    // Check if source extraction is enabled
-    const srcExtractionEnabled = configManager.getConfigValue(
+    this.isRefreshing = true;
+    const totalApps = this.appPaths.length;
+    let processedCount = 0;
+    let successCount = 0;
+    let errorCount = 0;
+    const newSymbols = {}; // Accumulate symbols from workers here
+
+    // Check and potentially prompt for srcExtractionPath *before* starting workers
+    const enableSrcExtraction = configManager.getConfigValue(
       "enableSrcExtraction",
       false
     );
-    if (!srcExtractionEnabled) return false;
+    let srcExtractionPath = configManager.getConfigValue(
+      "srcExtractionPath",
+      ""
+    );
 
-    try {
-      // Get base path for source extraction
-      let basePath = configManager.getConfigValue("srcExtractionPath", "");
-      if (!basePath) {
-        basePath = await this.promptForSrcPath();
-        if (!basePath) return false; // User cancelled
-
+    if (enableSrcExtraction && !srcExtractionPath) {
+      srcExtractionPath = await this.promptForSrcPath();
+      if (!srcExtractionPath) {
+        vscode.window.showWarningMessage(
+          "Source extraction cancelled. Proceeding without extracting sources."
+        );
+      } else {
+        // Save the selected path for future use
         try {
           await configManager.setConfigValue(
             "srcExtractionPath",
-            basePath,
-            "user" // Changed from "global" to "user"
+            srcExtractionPath,
+            "user"
           );
         } catch (err) {
-          console.warn(`Failed to save setting: ${err.message}`);
-          // Continue even if setting save fails
+          console.warn(
+            `Failed to save srcExtractionPath setting: ${err.message}`
+          );
+          vscode.window.showWarningMessage(
+            `Could not save source extraction path setting: ${err.message}`
+          );
         }
       }
+    }
 
-      // Safely extract app name/version with early returns for invalid paths
-      const fileName = path.parse(appPath).name;
-      if (!fileName) {
-        console.warn(`Invalid app path: ${appPath}`);
-        return false;
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: "Refreshing AL Symbol Cache",
+        cancellable: false,
+      },
+      async (progress) => {
+        progress.report({ increment: 0, message: "Starting..." });
+
+        const workerPromises = this.appPaths.map((appPath) =>
+          // First check if we can skip this app
+          this.checkIfAppCanBeSkipped(
+            appPath,
+            enableSrcExtraction,
+            srcExtractionPath
+          ).then((skipApp) => {
+            if (skipApp) {
+              console.log(`Skipping ${appPath}: Source files already exist`);
+              processedCount++;
+              successCount++;
+              const increment = (1 / totalApps) * 100;
+              progress.report({
+                increment,
+                message: `Skipped ${path.basename(
+                  appPath
+                )} (already processed)...`,
+              });
+              return Promise.resolve();
+            }
+
+            // If not skipping, create and handle the worker
+            return new Promise((resolve) => {
+              const workerPath = path.join(__dirname, "symbolCacheWorker.js");
+
+              // Create worker with inspector disabled to avoid port conflicts
+              const worker = fork(workerPath, [], {
+                stdio: "pipe",
+                execArgv: [], // Prevent inspector inheritance
+              });
+
+              // Handle messages from worker
+              worker.on("message", (message) => {
+                switch (message.type) {
+                  case "success":
+                    Object.assign(newSymbols, message.symbols);
+                    successCount++;
+                    break;
+                  case "error":
+                    errorCount++;
+                    console.error(
+                      `Worker error for ${message.appPath}: ${message.message}`,
+                      message.stack
+                    );
+                    vscode.window.showErrorMessage(
+                      `Error processing ${path.basename(message.appPath)}: ${
+                        message.message
+                      }`
+                    );
+                    break;
+                  case "progress":
+                    progress.report({
+                      message: `Processing ${path.basename(appPath)}: ${
+                        message.message
+                      }`,
+                    });
+                    break;
+                  case "warning":
+                    console.warn(
+                      `Worker warning for ${appPath}: ${message.message}`
+                    );
+                    vscode.window.showWarningMessage(
+                      `Warning processing ${path.basename(appPath)}: ${
+                        message.message
+                      }`
+                    );
+                    break;
+                }
+              });
+
+              // Handle worker exit
+              worker.on("exit", (code) => {
+                processedCount++;
+                const increment = (1 / totalApps) * 100;
+                progress.report({
+                  increment,
+                  message: `Processed ${processedCount}/${totalApps} apps...`,
+                });
+                if (code !== 0) {
+                  errorCount++;
+                  console.error(
+                    `Worker for ${appPath} exited with code ${code}`
+                  );
+                  vscode.window.showErrorMessage(
+                    `Worker for ${path.basename(appPath)} exited unexpectedly.`
+                  );
+                }
+                resolve();
+              });
+
+              // Handle worker errors
+              worker.on("error", (err) => {
+                processedCount++;
+                errorCount++;
+                console.error(`Failed to start worker for ${appPath}:`, err);
+                vscode.window.showErrorMessage(
+                  `Failed to start worker for ${path.basename(appPath)}: ${
+                    err.message
+                  }`
+                );
+                const increment = (1 / totalApps) * 100;
+                progress.report({
+                  increment,
+                  message: `Processed ${processedCount}/${totalApps} apps...`,
+                });
+                resolve();
+              });
+
+              // Handle worker stdout/stderr
+              worker.stdout.on("data", (data) =>
+                console.log(
+                  `Worker stdout (${path.basename(appPath)}): ${data}`
+                )
+              );
+              worker.stderr.on("data", (data) =>
+                console.error(
+                  `Worker stderr (${path.basename(appPath)}): ${data}`
+                )
+              );
+
+              // Send initial message to worker
+              worker.send({
+                type: "process",
+                appPath,
+                options: {
+                  cachePath: this.cachePath,
+                  extractPath: this.extractPath,
+                  enableSrcExtraction,
+                  srcExtractionPath,
+                },
+              });
+            });
+          })
+        );
+
+        // Wait for all workers to complete
+        await Promise.all(workerPromises);
+
+        // Update main symbols object and save cache
+        this.symbols = newSymbols;
+        await this.saveCache();
+
+        progress.report({ increment: 100, message: "Cache refresh complete." });
+        vscode.window.showInformationMessage(
+          `Symbol cache refresh finished. Processed: ${processedCount}, Success: ${successCount}, Errors: ${errorCount}.`
+        );
       }
+    );
+
+    this.isRefreshing = false;
+  }
+
+  async checkIfAppCanBeSkipped(
+    appPath,
+    enableSrcExtraction,
+    srcExtractionPath
+  ) {
+    if (!enableSrcExtraction || !srcExtractionPath) {
+      return false;
+    }
+
+    try {
+      // Calculate the expected source extraction directory path
+      const fileName = path.parse(appPath).name;
+      if (!fileName) return false;
 
       const nameParts = fileName.split("_");
-
-      // Use safe defaults when expected format isn't found
       const extractedAppName =
         nameParts.length > 1 ? nameParts[1] || "Unknown" : fileName;
       const extractedAppVersion =
         nameParts.length > 2 ? nameParts[2] || "1.0" : "1.0";
-
-      // Create sanitized path
       const sanitizedAppName = extractedAppName.replace(/[<>:"/\\|?*]/g, "_");
       const extractDir = path.join(
-        basePath,
+        srcExtractionPath,
         sanitizedAppName,
         extractedAppVersion
       );
 
-      // Skip if target already has AL files
+      // Check if target directory exists and contains AL files
       if (fs.existsSync(extractDir)) {
-        try {
-          const files = await readdir(extractDir);
-          if (files.some((file) => file.endsWith(".al"))) {
-            console.log(
-              `Skipping extraction: ${extractDir} already has AL files`
-            );
-            return true;
-          }
-        } catch (err) {
-          console.warn(`Error reading directory ${extractDir}: ${err.message}`);
-        }
+        const files = await readdir(extractDir);
+        return files.some((file) => file.endsWith(".al"));
       }
-
-      await mkdir(extractDir, { recursive: true });
-
-      // Extract relevant source files
-      let filesFound = false;
-      for (const filename of Object.keys(zip.files)) {
-        if (!filename.startsWith("src/") && filename !== "src") continue;
-
-        filesFound = true;
-        const file = zip.files[filename];
-
-        // Extract path safely
-        let relativePath = filename.replace(/^src\/?/, "");
-        let decodedPath = relativePath
-          .split("/")
-          .map((part) => {
-            try {
-              return decodeURIComponent(decodeURIComponent(part));
-            } catch (e) {
-              try {
-                console.log(e);
-                return decodeURIComponent(part);
-              } catch (e2) {
-                console.log(e2);
-                return part;
-              }
-            }
-          })
-          .join(path.sep);
-
-        const targetPath = path.join(extractDir, decodedPath);
-
-        if (file.dir) {
-          await mkdir(targetPath, { recursive: true });
-        } else {
-          await mkdir(path.dirname(targetPath), { recursive: true });
-          const content = await file.async("nodebuffer");
-          await writeFile(targetPath, content);
-        }
-      }
-
-      if (!filesFound) {
-        console.warn(`No source files found in ${appPath}`);
-        return false;
-      }
-
-      console.log(`Source files extracted to ${extractDir}`);
-      return true;
-    } catch (error) {
-      console.error(`Failed to extract source files from ${appPath}:`, error);
-      return false;
+    } catch (err) {
+      console.error(`Error checking if app can be skipped: ${err.message}`);
     }
+
+    return false;
   }
 
   async promptForSrcPath() {
@@ -348,53 +341,8 @@ class SymbolCache {
     if (result && result.length > 0) {
       return result[0].fsPath;
     }
+    vscode.window.showWarningMessage("Source extraction path not selected.");
     return null;
-  }
-
-  // Helper function to find SymbolReference.json in extracted directory
-  async findSymbolReferenceFile(dir) {
-    const entries = await readdir(dir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-
-      if (entry.isDirectory()) {
-        // Recursively search subdirectories
-        const found = await this.findSymbolReferenceFile(fullPath);
-        if (found) return found;
-      } else if (entry.name === "SymbolReference.json") {
-        return fullPath;
-      }
-    }
-
-    return null;
-  }
-
-  // Helper function to recursively remove a directory
-  async removeDirectory(dir) {
-    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-
-      if (entry.isDirectory()) {
-        await this.removeDirectory(fullPath);
-      } else {
-        await fs.promises.unlink(fullPath).catch(() => {});
-      }
-    }
-
-    await rmdir(dir).catch(() => {});
-  }
-
-  async processAppFiles() {
-    let processed = 0;
-    for (const appPath of this.appPaths) {
-      if (await this.extractFromApp(appPath)) {
-        processed++;
-      }
-    }
-    return processed;
   }
 
   getObjectInfo(objectName) {

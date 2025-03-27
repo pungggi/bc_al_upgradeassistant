@@ -2,12 +2,15 @@ const path = require("path");
 const JavaScriptObfuscator = require("webpack-obfuscator");
 
 module.exports = {
-  entry: "./src/extension.js",
+  entry: {
+    extension: "./src/extension.js",
+    symbolCacheWorker: "./src/symbolCacheWorker.js",
+  },
   target: "node",
   mode: "production",
   output: {
     path: path.resolve(__dirname, "dist"),
-    filename: "extension.js",
+    filename: "[name].js",
     libraryTarget: "commonjs2",
   },
   externals: {

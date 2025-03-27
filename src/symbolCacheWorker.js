@@ -1,0 +1,244 @@
+const fs = require("fs");
+const path = require("path");
+const util = require("util");
+const JSZip = require("jszip");
+
+const readFile = util.promisify(fs.readFile);
+const writeFile = util.promisify(fs.writeFile);
+const mkdir = util.promisify(fs.mkdir);
+const readdir = util.promisify(fs.readdir);
+const rmdir = util.promisify(fs.rmdir);
+
+// Extracted from symbolCache.js, modified for worker context
+async function processAppFile(appPath, options) {
+  const { extractPath, enableSrcExtraction, srcExtractionPath } = options;
+
+  try {
+    // Create a unique temp directory for this extraction
+    const appFileName = path.basename(appPath);
+    const extractDir = path.join(extractPath, appFileName.replace(/\./g, "_"));
+
+    try {
+      // Make sure the extraction directory exists and is empty
+      await mkdir(extractDir, { recursive: true });
+
+      process.send({ type: "progress", message: "Reading app file..." });
+
+      // Read the zip file as buffer
+      const zipData = await readFile(appPath);
+      const zip = await JSZip.loadAsync(zipData);
+
+      process.send({ type: "progress", message: "Extracting files..." });
+
+      // Extract files to extractDir
+      await Promise.all(
+        Object.keys(zip.files).map(async (filename) => {
+          const file = zip.files[filename];
+          const filePath = path.join(extractDir, filename);
+          if (file.dir) {
+            await mkdir(filePath, { recursive: true });
+          } else {
+            await mkdir(path.dirname(filePath), { recursive: true });
+            const content = await file.async("nodebuffer");
+            await writeFile(filePath, content);
+          }
+        })
+      );
+
+      process.send({ type: "progress", message: "Processing symbols..." });
+
+      // Extract source files if enabled
+      if (enableSrcExtraction && srcExtractionPath) {
+        await extractSourceFiles(appPath, zip, srcExtractionPath);
+      }
+
+      // Search for SymbolReference.json in the extracted files
+      const symbolFilePath = await findSymbolReferenceFile(extractDir);
+
+      if (!symbolFilePath) {
+        process.send({
+          type: "error",
+          message: `No SymbolReference.json found in ${appPath}`,
+        });
+        return;
+      }
+
+      // Read the symbol file with improved error handling
+      const buffer = await readFile(symbolFilePath, "utf8");
+
+      // Check for BOM and skip if present
+      let content = buffer.toString("utf8");
+      if (content.charCodeAt(0) === 0xfeff) {
+        content = content.substring(1);
+      }
+
+      // Parse JSON content
+      let symbolData;
+      try {
+        symbolData = JSON.parse(content);
+      } catch (initialParseError) {
+        // Try to sanitize the content by finding the outermost valid JSON structure
+        const match = content.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+        if (match) {
+          symbolData = JSON.parse(match[0]);
+        } else {
+          throw initialParseError;
+        }
+      }
+
+      // Process symbol data
+      const symbols = {};
+      if (symbolData) {
+        ["Tables", "Pages", "Reports"].forEach((type) => {
+          if (Array.isArray(symbolData[type])) {
+            symbolData[type].forEach((obj) => {
+              if (obj.Name) {
+                symbols[obj.Name] = obj;
+              }
+            });
+          }
+        });
+      }
+
+      // Send back the processed symbols
+      process.send({
+        type: "success",
+        symbols,
+        appPath,
+      });
+    } finally {
+      // Clean up extraction directory
+      await removeDirectory(extractDir);
+    }
+  } catch (error) {
+    process.send({
+      type: "error",
+      message: error.message,
+      stack: error.stack,
+      appPath,
+    });
+  }
+}
+
+async function extractSourceFiles(appPath, zip, basePath) {
+  try {
+    // Safely extract app name/version with early returns for invalid paths
+    const fileName = path.parse(appPath).name;
+    if (!fileName) {
+      return false;
+    }
+
+    const nameParts = fileName.split("_");
+    const extractedAppName =
+      nameParts.length > 1 ? nameParts[1] || "Unknown" : fileName;
+    const extractedAppVersion =
+      nameParts.length > 2 ? nameParts[2] || "1.0" : "1.0";
+
+    // Create sanitized path
+    const sanitizedAppName = extractedAppName.replace(/[<>:"/\\|?*]/g, "_");
+    const extractDir = path.join(
+      basePath,
+      sanitizedAppName,
+      extractedAppVersion
+    );
+
+    // Skip if target already has AL files
+    if (fs.existsSync(extractDir)) {
+      const files = await readdir(extractDir);
+      if (files.some((file) => file.endsWith(".al"))) {
+        return true;
+      }
+    }
+
+    await mkdir(extractDir, { recursive: true });
+
+    // Extract relevant source files
+    for (const filename of Object.keys(zip.files)) {
+      if (!filename.startsWith("src/") && filename !== "src") continue;
+
+      const file = zip.files[filename];
+
+      // Extract path safely
+      let relativePath = filename.replace(/^src\/?/, "");
+      let decodedPath = relativePath
+        .split("/")
+        .map((part) => {
+          try {
+            return decodeURIComponent(decodeURIComponent(part));
+          } catch (e) {
+            try {
+              console.log(e);
+              return decodeURIComponent(part);
+            } catch (e2) {
+              console.log(e2);
+              return part;
+            }
+          }
+        })
+        .join(path.sep);
+
+      const targetPath = path.join(extractDir, decodedPath);
+
+      if (file.dir) {
+        await mkdir(targetPath, { recursive: true });
+      } else {
+        await mkdir(path.dirname(targetPath), { recursive: true });
+        const content = await file.async("nodebuffer");
+        await writeFile(targetPath, content);
+      }
+    }
+
+    process.send({
+      type: "progress",
+      message: `Source files extracted to ${extractDir}`,
+    });
+    return true;
+  } catch (error) {
+    process.send({
+      type: "error",
+      message: `Failed to extract source files from ${appPath}: ${error.message}`,
+    });
+    return false;
+  }
+}
+
+async function findSymbolReferenceFile(dir) {
+  const entries = await readdir(dir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+
+    if (entry.isDirectory()) {
+      // Recursively search subdirectories
+      const found = await findSymbolReferenceFile(fullPath);
+      if (found) return found;
+    } else if (entry.name === "SymbolReference.json") {
+      return fullPath;
+    }
+  }
+
+  return null;
+}
+
+async function removeDirectory(dir) {
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+
+    if (entry.isDirectory()) {
+      await removeDirectory(fullPath);
+    } else {
+      await fs.promises.unlink(fullPath).catch(() => {});
+    }
+  }
+
+  await rmdir(dir).catch(() => {});
+}
+
+// Listen for messages from the main process
+process.on("message", async (message) => {
+  if (message.type === "process") {
+    await processAppFile(message.appPath, message.options);
+  }
+});
