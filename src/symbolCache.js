@@ -147,7 +147,6 @@ class SymbolCache {
             srcExtractionPath
           ).then((skipApp) => {
             if (skipApp) {
-              console.log(`Skipping ${appPath}: Source files already exist`);
               processedCount++;
               successCount++;
               const increment = (1 / totalApps) * 100;

@@ -41,7 +41,6 @@ let availableModels = [];
  */
 function initializeModels() {
   availableModels = getAvailableModels();
-  console.log(`Initialized ${availableModels.length} AI models`);
   return availableModels;
 }
 

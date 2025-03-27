@@ -1218,7 +1218,7 @@ function setupSymbolsWatchers(context) {
 
       // Handle new symbol files
       symbolsFolderWatcher.onDidCreate(async (uri) => {
-        console.log("New symbols file detected:", uri.fsPath);
+        console.log("New .app file detected:", uri.fsPath);
         // Refresh symbol cache when new app files are detected
         setTimeout(async () => {
           try {
@@ -1272,7 +1272,6 @@ async function initializeSymbolCache() {
                 packagePath = path.join(folderPath, packagePath);
               }
               defaultLocations.push(path.join(packagePath, "*.app"));
-              console.log(`Using al.packageCachePath: ${packagePath}`);
               continue;
             }
           }
@@ -1287,7 +1286,6 @@ async function initializeSymbolCache() {
             defaultLocations.push(
               path.join(folderPath, ".alpackages", "*.app")
             );
-            console.log(`Using app.json location: ${folderPath}/.alpackages`);
             continue;
           }
         } catch (err) {

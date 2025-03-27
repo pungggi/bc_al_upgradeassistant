@@ -23,7 +23,6 @@ function registerCommandOnce(context, commandId, handler) {
   );
 
   registeredCommands.add(commandId);
-  console.log(`Command ${commandId} registered successfully`);
 }
 
 module.exports = {
