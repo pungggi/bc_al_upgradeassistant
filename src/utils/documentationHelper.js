@@ -6,28 +6,41 @@ const path = require("path");
  * @returns {{idMap: Object, regex: RegExp|null}} Map of IDs and regex pattern
  */
 function createDocumentationRegex(docIds) {
+  // Early return with clearer logging if no IDs configured
   if (!docIds || docIds.length === 0) {
+    console.log(
+      "No documentation IDs configured - this is normal for files without IDs"
+    );
     return { idMap: {}, regex: null };
   }
 
-  // Create a map of documentation IDs for quick lookup
-  const idMap = {};
-  docIds.forEach((doc) => {
-    idMap[doc.id] = doc;
-  });
+  try {
+    // Create a map of documentation IDs for quick lookup
+    const idMap = {};
+    docIds.forEach((doc) => {
+      idMap[doc.id] = doc;
+    });
 
-  // Create a regex pattern from all the documentation IDs
-  const idPattern = Object.keys(idMap).join("|");
-  if (!idPattern) {
-    return { idMap, regex: null };
+    // Create a regex pattern from all the documentation IDs
+    const idPattern = Object.keys(idMap).join("|");
+    if (!idPattern) {
+      console.log("No valid documentation ID patterns found in configuration");
+      return { idMap, regex: null };
+    }
+
+    // Return regex that matches the ID even if it's part of a larger word/identifier
+    // and captures the task ID (text after the doc ID until the first space)
+    return {
+      idMap,
+      regex: new RegExp(`(${idPattern})(/[^\\s]+)?`, "g"),
+    };
+  } catch (error) {
+    console.error(
+      "[Documentation Helper] Error creating documentation regex pattern:",
+      error.message
+    );
+    return { idMap: {}, regex: null };
   }
-
-  // Return regex that matches the ID even if it's part of a larger word/identifier
-  // and captures the task ID (text after the doc ID until the first space)
-  return {
-    idMap,
-    regex: new RegExp(`(${idPattern})(/[^\\s]+)?`, "g"),
-  };
 }
 
 /**
@@ -39,44 +52,63 @@ function createDocumentationRegex(docIds) {
  * @returns {Array<{id: string, taskId: string, lineNumber: number, description: string, url: string, context: string}>} Found references
  */
 function findDocumentationReferences(content, regex, idMap = "") {
-  if (!content || !regex || !idMap) {
+  // Early return if no content
+  if (!content) {
     return [];
   }
 
-  const docRefs = [];
-  const lines = content.split("\n");
+  // Early return if no regex pattern or ID map
+  if (!regex || !idMap) {
+    console.log(
+      "No documentation configuration found for this file - this is normal"
+    );
+    return [];
+  }
 
-  // Scan each line for references
-  lines.forEach((line, index) => {
-    // Reset regex for each line
-    regex.lastIndex = 0;
-    let match;
+  try {
+    const docRefs = [];
+    const lines = content.split("\n");
 
-    while ((match = regex.exec(line)) !== null) {
-      const id = match[1]; // This will be the matched ID
-      const taskId = match[2] || ""; // This will be the task ID if available
-      const docInfo = idMap[id];
+    // Scan each line for references
+    lines.forEach((line, index) => {
+      // Reset regex for each line
+      regex.lastIndex = 0;
+      let match;
 
-      if (docInfo) {
-        // Extract the context
-        const context = line.trim();
+      while ((match = regex.exec(line)) !== null) {
+        const id = match[1]; // This will be the matched ID
+        const taskId = match[2] || ""; // This will be the task ID if available
+        const docInfo = idMap[id];
 
-        docRefs.push({
-          id,
-          taskId,
-          lineNumber: index + 1,
-          description: docInfo.description || "",
-          url: docInfo.url || "",
-          fullMatch: match[0],
-          context:
-            context.length > 500 ? context.substring(0, 499) + "..." : context,
-        });
+        if (docInfo) {
+          // Extract the context
+          const context = line.trim();
+
+          docRefs.push({
+            id,
+            taskId,
+            lineNumber: index + 1,
+            description: docInfo.description || "",
+            url: docInfo.url || "",
+            fullMatch: match[0],
+            context:
+              context.length > 500
+                ? context.substring(0, 499) + "..."
+                : context,
+          });
+        }
       }
-    }
-  });
+    });
 
-  // Sort by line number
-  return docRefs.sort((a, b) => a.lineNumber - b.lineNumber);
+    // Sort by line number
+    return docRefs.sort((a, b) => a.lineNumber - b.lineNumber);
+  } catch (error) {
+    console.error(
+      "[Documentation Helper] Error finding documentation references:",
+      error.message
+    );
+    return [];
+  }
 }
 
 /**
