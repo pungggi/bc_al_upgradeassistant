@@ -97,6 +97,33 @@ async function initializeSymbolCache(force = false) {
   }
 }
 
+/**
+ * Update symbol cache for a specific file
+ * @param {string} filePath - Path to the file
+ * @returns {Promise<boolean>} - True if the cache was updated
+ */
+async function updateSymbolCacheForFile(filePath) {
+  try {
+    if (!filePath || !fs.existsSync(filePath)) {
+      return false;
+    }
+
+    // Check if this is a relevant file type that needs to be added to the cache
+    if (!filePath.toLowerCase().endsWith(".app")) {
+      return false;
+    }
+
+    // Add the file to the cache without refreshing all files
+    await symbolCache.addFileToCache(filePath);
+
+    return true;
+  } catch (error) {
+    console.error(`Error updating symbol cache for file ${filePath}:`, error);
+    return false;
+  }
+}
+
 module.exports = {
   initializeSymbolCache,
+  updateSymbolCacheForFile,
 };

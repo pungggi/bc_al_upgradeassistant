@@ -513,9 +513,135 @@ async function guessTableType(documentText, variableName) {
   return null;
 }
 
+/**
+ * Update the fields cache for a single file
+ * @param {string} filePath - Path to the AL file
+ * @param {string} fileContent - Content of the file
+ * @returns {boolean} - True if the cache was updated
+ */
+function updateFieldsCacheForFile(filePath, fileContent) {
+  if (!filePath || !fileContent) {
+    return false;
+  }
+
+  let updated = false;
+
+  try {
+    // For tables, extract fields and update cache
+    const tableResult = extractFieldsFromTable(fileContent);
+    if (tableResult && tableResult.tableName && tableResult.fields.length) {
+      // If table already in cache, combine the fields
+      if (tableFieldsCache[tableResult.tableName]) {
+        tableFieldsCache[tableResult.tableName] = [
+          ...new Set([
+            ...tableFieldsCache[tableResult.tableName],
+            ...tableResult.fields,
+          ]),
+        ];
+      } else {
+        tableFieldsCache[tableResult.tableName] = tableResult.fields;
+      }
+      updated = true;
+    }
+
+    // For pages, extract source table and update cache
+    const pageResult = extractSourceTableFromPage(fileContent);
+    if (pageResult && pageResult.pageName && pageResult.sourceTable) {
+      pageSourceTableCache[pageResult.pageName] = pageResult.sourceTable;
+      updated = true;
+    }
+
+    if (updated) {
+      lastCacheUpdate = Date.now();
+      console.log(`Updated fields cache for file: ${path.basename(filePath)}`);
+    }
+
+    return updated;
+  } catch (error) {
+    console.error(`Error updating fields cache for ${filePath}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Extract fields from table content
+ * @param {string} content - Content of the AL file
+ * @returns {Object|null} - Object with tableName and fields array, or null
+ */
+function extractFieldsFromTable(content) {
+  // Skip if not a table definition
+  if (!content.includes("table ") && !content.includes("tableextension ")) {
+    return null;
+  }
+
+  // Extract table name
+  let tableName = null;
+  let tableMatch = content.match(/table\s+(\d+)\s+["']([^"']+)["']/i);
+
+  if (tableMatch) {
+    tableName = tableMatch[2];
+  } else {
+    // Try tableextension
+    tableMatch = content.match(
+      /tableextension\s+(\d+)\s+["']([^"']+)["']\s+extends\s+["']([^"']+)["']/i
+    );
+    if (tableMatch) {
+      tableName = tableMatch[3]; // Use the base table name
+    }
+  }
+
+  if (!tableName) {
+    return null;
+  }
+
+  // Extract field definitions
+  const fields = [];
+
+  // Match field definitions
+  const fieldRegex = /field\s*\(\s*\d+\s*;\s*["']([^"']+)["']/gi;
+  let match;
+  while ((match = fieldRegex.exec(content)) !== null) {
+    fields.push(match[1]);
+  }
+
+  return { tableName, fields };
+}
+
+/**
+ * Extract source table from page content
+ * @param {string} content - Content of the AL file
+ * @returns {Object|null} - Object with pageName and sourceTable, or null
+ */
+function extractSourceTableFromPage(content) {
+  // Skip if not a page definition
+  if (!content.includes("page ")) {
+    return null;
+  }
+
+  // Extract page name
+  const pageMatch = content.match(/page\s+(\d+)\s+["']([^"']+)["']/i);
+  if (!pageMatch) {
+    return null;
+  }
+
+  const pageName = pageMatch[2];
+
+  // Extract source table
+  const sourceTableMatch = content.match(/SourceTable\s*=\s*["']([^"']+)["']/i);
+  if (!sourceTableMatch) {
+    return null;
+  }
+
+  return {
+    pageName,
+    sourceTable: sourceTableMatch[1],
+  };
+}
+
 module.exports = {
   getFieldsForTable,
   updateFieldsCache,
+  updateFieldsCacheForFile, // Export the new function
   ensureCacheIsUpToDate,
   getAllKnownTables,
   guessTableType,

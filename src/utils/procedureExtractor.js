@@ -157,6 +157,102 @@ async function updateProceduresCache() {
 }
 
 /**
+ * Update the procedures cache for a single file
+ * @param {string} filePath - Path to the AL file
+ * @param {string} fileContent - Content of the file
+ * @returns {boolean} - True if the cache was updated
+ */
+function updateProceduresCacheForFile(filePath, fileContent) {
+  if (!filePath || !fileContent) {
+    return false;
+  }
+
+  try {
+    // Extract object type and name from content
+    const objectMatch = fileContent.match(
+      /\b(table|page|codeunit|report|query|xmlport)\s+(\d+)\s+["']([^"']+)["']/i
+    );
+
+    if (!objectMatch) {
+      return false;
+    }
+
+    const objectType = objectMatch[1].toLowerCase();
+    const objectName = objectMatch[3];
+    const cacheKey = `${objectType}:${objectName}`;
+
+    // Extract global procedures
+    const procedures = [];
+    const lines = fileContent.split(/\r?\n/);
+    let currentProcedure = null;
+    let procedureLines = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      // Look for procedure start - match procedure that doesn't have 'local' before it
+      const procMatch = line.match(
+        /^(?!.*\blocal\s+)procedure\s+["']?([^"'\s(]+)["']?\s*\((.*)\)(:\s*(.+))?;/i
+      );
+
+      if (procMatch) {
+        if (currentProcedure) {
+          // Store previous procedure if exists
+          procedures.push({
+            name: currentProcedure.name,
+            parameters: currentProcedure.parameters,
+            returnType: currentProcedure.returnType,
+            body: procedureLines.join("\n"),
+          });
+        }
+
+        // Start new procedure
+        currentProcedure = {
+          name: procMatch[1],
+          parameters: procMatch[2]
+            .split(",")
+            .map((param) => param.trim())
+            .filter((p) => p),
+          returnType: procMatch[4] ? procMatch[4].trim() : null,
+        };
+        procedureLines = [line];
+        continue;
+      }
+
+      // If we're in a procedure, collect its lines
+      if (currentProcedure) {
+        procedureLines.push(line);
+
+        // Check for procedure end
+        if (line.toLowerCase() === "end;") {
+          procedures.push({
+            name: currentProcedure.name,
+            parameters: currentProcedure.parameters,
+            returnType: currentProcedure.returnType,
+            body: procedureLines.join("\n"),
+          });
+          currentProcedure = null;
+          procedureLines = [];
+        }
+      }
+    }
+
+    // Update cache if procedures were found
+    if (procedures.length > 0) {
+      proceduresCache[cacheKey] = procedures;
+      lastCacheUpdate = Date.now();
+      console.log(`Updated procedures cache for ${objectType} ${objectName}`);
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    console.error(`Error updating procedures cache for ${filePath}:`, error);
+    return false;
+  }
+}
+
+/**
  * Ensure the procedures cache is up-to-date
  * @returns {Promise<void>}
  */
@@ -180,6 +276,7 @@ async function getAllObjectsWithProcedures() {
 module.exports = {
   getProceduresForObject,
   updateProceduresCache,
+  updateProceduresCacheForFile, // Export the new function
   ensureCacheIsUpToDate,
   getAllObjectsWithProcedures,
   extractProceduresFromObjects,

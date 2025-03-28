@@ -1,17 +1,22 @@
 const fs = require("fs");
 const path = require("path");
-const vscode = require("vscode"); // Added vscode for potential messages
+const vscode = require("vscode");
 const {
   getConfigValue,
   getSrcExtractionPath,
-} = require("../utils/configManager"); // Added getSrcExtractionPath
-const { findAppJsonFile } = require("../utils/appJsonReader"); // Added findAppJsonFile
-const { readJsonFile } = require("../jsonUtils"); // Added readJsonFile
-const { initializeSymbolCache } = require("../utils/cacheHelper"); // Import from new location
+} = require("../utils/configManager");
+const { findAppJsonFile } = require("../utils/appJsonReader");
+const { readJsonFile } = require("../jsonUtils");
 const { updateIndexAfterObjectChange } = require("./utils/indexManager");
 const { findMigrationReferences } = require("../utils/migrationHelper");
-const { updateFieldsCache } = require("../utils/fieldCollector"); // Import updateFieldsCache function
-const { updateProceduresCache } = require("../utils/procedureExtractor"); // Import updateProceduresCache function
+const {
+  updateFieldsCache,
+  updateFieldsCacheForFile,
+} = require("../utils/fieldCollector");
+const {
+  updateProceduresCache,
+  updateProceduresCacheForFile,
+} = require("../utils/procedureExtractor");
 
 /**
  * Process changes to an existing AL file
@@ -118,12 +123,67 @@ async function handleAlFileChange(filePath, newContent, previousContent) {
 
     await copyWorkspaceAlFileToExtractionPath(filePath);
 
-    // --- Trigger full cache refresh ---
-    await initializeSymbolCache(true); // Force refresh
+    // --- Targeted cache updates ---
+    // Use the new targeted update approach instead of full cache refreshes
+    const isUpdated = {
+      symbols: false,
+      fields: false,
+      procedures: false,
+    };
 
-    // --- Trigger field and procedure cache updates ---
-    await updateFieldsCache();
-    await updateProceduresCache();
+    // Update the field cache for this file
+    isUpdated.fields = updateFieldsCacheForFile(filePath, newContent);
+
+    // Update the procedure cache for this file
+    isUpdated.procedures = updateProceduresCacheForFile(filePath, newContent);
+
+    // Update symbol cache if file is copied to extraction path
+    const appJsonPath = findAppJsonFile();
+    if (appJsonPath) {
+      const extractionPath = await getSrcExtractionPath();
+      if (extractionPath) {
+        // We might need to update the symbol cache if this is done
+        // at the file system level and impacts searchable symbols
+        isUpdated.symbols = true;
+      }
+    }
+
+    // Only perform a full refresh if necessary (file format not supported by targeted updates)
+    if (!isUpdated.fields && !isUpdated.procedures) {
+      console.log(
+        `No targeted updates applied for ${filePath}, determining if full refresh needed`
+      );
+
+      // Check if this is a type that needs cache refresh
+      const fileRequiresRefresh =
+        /\.(table|page|codeunit|report|query|xmlport)$/i.test(filePath) ||
+        objectType.includes("table") ||
+        objectType.includes("page");
+
+      if (fileRequiresRefresh) {
+        console.log(
+          `File ${path.basename(filePath)} may need full cache refresh`
+        );
+        // Consider a partial refresh based on object type
+        if (
+          !isUpdated.fields &&
+          (objectType.includes("table") || objectType.includes("page"))
+        ) {
+          await updateFieldsCache();
+          isUpdated.fields = true;
+        }
+
+        if (
+          !isUpdated.procedures &&
+          ["codeunit", "page", "table", "report", "query", "xmlport"].includes(
+            objectType
+          )
+        ) {
+          await updateProceduresCache();
+          isUpdated.procedures = true;
+        }
+      }
+    }
 
     return infoData;
   } catch (error) {
