@@ -3,6 +3,7 @@ const { extractObjectsFromPath } = require("./utils/objectExtractor");
 const path = require("path");
 const claude = require("./claude");
 const configManager = require("./utils/configManager");
+const { initializeSymbolCache } = require("./utils/cacheHelper"); // Import from new location
 const { registerCommandOnce } = require("./utils/commandHelper");
 const { EXTENSION_ID } = require("./constants");
 const { registerClipboardMonitor } = require("./clipboardMonitor");
@@ -29,8 +30,8 @@ function registerRefreshSymbolCacheCommand(context) {
     `${EXTENSION_ID}.refreshSymbolCache`,
     async () => {
       try {
-        const extension = require("./extension");
-        const processed = await extension.initializeSymbolCache(true);
+        // const extension = require("./extension"); // No longer needed
+        const processed = await initializeSymbolCache(true); // Call directly
         vscode.window.showInformationMessage(
           `Symbol cache refreshed successfully. Processed ${processed} app files for symbols.`
         );

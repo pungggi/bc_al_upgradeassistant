@@ -97,8 +97,6 @@ class SymbolCache {
     this.isRefreshing = true;
     const totalApps = this.appPaths.length;
     let processedCount = 0;
-    let successCount = 0;
-    let errorCount = 0;
     const newSymbols = {}; // Accumulate symbols from workers here
 
     // Get srcExtractionPath using the new centralized function
@@ -137,7 +135,6 @@ class SymbolCache {
             ).then((skipApp) => {
               if (skipApp) {
                 processedCount++;
-                successCount++;
                 const increment = (1 / totalApps) * 100;
                 progress.report({
                   increment,
@@ -163,10 +160,8 @@ class SymbolCache {
                   switch (message.type) {
                     case "success":
                       Object.assign(newSymbols, message.symbols);
-                      successCount++;
                       break;
                     case "error":
-                      errorCount++;
                       console.error(
                         `Worker error for ${message.appPath}: ${message.message}`,
                         message.stack
@@ -206,7 +201,6 @@ class SymbolCache {
                     message: `Processed ${processedCount}/${totalApps} apps...`,
                   });
                   if (code !== 0) {
-                    errorCount++;
                     console.error(
                       `Worker for ${appPath} exited with code ${code}`
                     );
@@ -222,7 +216,6 @@ class SymbolCache {
                 // Handle worker errors
                 worker.on("error", (err) => {
                   processedCount++;
-                  errorCount++;
                   console.error(`Failed to start worker for ${appPath}:`, err);
                   vscode.window.showErrorMessage(
                     `Failed to start worker for ${path.basename(appPath)}: ${
@@ -278,11 +271,6 @@ class SymbolCache {
           });
           return; // removed delay to ensure message disappears promptly
         }
-      );
-
-      // Show completion message after progress notification is closed
-      vscode.window.showInformationMessage(
-        `Symbol cache refresh finished. Processed: ${processedCount}, Success: ${successCount}, Errors: ${errorCount}.`
       );
     } catch (error) {
       console.error("Error refreshing symbol cache:", error);

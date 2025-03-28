@@ -7,8 +7,10 @@ const {
 } = require("../utils/configManager"); // Added getSrcExtractionPath
 const { findAppJsonFile } = require("../utils/appJsonReader"); // Added findAppJsonFile
 const { readJsonFile } = require("../jsonUtils"); // Added readJsonFile
+const { initializeSymbolCache } = require("../utils/cacheHelper"); // Import from new location
 const { updateIndexAfterObjectChange } = require("./utils/indexManager");
 const { findMigrationReferences } = require("../utils/migrationHelper");
+const { updateFieldsCache } = require("../utils/fieldCollector"); // Import updateFieldsCache function
 
 /**
  * Process changes to an existing AL file
@@ -41,7 +43,8 @@ async function handleAlFileChange(filePath, newContent, previousContent) {
     //#region previous object
     if (!previousContent) {
       // Get the base path for indexes
-      const upgradedObjectFolders = configManager.getConfigValue(
+      const upgradedObjectFolders = getConfigValue(
+        // Use destructured function
         "upgradedObjectFolders",
         null
       );
@@ -69,7 +72,8 @@ async function handleAlFileChange(filePath, newContent, previousContent) {
     //#endregion
 
     // Get the base path for indexes
-    const upgradedObjectFolders = configManager.getConfigValue(
+    const upgradedObjectFolders = getConfigValue(
+      // Use destructured function
       "upgradedObjectFolders",
       null
     );
@@ -110,14 +114,25 @@ async function handleAlFileChange(filePath, newContent, previousContent) {
         newContent
       );
     }
+
+    await copyWorkspaceAlFileToExtractionPath(filePath);
+
+    // --- Trigger full cache refresh ---
+    console.log(
+      `AL file changed (${path.basename(
+        filePath
+      )}), triggering full symbol cache refresh...`
+    );
+    await initializeSymbolCache(true); // Force refresh
+    // --- End cache refresh ---
+
+    // --- Trigger field cache update first for immediate field suggestions ---
+    await updateFieldsCache();
+
     return infoData;
   } catch (error) {
     console.error(`Error updating index after object change:`, error);
   }
-
-  // --- Add file copying logic ---
-  await copyWorkspaceAlFileToExtractionPath(filePath);
-  // --- End file copying logic ---
 }
 
 /**

@@ -7,6 +7,7 @@ const {
 } = require("../utils/configManager"); // Added getSrcExtractionPath
 const { findAppJsonFile } = require("../utils/appJsonReader"); // Added findAppJsonFile
 const { readJsonFile } = require("../jsonUtils"); // Added readJsonFile
+const { initializeSymbolCache } = require("../utils/cacheHelper"); // Import from new location
 const { fileEvents } = require("../utils/alFileSaver");
 const { postCorrections } = require("./utils/postCorrections");
 const {
@@ -19,7 +20,8 @@ const fileContentCache = new Map();
 
 function createIndexFolder() {
   try {
-    const upgradedObjectFolders = configManager.getConfigValue(
+    const upgradedObjectFolders = getConfigValue(
+      // Use destructured function
       "upgradedObjectFolders",
       null
     );
@@ -52,7 +54,8 @@ function createIndexFolder() {
  */
 function updateFileIndex(fileInfo) {
   try {
-    const upgradedObjectFolders = configManager.getConfigValue(
+    const upgradedObjectFolders = getConfigValue(
+      // Use destructured function
       "upgradedObjectFolders",
       null
     );
@@ -359,7 +362,8 @@ async function handleAlFileCreate(filePath, content) {
     const objectNumber = objectMatch[2];
 
     // Get the base path for indexes
-    const upgradedObjectFolders = configManager.getConfigValue(
+    const upgradedObjectFolders = getConfigValue(
+      // Use destructured function
       "upgradedObjectFolders",
       null
     );
@@ -389,7 +393,7 @@ async function handleAlFileDelete(filePath) {
     // --- End file deletion logic ---
 
     // Get the base path for indexes
-    const upgradedObjectFolders = getConfigValue("upgradedObjectFolders", null);
+    const upgradedObjectFolders = getConfigValue("upgradedObjectFolders", null); // Already correct here
     if (!upgradedObjectFolders || !upgradedObjectFolders.basePath) {
       return;
     }
@@ -449,6 +453,15 @@ async function handleAlFileDelete(filePath) {
   } catch (error) {
     console.error(`Error handling AL file deletion for ${filePath}:`, error);
   }
+
+  // --- Trigger full cache refresh ---
+  console.log(
+    `AL file deleted (${path.basename(
+      filePath
+    )}), triggering full symbol cache refresh...`
+  );
+  await initializeSymbolCache(true); // Force refresh
+  // --- End cache refresh ---
 }
 
 /**
@@ -544,7 +557,8 @@ async function deleteWorkspaceAlFileFromExtractionPath(sourceFilePath) {
 
 function setupTxtFileWatcher(context) {
   try {
-    const upgradedObjectFolders = configManager.getConfigValue(
+    const upgradedObjectFolders = getConfigValue(
+      // Use destructured function
       "upgradedObjectFolders",
       null
     );
