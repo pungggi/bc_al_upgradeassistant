@@ -245,39 +245,82 @@ async function extractSourceFiles(appPath, zip, basePath) {
 
     await mkdir(extractDir, { recursive: true });
 
-    // Extract relevant source files
-    for (const filename of Object.keys(zip.files)) {
-      if (!filename.startsWith("src/") && filename !== "src") continue;
+    // Store files to extract with their corrected paths
+    const sourceFilesToExtract = {};
 
+    // First pass: identify and map all .al files
+    for (const filename of Object.keys(zip.files)) {
       const file = zip.files[filename];
 
-      // Extract path safely
-      let relativePath = filename.replace(/^src\/?/, "");
-      let decodedPath = relativePath
-        .split("/")
-        .map((part) => {
-          try {
-            return decodeURIComponent(decodeURIComponent(part));
-          } catch (e) {
-            try {
-              console.log(e);
-              return decodeURIComponent(part);
-            } catch (e2) {
-              console.log(e2);
-              return part;
-            }
-          }
-        })
-        .join(path.sep);
+      // Skip directories and non-.al files
+      if (file.dir || !filename.toLowerCase().endsWith(".al")) continue;
 
-      const targetPath = path.join(extractDir, decodedPath);
+      // Find the last occurrence of '/src/' or check if 'src/' is at the beginning
+      const lastSrcIndex = filename.lastIndexOf("/src/");
+      let relativePath;
 
-      if (file.dir) {
-        await mkdir(targetPath, { recursive: true });
+      if (lastSrcIndex !== -1) {
+        // Take the part after the last '/src/'
+        relativePath = filename.substring(lastSrcIndex + "/src/".length);
+      } else if (filename.toLowerCase().startsWith("src/")) {
+        // Handle case where it's directly under the first src/
+        relativePath = filename.substring("src/".length);
       } else {
+        // Skip .al files not under any src folder
+        process.send({
+          type: "warning",
+          message: `Skipping .al file not found under a 'src/' directory: ${filename}`,
+        });
+        continue;
+      }
+
+      // Basic sanitization for relative path (prevent directory traversal)
+      relativePath = relativePath
+        .replace(/^[/\\]+/, "")
+        .replace(/[/\\]\.\.[/\\]/, "");
+
+      if (relativePath) {
+        sourceFilesToExtract[relativePath] = file;
+      }
+    }
+
+    // Second pass: extract the collected source files
+    for (const [relativePath, file] of Object.entries(sourceFilesToExtract)) {
+      try {
+        // Decode the path parts
+        const decodedPath = relativePath
+          .split("/")
+          .map((part) => {
+            try {
+              return decodeURIComponent(decodeURIComponent(part));
+            } catch (_) {
+              console.log(_);
+              try {
+                return decodeURIComponent(part);
+              } catch (_) {
+                console.log(_);
+                return part;
+              }
+            }
+          })
+          .join(path.sep);
+
+        const targetPath = path.join(extractDir, decodedPath);
+
+        // Create directory and write file
         await mkdir(path.dirname(targetPath), { recursive: true });
         const content = await file.async("nodebuffer");
         await writeFile(targetPath, content);
+
+        process.send({
+          type: "progress",
+          message: `Extracted ${path.basename(targetPath)}`,
+        });
+      } catch (writeError) {
+        process.send({
+          type: "warning",
+          message: `Failed to write extracted file ${relativePath}: ${writeError.message}`,
+        });
       }
     }
 
