@@ -2,7 +2,7 @@ const vscode = require("vscode");
 const {
   isEventSubscriberTemplate,
   modifyEventSubscriberTemplate,
-} = require("./ALCode");
+} = require("./eventSubscriber");
 
 let lastClipboardContent = "";
 

@@ -1,4 +1,10 @@
-# Change Log
+# Changelog
+
+## [0.0.106]
+
+### Added
+
+- New Record Trigger Action Provider to generate AL event subscriber code
 
 ## [0.0.96]
 

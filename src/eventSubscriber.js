@@ -1,10 +1,16 @@
+const typeAbbreviations = {
+  Table: "Tab",
+  Codeunit: "Cod",
+  Page: "Pag",
+  Report: "Rep",
+};
+
 function isEventSubscriberTemplate(content) {
   const alCodePattern =
     //  /\[EventSubscriber\(.*?\)\][\s\S]*?local procedure[\s\S]*?begin[\s\S]*?end;/;
     /\[EventSubscriber\(.*?\)\][\s\S]*?local procedure[\s\S]*?begin\s*end;/;
   return alCodePattern.test(content);
 }
-exports.isEventSubscriberTemplate = isEventSubscriberTemplate;
 
 function modifyEventSubscriberTemplate(content) {
   // Step 1: Find the event subscriber attributes
@@ -30,13 +36,6 @@ function modifyEventSubscriberTemplate(content) {
   const eventName = eventNameMatch[1];
 
   // Step 4: Map object type to its abbreviation
-  const typeAbbreviations = {
-    Table: "Tab",
-    Codeunit: "Cod",
-    Page: "Pag",
-    Report: "Rep",
-  };
-
   const typeAbbr = typeAbbreviations[objectType] || objectType.substring(0, 3);
 
   // Step 5: Clean object name (remove special characters)
@@ -54,4 +53,8 @@ function modifyEventSubscriberTemplate(content) {
 
   return updatedContent;
 }
-exports.modifyEventSubscriberTemplate = modifyEventSubscriberTemplate;
+
+module.exports = {
+  isEventSubscriberTemplate,
+  modifyEventSubscriberTemplate,
+};

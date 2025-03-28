@@ -15,6 +15,9 @@ const { registerViews } = require("./views/registerViews");
 const {
   FieldSuggestionActionProvider,
 } = require("./providers/fieldSuggestionProvider");
+const {
+  RecordTriggerActionProvider,
+} = require("./providers/recordTriggerActionProvider");
 const fieldCollector = require("./utils/fieldCollector");
 
 let globalStatusBarItems = {};
@@ -1138,6 +1141,28 @@ async function activate(context) {
               );
             }
           }
+        }
+      )
+    );
+
+    // Register command to copy trigger info to clipboard
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bc-al-upgradeassistant.copyTriggerInfo",
+        async (text) => {
+          await vscode.env.clipboard.writeText(text);
+          vscode.window.setStatusBarMessage(`Copied: ${text}`, 2400);
+        }
+      )
+    );
+
+    // Register record trigger action provider
+    context.subscriptions.push(
+      vscode.languages.registerCodeActionsProvider(
+        { scheme: "file", language: "al" },
+        new RecordTriggerActionProvider(),
+        {
+          providedCodeActionKinds: [vscode.CodeActionKind.QuickFix],
         }
       )
     );

@@ -257,7 +257,6 @@ function findSourceTableForPage(pageName) {
  * @param {string} variableName - Record variable name
  * @returns {string|null} - Table name or null if not found
  */
-// Changelog: Improved parsing algorithm
 function findTableTypeInVariableDeclarations(documentText, variableName) {
   if (!documentText || !variableName) return null;
 
@@ -645,6 +644,7 @@ module.exports = {
   ensureCacheIsUpToDate,
   getAllKnownTables,
   guessTableType,
+  findTableTypeInVariableDeclarations,
   findSourceTableForPage,
   findExtendedPage,
   findSourceTableFromWorkspace,
