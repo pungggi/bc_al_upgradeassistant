@@ -88,6 +88,8 @@ async function processAppFile(appPath, options) {
 
       // Process symbol data
       const symbols = {};
+      const procedures = {};
+
       if (symbolData) {
         ["Tables", "Pages", "Reports"].forEach((type) => {
           if (Array.isArray(symbolData[type])) {
@@ -100,10 +102,101 @@ async function processAppFile(appPath, options) {
         });
       }
 
-      // Send back the processed symbols
+      // Extract procedures from AL files in src directory
+      const srcDir = path.join(extractDir, "src");
+      if (fs.existsSync(srcDir)) {
+        const files = await readdir(srcDir);
+        for (const file of files) {
+          if (file.endsWith(".al")) {
+            const filePath = path.join(srcDir, file);
+            const content = await readFile(filePath, "utf8");
+
+            // Extract object info from the file
+            const objectMatch = content.match(
+              /\b(table|page|codeunit|report|query|xmlport)\s+(\d+)\s+["']([^"']+)["']/i
+            );
+
+            if (objectMatch) {
+              const objectType = objectMatch[1].toLowerCase();
+              const objectName = objectMatch[3];
+
+              // Extract global procedures
+              const procedureLines = [];
+              let inProcedure = false;
+              let currentProcedure = null;
+
+              content.split(/\r?\n/).forEach((line) => {
+                const trimmedLine = line.trim();
+
+                // Match procedure that doesn't have 'local' before it
+                const procMatch = trimmedLine.match(
+                  /^(?!.*\blocal\s+)procedure\s+["']?([^"'\s(]+)["']?\s*\((.*)\)(:\s*(.+))?;/i
+                );
+
+                if (procMatch) {
+                  if (currentProcedure) {
+                    procedures[
+                      `${currentProcedure.type}:${currentProcedure.objectName}`
+                    ] =
+                      procedures[
+                        `${currentProcedure.type}:${currentProcedure.objectName}`
+                      ] || [];
+                    procedures[
+                      `${currentProcedure.type}:${currentProcedure.objectName}`
+                    ].push({
+                      name: currentProcedure.name,
+                      parameters: currentProcedure.parameters,
+                      returnType: currentProcedure.returnType,
+                      body: procedureLines.join("\n"),
+                    });
+                  }
+
+                  currentProcedure = {
+                    type: objectType,
+                    objectName: objectName,
+                    name: procMatch[1],
+                    parameters: procMatch[2]
+                      .split(",")
+                      .map((p) => p.trim())
+                      .filter((p) => p),
+                    returnType: procMatch[4] ? procMatch[4].trim() : null,
+                  };
+                  procedureLines.length = 0;
+                  procedureLines.push(line);
+                  inProcedure = true;
+                } else if (inProcedure) {
+                  procedureLines.push(line);
+                  if (trimmedLine.toLowerCase() === "end;") {
+                    procedures[
+                      `${currentProcedure.type}:${currentProcedure.objectName}`
+                    ] =
+                      procedures[
+                        `${currentProcedure.type}:${currentProcedure.objectName}`
+                      ] || [];
+                    procedures[
+                      `${currentProcedure.type}:${currentProcedure.objectName}`
+                    ].push({
+                      name: currentProcedure.name,
+                      parameters: currentProcedure.parameters,
+                      returnType: currentProcedure.returnType,
+                      body: procedureLines.join("\n"),
+                    });
+                    currentProcedure = null;
+                    inProcedure = false;
+                    procedureLines.length = 0;
+                  }
+                }
+              });
+            }
+          }
+        }
+      }
+
+      // Send back the processed symbols and procedures
       process.send({
         type: "success",
         symbols,
+        procedures,
         appPath,
       });
     } finally {

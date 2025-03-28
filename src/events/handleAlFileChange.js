@@ -11,6 +11,7 @@ const { initializeSymbolCache } = require("../utils/cacheHelper"); // Import fro
 const { updateIndexAfterObjectChange } = require("./utils/indexManager");
 const { findMigrationReferences } = require("../utils/migrationHelper");
 const { updateFieldsCache } = require("../utils/fieldCollector"); // Import updateFieldsCache function
+const { updateProceduresCache } = require("../utils/procedureExtractor"); // Import updateProceduresCache function
 
 /**
  * Process changes to an existing AL file
@@ -120,8 +121,9 @@ async function handleAlFileChange(filePath, newContent, previousContent) {
     // --- Trigger full cache refresh ---
     await initializeSymbolCache(true); // Force refresh
 
-    // --- Trigger field cache update first for immediate field suggestions ---
+    // --- Trigger field and procedure cache updates ---
     await updateFieldsCache();
+    await updateProceduresCache();
 
     return infoData;
   } catch (error) {
@@ -190,8 +192,6 @@ async function copyWorkspaceAlFileToExtractionPath(sourceFilePath) {
 
     // Copy the file
     await fs.promises.copyFile(sourceFilePath, targetFilePath);
-
-    console.log(`Copied workspace file ${relativePath} to ${targetFilePath}`);
   } catch (error) {
     console.error(
       `Error copying workspace AL file ${sourceFilePath} to extraction path:`,

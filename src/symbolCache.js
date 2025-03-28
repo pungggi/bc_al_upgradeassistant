@@ -25,6 +25,7 @@ class SymbolCache {
       "extract"
     );
     this.symbols = {};
+    this.procedures = {}; // Store procedures by objectType:objectName
     this.appPaths = [];
     this.isRefreshing = false;
   }
@@ -51,12 +52,20 @@ class SymbolCache {
 
   async loadCache() {
     try {
-      const cacheFilePath = path.join(this.cachePath, "symbols.json");
-      if (fs.existsSync(cacheFilePath)) {
-        const cacheData = await readFile(cacheFilePath, "utf8");
-        this.symbols = JSON.parse(cacheData);
-        return true;
+      const symbolsFilePath = path.join(this.cachePath, "symbols.json");
+      const proceduresFilePath = path.join(this.cachePath, "procedures.json");
+
+      if (fs.existsSync(symbolsFilePath)) {
+        const symbolsData = await readFile(symbolsFilePath, "utf8");
+        this.symbols = JSON.parse(symbolsData);
       }
+
+      if (fs.existsSync(proceduresFilePath)) {
+        const proceduresData = await readFile(proceduresFilePath, "utf8");
+        this.procedures = JSON.parse(proceduresData);
+      }
+
+      return true;
     } catch (error) {
       console.error("Failed to load symbol cache:", error);
     }
@@ -65,8 +74,14 @@ class SymbolCache {
 
   async saveCache() {
     try {
-      const cacheFilePath = path.join(this.cachePath, "symbols.json");
-      await writeFile(cacheFilePath, JSON.stringify(this.symbols, null, 2));
+      const symbolsFilePath = path.join(this.cachePath, "symbols.json");
+      const proceduresFilePath = path.join(this.cachePath, "procedures.json");
+
+      await writeFile(symbolsFilePath, JSON.stringify(this.symbols, null, 2));
+      await writeFile(
+        proceduresFilePath,
+        JSON.stringify(this.procedures, null, 2)
+      );
       return true;
     } catch (error) {
       console.error("Failed to save symbol cache:", error);
@@ -79,7 +94,23 @@ class SymbolCache {
 
   clearCache() {
     this.symbols = {};
+    this.procedures = {};
     this.saveCache();
+  }
+
+  // Procedure-related methods
+  getProcedures(objectType, objectName) {
+    const key = `${objectType}:${objectName}`;
+    return this.procedures[key] || [];
+  }
+
+  setProcedures(objectType, objectName, procedures) {
+    const key = `${objectType}:${objectName}`;
+    this.procedures[key] = procedures;
+  }
+
+  getAllObjectsWithProcedures() {
+    return Object.keys(this.procedures);
   }
 
   async refreshCacheInBackground() {
@@ -160,6 +191,9 @@ class SymbolCache {
                   switch (message.type) {
                     case "success":
                       Object.assign(newSymbols, message.symbols);
+                      if (message.procedures) {
+                        Object.assign(this.procedures, message.procedures);
+                      }
                       break;
                     case "error":
                       console.error(
@@ -260,7 +294,7 @@ class SymbolCache {
           // Wait for all workers to complete
           await Promise.all(workerPromises);
 
-          // Update main symbols object and save cache
+          // Update main symbols and procedures objects and save cache
           this.symbols = newSymbols;
           await this.saveCache();
 

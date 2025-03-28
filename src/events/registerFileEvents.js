@@ -652,10 +652,10 @@ module.exports = {
 };
 
 /**
- * Recursively finds all .al files within a directory.
+ * Recursively finds all .al files within a directory
  * @param {string} dirPath - The directory to start searching from.
  * @param {string[]} arrayOfFiles - Accumulator for file paths.
- * @returns {Promise<string[]>} - A promise resolving to an array of .al file paths.
+ * @returns {Promise<string[]>} - A promise resolving to an array of new .al file paths.
  */
 async function findAllAlFiles(dirPath, arrayOfFiles = []) {
   try {
@@ -671,12 +671,10 @@ async function findAllAlFiles(dirPath, arrayOfFiles = []) {
           arrayOfFiles.push(fullPath);
         }
       } catch (statError) {
-        // Ignore errors for single files/subdirs (e.g., permission denied)
         console.warn(`Could not stat ${fullPath}: ${statError.message}`);
       }
     }
   } catch (readDirError) {
-    // Ignore errors reading a directory (e.g., permission denied)
     console.warn(
       `Could not read directory ${dirPath}: ${readDirError.message}`
     );
@@ -689,10 +687,6 @@ async function findAllAlFiles(dirPath, arrayOfFiles = []) {
  * to the configured srcExtractionPath.
  */
 async function syncWorkspaceToExtractionPath() {
-  console.log(
-    "Starting initial sync of workspace AL files to extraction path..."
-  );
-
   try {
     const srcExtractionPath = await getSrcExtractionPath();
     if (!srcExtractionPath) {
@@ -710,7 +704,6 @@ async function syncWorkspaceToExtractionPath() {
 
     const projectRoot = path.dirname(appJsonPath);
 
-    console.log(`Scanning project root: ${projectRoot}`);
     const alFiles = await findAllAlFiles(projectRoot);
     console.log(`Found ${alFiles.length} .al files to sync.`);
 
@@ -728,8 +721,6 @@ async function syncWorkspaceToExtractionPath() {
     );
 
     await Promise.all(copyPromises);
-
-    console.log("Initial sync of workspace AL files complete.");
   } catch (error) {
     console.error("Error during initial sync of workspace AL files:", error);
     vscode.window.showErrorMessage(
