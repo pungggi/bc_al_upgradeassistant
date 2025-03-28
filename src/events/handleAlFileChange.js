@@ -118,13 +118,7 @@ async function handleAlFileChange(filePath, newContent, previousContent) {
     await copyWorkspaceAlFileToExtractionPath(filePath);
 
     // --- Trigger full cache refresh ---
-    console.log(
-      `AL file changed (${path.basename(
-        filePath
-      )}), triggering full symbol cache refresh...`
-    );
     await initializeSymbolCache(true); // Force refresh
-    // --- End cache refresh ---
 
     // --- Trigger field cache update first for immediate field suggestions ---
     await updateFieldsCache();
