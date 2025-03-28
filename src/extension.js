@@ -1,6 +1,9 @@
 const vscode = require("vscode");
 const { registerCommands } = require("./registerCommands");
 const { registerEvents } = require("./registerEvents");
+const {
+  syncWorkspaceToExtractionPath,
+} = require("./events/registerFileEvents"); // Import the sync function
 const modelHelper = require("./modelHelper");
 const path = require("path");
 const fs = require("fs");
@@ -38,6 +41,10 @@ async function activate(context) {
 
     // Set up watchers for symbol downloads
     setupSymbolsWatchers(context);
+
+    // Perform initial sync of workspace AL files to extraction path
+    // Run this after event registration and cache initialization
+    await syncWorkspaceToExtractionPath();
 
     // Register command to generate documentation reference summary
     context.subscriptions.push(

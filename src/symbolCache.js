@@ -5,6 +5,7 @@ const os = require("os");
 const vscode = require("vscode");
 const { fork } = require("child_process"); // Added fork
 const configManager = require("./utils/configManager");
+const { getSrcExtractionPath } = require("./utils/configManager"); // Import the new function
 
 const readFile = util.promisify(fs.readFile);
 const writeFile = util.promisify(fs.writeFile);
@@ -100,39 +101,21 @@ class SymbolCache {
     let errorCount = 0;
     const newSymbols = {}; // Accumulate symbols from workers here
 
-    // Check and potentially prompt for srcExtractionPath *before* starting workers
+    // Get srcExtractionPath using the new centralized function
     const enableSrcExtraction = configManager.getConfigValue(
       "enableSrcExtraction",
       false
     );
-    let srcExtractionPath = configManager.getConfigValue(
-      "srcExtractionPath",
-      ""
-    );
+    const srcExtractionPath = enableSrcExtraction
+      ? await getSrcExtractionPath() // This handles prompting and saving
+      : null;
 
+    // If extraction is enabled but path is still null (e.g., user cancelled prompt), show warning
     if (enableSrcExtraction && !srcExtractionPath) {
-      srcExtractionPath = await this.promptForSrcPath();
-      if (!srcExtractionPath) {
-        vscode.window.showWarningMessage(
-          "Source extraction cancelled. Proceeding without extracting sources."
-        );
-      } else {
-        // Save the selected path for future use
-        try {
-          await configManager.setConfigValue(
-            "srcExtractionPath",
-            srcExtractionPath,
-            "user"
-          );
-        } catch (err) {
-          console.warn(
-            `Failed to save srcExtractionPath setting: ${err.message}`
-          );
-          vscode.window.showWarningMessage(
-            `Could not save source extraction path setting: ${err.message}`
-          );
-        }
-      }
+      vscode.window.showWarningMessage(
+        "Source extraction path not configured or provided. Cannot extract sources from .app files."
+      );
+      // Continue without extraction for .app files
     }
 
     try {
@@ -349,21 +332,7 @@ class SymbolCache {
     return false;
   }
 
-  async promptForSrcPath() {
-    const options = {
-      canSelectFiles: false,
-      canSelectFolders: true,
-      canSelectMany: false,
-      openLabel: "Select folder for source extraction",
-    };
-
-    const result = await vscode.window.showOpenDialog(options);
-    if (result && result.length > 0) {
-      return result[0].fsPath;
-    }
-    vscode.window.showWarningMessage("Source extraction path not selected.");
-    return null;
-  }
+  // Removed promptForSrcPath() as it's now in configManager.js
 
   getObjectInfo(objectName) {
     return this.symbols[objectName] || null;

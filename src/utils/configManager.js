@@ -112,4 +112,100 @@ module.exports = {
   getConfigValue,
   setConfigValue,
   getMergedDocumentationIds,
+  getSrcExtractionPath, // Added export
 };
+
+/**
+ * Prompt the user to select a folder for source extraction.
+ * Copied from symbolCache.js
+ * @returns {Promise<string|null>} The selected folder path or null if cancelled.
+ */
+async function promptForSrcPath() {
+  const options = {
+    canSelectFiles: false,
+    canSelectFolders: true,
+    canSelectMany: false,
+    openLabel: "Select folder for source extraction",
+  };
+
+  const result = await vscode.window.showOpenDialog(options);
+  if (result && result.length > 0) {
+    return result[0].fsPath;
+  }
+  vscode.window.showWarningMessage("Source extraction path not selected.");
+  return null;
+}
+
+/**
+ * Gets the configured source extraction path, prompting the user if necessary.
+ * Saves the selected path to settings if prompted.
+ * @returns {Promise<string|null>} The source extraction path or null if disabled or not provided.
+ */
+async function getSrcExtractionPath() {
+  const enableSrcExtraction = getConfigValue("enableSrcExtraction", false);
+  if (!enableSrcExtraction) {
+    console.log("Source extraction is disabled in settings.");
+    return null;
+  }
+
+  let srcExtractionPath = getConfigValue("srcExtractionPath", "");
+
+  if (!srcExtractionPath) {
+    vscode.window.showInformationMessage(
+      "The 'srcExtractionPath' setting is not configured. Please select a folder to store extracted source code."
+    );
+    srcExtractionPath = await promptForSrcPath();
+
+    if (!srcExtractionPath) {
+      vscode.window.showWarningMessage(
+        "Source extraction path not provided. Cannot copy workspace AL files."
+      );
+      return null;
+    } else {
+      // Save the selected path for future use (user scope)
+      try {
+        const config = vscode.workspace.getConfiguration(EXTENSION_ID);
+        await config.update(
+          "srcExtractionPath",
+          srcExtractionPath,
+          vscode.ConfigurationTarget.Global // Use Global scope for path consistency
+        );
+        vscode.window.showInformationMessage(
+          `Source extraction path saved to global settings: ${srcExtractionPath}`
+        );
+      } catch (err) {
+        console.warn(
+          `Failed to save srcExtractionPath setting: ${err.message}`
+        );
+        vscode.window.showWarningMessage(
+          `Could not save source extraction path setting: ${err.message}`
+        );
+        // Proceed with the path even if saving failed
+      }
+    }
+  }
+
+  // Final check if the path exists and is a directory
+  try {
+    const stats = fs.statSync(srcExtractionPath);
+    if (!stats.isDirectory()) {
+      vscode.window.showErrorMessage(
+        `Configured srcExtractionPath is not a valid directory: ${srcExtractionPath}`
+      );
+      return null;
+    }
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      vscode.window.showErrorMessage(
+        `Configured srcExtractionPath does not exist: ${srcExtractionPath}`
+      );
+    } else {
+      vscode.window.showErrorMessage(
+        `Error accessing srcExtractionPath (${srcExtractionPath}): ${err.message}`
+      );
+    }
+    return null;
+  }
+
+  return srcExtractionPath;
+}

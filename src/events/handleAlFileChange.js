@@ -1,6 +1,12 @@
 const fs = require("fs");
 const path = require("path");
-const configManager = require("../utils/configManager");
+const vscode = require("vscode"); // Added vscode for potential messages
+const {
+  getConfigValue,
+  getSrcExtractionPath,
+} = require("../utils/configManager"); // Added getSrcExtractionPath
+const { findAppJsonFile } = require("../utils/appJsonReader"); // Added findAppJsonFile
+const { readJsonFile } = require("../jsonUtils"); // Added readJsonFile
 const { updateIndexAfterObjectChange } = require("./utils/indexManager");
 const { findMigrationReferences } = require("../utils/migrationHelper");
 
@@ -10,7 +16,8 @@ const { findMigrationReferences } = require("../utils/migrationHelper");
  * @param {string} newContent - Content of the file after saving
  * @param {string} previousContent - Previous content of the file when opening
  */
-function handleAlFileChange(filePath, newContent, previousContent) {
+async function handleAlFileChange(filePath, newContent, previousContent) {
+  // Made async
   if (!filePath || !newContent) {
     console.error(
       `Invalid parameters for handleAlFileChange: missing filePath or newContent`
@@ -107,6 +114,84 @@ function handleAlFileChange(filePath, newContent, previousContent) {
   } catch (error) {
     console.error(`Error updating index after object change:`, error);
   }
+
+  // --- Add file copying logic ---
+  await copyWorkspaceAlFileToExtractionPath(filePath);
+  // --- End file copying logic ---
+}
+
+/**
+ * Copies a workspace AL file to the configured srcExtractionPath.
+ * @param {string} sourceFilePath - The path to the workspace AL file to copy.
+ */
+async function copyWorkspaceAlFileToExtractionPath(sourceFilePath) {
+  try {
+    const srcExtractionPath = await getSrcExtractionPath();
+    if (!srcExtractionPath) {
+      // Warning already shown by getSrcExtractionPath if prompting failed
+      console.log(
+        "Skipping workspace AL file copy: srcExtractionPath not available."
+      );
+      return;
+    }
+
+    const appJsonPath = findAppJsonFile();
+    if (!appJsonPath) {
+      console.warn(
+        `Skipping workspace AL file copy: app.json not found in workspace for file ${sourceFilePath}`
+      );
+      return;
+    }
+
+    const projectRoot = path.dirname(appJsonPath);
+    let appName = "UnknownApp";
+    let appVersion = "1.0.0.0";
+
+    try {
+      const appJson = readJsonFile(appJsonPath); // Using imported utility
+      appName = appJson.name || appName;
+      appVersion = appJson.version || appVersion;
+    } catch (err) {
+      console.error(`Error reading app.json at ${appJsonPath}: ${err.message}`);
+      // Proceed with defaults
+    }
+
+    const sanitizedAppName = appName.replace(/[<>:"/\\|?*]/g, "_");
+    const relativePath = path.relative(projectRoot, sourceFilePath);
+
+    // Ensure relativePath doesn't start with '..' if file is outside projectRoot (shouldn't happen with watcher)
+    if (relativePath.startsWith("..")) {
+      console.warn(
+        `Skipping workspace AL file copy: File ${sourceFilePath} seems outside project root ${projectRoot}`
+      );
+      return;
+    }
+
+    const targetDir = path.join(
+      srcExtractionPath,
+      sanitizedAppName,
+      appVersion,
+      "src", // Add the 'src' subdirectory
+      path.dirname(relativePath)
+    );
+    const targetFilePath = path.join(targetDir, path.basename(sourceFilePath));
+
+    // Ensure target directory exists
+    await fs.promises.mkdir(targetDir, { recursive: true });
+
+    // Copy the file
+    await fs.promises.copyFile(sourceFilePath, targetFilePath);
+
+    console.log(`Copied workspace file ${relativePath} to ${targetFilePath}`);
+  } catch (error) {
+    console.error(
+      `Error copying workspace AL file ${sourceFilePath} to extraction path:`,
+      error
+    );
+    vscode.window.showErrorMessage(
+      `Failed to copy AL file to extraction path: ${error.message}`
+    );
+  }
 }
 
 /**
@@ -164,4 +249,5 @@ function createNewIndexEntry(filePath, objectType, objectNumber, indexPath) {
 module.exports = {
   handleAlFileChange,
   createNewIndexEntry,
+  copyWorkspaceAlFileToExtractionPath, // Export the function
 };

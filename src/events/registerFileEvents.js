@@ -1,12 +1,18 @@
 const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
-const configManager = require("../utils/configManager");
+const {
+  getConfigValue,
+  getSrcExtractionPath,
+} = require("../utils/configManager"); // Added getSrcExtractionPath
+const { findAppJsonFile } = require("../utils/appJsonReader"); // Added findAppJsonFile
+const { readJsonFile } = require("../jsonUtils"); // Added readJsonFile
 const { fileEvents } = require("../utils/alFileSaver");
 const { postCorrections } = require("./utils/postCorrections");
 const {
   createNewIndexEntry,
   handleAlFileChange,
+  copyWorkspaceAlFileToExtractionPath, // Import the copy function
 } = require("./handleAlFileChange");
 
 const fileContentCache = new Map();
@@ -332,8 +338,13 @@ function setupFileWatcher(context) {
  * @param {string} filePath - Path to the new AL file
  * @param {string} content - Content of the file
  */
-function handleAlFileCreate(filePath, content) {
+async function handleAlFileCreate(filePath, content) {
+  // Made async
   try {
+    // --- Add file copying logic ---
+    await copyWorkspaceAlFileToExtractionPath(filePath);
+    // --- End file copying logic ---
+
     // Extract object information from the AL file
     const objectTypeRegex =
       /\b(table|tableextension|page|pageextension|report|reportextension|codeunit|query|xmlport|enum|enumextension|profile|interface)\b\s+(\d+)\s+["']([^"']+)["']/i;
@@ -370,13 +381,15 @@ function handleAlFileCreate(filePath, content) {
  * Handle the deletion of an AL file
  * @param {string} filePath - Path to the deleted AL file
  */
-function handleAlFileDelete(filePath) {
+async function handleAlFileDelete(filePath) {
+  // Made async
   try {
+    // --- Add file deletion logic ---
+    await deleteWorkspaceAlFileFromExtractionPath(filePath);
+    // --- End file deletion logic ---
+
     // Get the base path for indexes
-    const upgradedObjectFolders = configManager.getConfigValue(
-      "upgradedObjectFolders",
-      null
-    );
+    const upgradedObjectFolders = getConfigValue("upgradedObjectFolders", null);
     if (!upgradedObjectFolders || !upgradedObjectFolders.basePath) {
       return;
     }
@@ -435,6 +448,97 @@ function handleAlFileDelete(filePath) {
     }
   } catch (error) {
     console.error(`Error handling AL file deletion for ${filePath}:`, error);
+  }
+}
+
+/**
+ * Deletes a workspace AL file from the configured srcExtractionPath.
+ * @param {string} sourceFilePath - The path to the workspace AL file that was deleted.
+ */
+async function deleteWorkspaceAlFileFromExtractionPath(sourceFilePath) {
+  try {
+    const srcExtractionPath = await getSrcExtractionPath();
+    if (!srcExtractionPath) {
+      console.log(
+        "Skipping workspace AL file deletion: srcExtractionPath not available."
+      );
+      return;
+    }
+
+    // We need app.json details to construct the path, even for deletion
+    const appJsonPath = findAppJsonFile();
+    if (!appJsonPath) {
+      // If app.json isn't found, we can't reliably determine the target path
+      console.warn(
+        `Skipping workspace AL file deletion: app.json not found in workspace for file ${sourceFilePath}`
+      );
+      return;
+    }
+
+    const projectRoot = path.dirname(appJsonPath);
+    let appName = "UnknownApp";
+    let appVersion = "1.0.0.0";
+
+    try {
+      const appJson = readJsonFile(appJsonPath);
+      appName = appJson.name || appName;
+      appVersion = appJson.version || appVersion;
+    } catch (err) {
+      // Log error but still try to construct path with defaults
+      console.error(
+        `Error reading app.json at ${appJsonPath} during delete operation: ${err.message}`
+      );
+    }
+
+    const sanitizedAppName = appName.replace(/[<>:"/\\|?*]/g, "_");
+    const relativePath = path.relative(projectRoot, sourceFilePath);
+
+    if (relativePath.startsWith("..")) {
+      console.warn(
+        `Skipping workspace AL file deletion: File ${sourceFilePath} seems outside project root ${projectRoot}`
+      );
+      return;
+    }
+
+    const targetDir = path.join(
+      srcExtractionPath,
+      sanitizedAppName,
+      appVersion,
+      "src",
+      path.dirname(relativePath)
+    );
+    const targetFilePath = path.join(targetDir, path.basename(sourceFilePath));
+
+    // Check if the file exists before attempting deletion
+    if (fs.existsSync(targetFilePath)) {
+      await fs.promises.unlink(targetFilePath);
+      console.log(
+        `Deleted workspace file ${relativePath} from ${targetFilePath}`
+      );
+
+      // Optional: Clean up empty directories - this can be complex and might need refinement
+      // try {
+      //   let currentDir = targetDir;
+      //   const baseSrcDir = path.join(srcExtractionPath, sanitizedAppName, appVersion, 'src');
+      //   while (currentDir !== baseSrcDir && fs.readdirSync(currentDir).length === 0) {
+      //     fs.rmdirSync(currentDir);
+      //     console.log(`Removed empty directory: ${currentDir}`);
+      //     currentDir = path.dirname(currentDir);
+      //   }
+      // } catch (cleanupError) {
+      //   console.error(`Error cleaning up empty directories after deleting ${targetFilePath}:`, cleanupError);
+      // }
+    } else {
+      console.log(
+        `Skipped deletion: File ${targetFilePath} not found in extraction path.`
+      );
+    }
+  } catch (error) {
+    console.error(
+      `Error deleting workspace AL file ${sourceFilePath} from extraction path:`,
+      error
+    );
+    // Don't necessarily show error message to user for deletion failure, could be noisy
   }
 }
 
@@ -530,4 +634,92 @@ function registerfileEvents(context) {
 
 module.exports = {
   registerfileEvents,
+  syncWorkspaceToExtractionPath, // Export the new function
 };
+
+/**
+ * Recursively finds all .al files within a directory.
+ * @param {string} dirPath - The directory to start searching from.
+ * @param {string[]} arrayOfFiles - Accumulator for file paths.
+ * @returns {Promise<string[]>} - A promise resolving to an array of .al file paths.
+ */
+async function findAllAlFiles(dirPath, arrayOfFiles = []) {
+  try {
+    const files = await fs.promises.readdir(dirPath);
+
+    for (const file of files) {
+      const fullPath = path.join(dirPath, file);
+      try {
+        const stat = await fs.promises.stat(fullPath);
+        if (stat.isDirectory()) {
+          await findAllAlFiles(fullPath, arrayOfFiles);
+        } else if (path.extname(file).toLowerCase() === ".al") {
+          arrayOfFiles.push(fullPath);
+        }
+      } catch (statError) {
+        // Ignore errors for single files/subdirs (e.g., permission denied)
+        console.warn(`Could not stat ${fullPath}: ${statError.message}`);
+      }
+    }
+  } catch (readDirError) {
+    // Ignore errors reading a directory (e.g., permission denied)
+    console.warn(
+      `Could not read directory ${dirPath}: ${readDirError.message}`
+    );
+  }
+  return arrayOfFiles;
+}
+
+/**
+ * Performs an initial scan of the workspace project and copies all .al files
+ * to the configured srcExtractionPath.
+ */
+async function syncWorkspaceToExtractionPath() {
+  console.log(
+    "Starting initial sync of workspace AL files to extraction path..."
+  );
+
+  try {
+    const srcExtractionPath = await getSrcExtractionPath();
+    if (!srcExtractionPath) {
+      console.log(
+        "Initial sync skipped: srcExtractionPath not available or extraction disabled."
+      );
+      return;
+    }
+
+    const appJsonPath = findAppJsonFile();
+    if (!appJsonPath) {
+      console.warn("Initial sync skipped: app.json not found in workspace.");
+      return;
+    }
+
+    const projectRoot = path.dirname(appJsonPath);
+
+    console.log(`Scanning project root: ${projectRoot}`);
+    const alFiles = await findAllAlFiles(projectRoot);
+    console.log(`Found ${alFiles.length} .al files to sync.`);
+
+    if (alFiles.length === 0) {
+      console.log("No .al files found in the project root. Sync complete.");
+      return;
+    }
+
+    // Use Promise.all for concurrent copying
+    const copyPromises = alFiles.map((filePath) =>
+      copyWorkspaceAlFileToExtractionPath(filePath).catch((err) => {
+        // Catch individual copy errors so one failure doesn't stop others
+        console.error(`Failed to copy ${filePath}: ${err.message}`);
+      })
+    );
+
+    await Promise.all(copyPromises);
+
+    console.log("Initial sync of workspace AL files complete.");
+  } catch (error) {
+    console.error("Error during initial sync of workspace AL files:", error);
+    vscode.window.showErrorMessage(
+      `Failed initial AL file sync: ${error.message}`
+    );
+  }
+}
