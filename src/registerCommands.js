@@ -22,6 +22,22 @@ function registerCommands(context) {
     "bc-al-upgradeassistant.suggestFieldNames",
     suggestFieldNames
   );
+
+  // Command to copy generated Integration Event subscriber snippet
+  registerCommandOnce(
+    context,
+    "al.copyIntegrationEventSubscriber",
+    (snippet) => {
+      if (snippet) {
+        vscode.env.clipboard.writeText(snippet);
+        vscode.window.showInformationMessage(
+          "Event Subscriber snippet copied to clipboard."
+        );
+      } else {
+        vscode.window.showWarningMessage("No snippet provided to copy.");
+      }
+    }
+  );
 }
 
 function registerRefreshSymbolCacheCommand(context) {

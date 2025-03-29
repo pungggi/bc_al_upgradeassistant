@@ -1,8 +1,12 @@
 # Changelog
 
-## [0.0.106]
+## [0.0.107]
 
 ### Added
+
+- Integration Event Action Provider that generates event subscriber code for integration events
+
+## [0.0.106]
 
 - New Record Trigger Action Provider to generate AL event subscriber code
 

@@ -18,6 +18,9 @@ const {
 const {
   RecordTriggerActionProvider,
 } = require("./providers/recordTriggerActionProvider");
+const {
+  IntegrationEventActionProvider,
+} = require("./providers/integrationEventActionProvider"); // Added import
 const fieldCollector = require("./utils/fieldCollector");
 
 let globalStatusBarItems = {};
@@ -1163,6 +1166,17 @@ async function activate(context) {
         new RecordTriggerActionProvider(),
         {
           providedCodeActionKinds: [vscode.CodeActionKind.QuickFix],
+        }
+      )
+    );
+
+    // Register integration event action provider
+    context.subscriptions.push(
+      vscode.languages.registerCodeActionsProvider(
+        { scheme: "file", language: "al" },
+        new IntegrationEventActionProvider(),
+        {
+          providedCodeActionKinds: [vscode.CodeActionKind.RefactorExtract], // Use RefactorExtract as planned
         }
       )
     );
