@@ -33,12 +33,7 @@ function filterToIdRanges(code, returnDebugInfo = false) {
     return returnDebugInfo ? { filteredCode: code } : code;
   }
 
-  console.log(`Found ${idRanges.length} ID ranges in app.json:`, idRanges);
-
-  // Detect if the code is C/AL (contains OBJECT) or AL syntax
-  const isCAL = code.includes("OBJECT ") || code.includes("OBJECT-PROPERTIES");
-
-  if (isCAL) {
+  if (alParser.isCAL(code)) {
     // Process C/AL code using our new parser
     return calParser.filterCALToIdRanges(code, returnDebugInfo);
   } else {
