@@ -1,4 +1,5 @@
 const calParser = require("./calParser");
+const alParser = require("../../al-parser-lib/alparser");
 
 /**
  * Extract ID ranges from app.json
@@ -42,54 +43,22 @@ function filterToIdRanges(code, returnDebugInfo = false) {
     return calParser.filterCALToIdRanges(code, returnDebugInfo);
   } else {
     // Process modern AL code
-    const filteredCode = filterTableFields(code, idRanges);
-    const finalCode = filterPageControls(filteredCode, idRanges);
+    // Pass the isIdInRanges function to the new parser functions
+    const filteredCode = alParser.filterTableFields(
+      code,
+      idRanges,
+      isIdInRanges
+    );
+    const finalCode = alParser.filterPageControls(
+      filteredCode,
+      idRanges,
+      isIdInRanges
+    );
     return returnDebugInfo ? { filteredCode: finalCode } : finalCode;
   }
 }
 
-/**
- * Filter table fields based on ID ranges
- * @param {string} code - The AL code to filter
- * @param {Array<{from: number, to: number}>} idRanges - Array of ID range objects
- * @returns {string} - Filtered AL code
- */
-function filterTableFields(code, idRanges) {
-  // Regular expression to match table field declarations
-  const fieldRegex =
-    /field\s*\(\s*(\d+)\s*;[^;{}]*\)\s*{[^{}]*(?:{[^{}]*}[^{}]*)*}/g;
-
-  // Replace fields outside of ID ranges with comments
-  return code.replace(fieldRegex, (match, id) => {
-    if (isIdInRanges(id, idRanges)) {
-      return match; // Keep fields within ranges
-    } else {
-      return `// Field with ID ${id} removed as it's outside app.json ID ranges\n`;
-    }
-  });
-}
-
-/**
- * Filter page controls based on ID ranges
- * @param {string} code - The AL code to filter
- * @param {Array<{from: number, to: number}>} idRanges - Array of ID range objects
- * @returns {string} - Filtered AL code
- */
-function filterPageControls(code, idRanges) {
-  // Regular expression to match page control declarations with IDs
-  // This handles different control types (field, part, group, etc.)
-  const controlRegex =
-    /(\s*)(field|part|group|systempart|chartpart|cuegroup)\s*\(\s*(\d+)\s*;[^;{}]*\)\s*{[^{}]*(?:{[^{}]*}[^{}]*)*}/g;
-
-  // Replace controls outside of ID ranges with comments
-  return code.replace(controlRegex, (match, indent, type, id) => {
-    if (isIdInRanges(id, idRanges)) {
-      return match; // Keep controls within ranges
-    } else {
-      return `${indent}// ${type} with ID ${id} removed as it's outside app.json ID ranges\n`;
-    }
-  });
-}
+// Removed filterTableFields and filterPageControls functions as they are now in alparser.js
 
 module.exports = {
   filterToIdRanges,
