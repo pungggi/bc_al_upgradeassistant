@@ -200,11 +200,19 @@ class SymbolCache {
                         `Worker error for ${message.appPath}: ${message.message}`,
                         message.stack
                       );
-                      vscode.window.showErrorMessage(
-                        `Error processing ${path.basename(message.appPath)}: ${
-                          message.message
-                        }`
-                      );
+                      // Filter out specific known non-critical errors
+                      const isZipFileError = message.message
+                        .toLowerCase()
+                        .includes("is this a zip file");
+                      if (!isZipFileError) {
+                        const errorMessage = `Error processing ${path.basename(
+                          message.appPath
+                        )}: ${message.message.trim()}`;
+                        vscode.window.showErrorMessage(errorMessage, {
+                          modal: false,
+                          detail: message.stack,
+                        });
+                      }
                       break;
                     case "progress":
                       progress.report({
