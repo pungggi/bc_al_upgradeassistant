@@ -20,7 +20,10 @@ const {
 } = require("./providers/recordTriggerActionProvider");
 const {
   IntegrationEventActionProvider,
-} = require("./providers/integrationEventActionProvider"); // Added import
+} = require("./providers/integrationEventActionProvider");
+const {
+  ObjectSuggestionActionProvider,
+} = require("./providers/objectSuggestionProvider");
 const fieldCollector = require("./utils/fieldCollector");
 
 let globalStatusBarItems = {};
@@ -66,6 +69,17 @@ async function activate(context) {
       vscode.languages.registerCodeLensProvider(
         { scheme: "file", language: "al" },
         new ExtendedObjectHoverProvider()
+      )
+    );
+
+    // Register the Object Suggestion provider for AL files
+    context.subscriptions.push(
+      vscode.languages.registerCodeActionsProvider(
+        { scheme: "file", language: "al" },
+        new ObjectSuggestionActionProvider(),
+        {
+          providedCodeActionKinds: [vscode.CodeActionKind.QuickFix],
+        }
       )
     );
 

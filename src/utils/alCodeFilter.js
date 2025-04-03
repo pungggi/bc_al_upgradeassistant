@@ -1,4 +1,4 @@
-const calParser = require("./calParser");
+const calParser = require("../../al-parser-lib/calParser");
 const alParser = require("../../al-parser-lib/alparser");
 
 /**

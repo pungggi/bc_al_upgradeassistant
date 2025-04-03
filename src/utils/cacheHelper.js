@@ -2,8 +2,8 @@ const vscode = require("vscode");
 const path = require("path");
 const fs = require("fs");
 const glob = require("glob").sync;
-const symbolCache = require("../symbolCache"); // Adjust path relative to utils
-const { readJsonFile } = require("../jsonUtils"); // Adjust path relative to utils
+const symbolCache = require("../symbolCache");
+const { readJsonFile } = require("../jsonUtils");
 
 /**
  * Initialize symbol cache.
@@ -13,10 +13,17 @@ const { readJsonFile } = require("../jsonUtils"); // Adjust path relative to uti
  */
 async function initializeSymbolCache(force = false) {
   try {
+    console.log("[Cache] Initializing symbol cache. Force:", force);
+
     if (force) {
+      console.log("[Cache] Forcing cache clear");
       symbolCache.clearCache();
     }
 
+    console.log(
+      "[Cache] Current symbol count:",
+      Object.keys(symbolCache.symbols).length
+    );
     let appPaths = [];
     const defaultLocations = [];
 
@@ -66,17 +73,31 @@ async function initializeSymbolCache(force = false) {
     }
 
     // Find all app files
+    console.log("[Cache] Default locations to search:", defaultLocations); // Log the patterns we will search
     for (const pattern of defaultLocations) {
+      console.log(`[Cache] Searching for .app files with pattern: ${pattern}`); // Log the current pattern
       try {
-        const files = await glob(pattern);
+        const files = glob(pattern); // Note: glob.sync was imported, so no await needed
+        console.log(
+          `[Cache] Found ${files.length} files for pattern ${pattern}:`,
+          files
+        ); // Log the result of glob
         appPaths = [...appPaths, ...files];
       } catch (err) {
-        console.error(`Error finding app files with pattern ${pattern}:`, err);
+        console.error(
+          `[Cache] Error finding app files with pattern ${pattern}:`,
+          err
+        );
       }
     }
 
     // Initialize the cache with found paths
+    console.log("[Cache] Found app paths:", appPaths);
     await symbolCache.initialize(appPaths);
+    console.log(
+      "[Cache] After initialization symbol count:",
+      Object.keys(symbolCache.symbols).length
+    );
 
     let processed = 0;
     // Only refresh if paths were found or force is true

@@ -152,7 +152,7 @@ async function updateFieldsCache() {
   try {
     // Find all AL files
     const alFiles = glob.sync(path.join(srcPath, "**", "*.al"));
-
+    console.log(`Found ${alFiles.length} .al files in ${srcPath}`);
     // Reset caches
     tableFieldsCache = {};
     pageSourceTableCache = {};
@@ -171,6 +171,7 @@ async function updateFieldsCache() {
             ]),
           ];
         } else {
+          // This is the correct 'else' for when the table is new
           tableFieldsCache[tableResult.tableName] = tableResult.fields;
         }
       }
@@ -183,11 +184,16 @@ async function updateFieldsCache() {
     }
 
     lastCacheUpdate = Date.now();
+    const tableCount = Object.keys(tableFieldsCache).length;
+    const pageCount = Object.keys(pageSourceTableCache).length;
     console.log(
-      `Updated fields cache with ${
-        Object.keys(tableFieldsCache).length
-      } tables and ${Object.keys(pageSourceTableCache).length} pages`
+      // Log the final counts
+      `Finished updating fields cache. Tables: ${tableCount}, Pages: ${pageCount}`
     );
+    // Optional: Uncomment to log all cached tables for deeper debugging
+    // if (tableCount > 0) {
+    //   console.log("Cached tables:", Object.keys(tableFieldsCache));
+    // }
   } catch (error) {
     console.error("Error updating fields cache:", error);
   }

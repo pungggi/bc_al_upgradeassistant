@@ -182,11 +182,15 @@ class FieldSuggestionActionProvider {
         continue;
       }
 
-      // Find similar field names
-      const suggestions = stringSimilarity.findSimilarFieldNames(
+      console.log("Finding similar field names:", {
+        fieldName,
+        availableFields: validFields,
+      });
+      const suggestions = stringSimilarity.findSimilarNames(
         fieldName,
         validFields
       );
+      console.log("Found field suggestions:", suggestions);
 
       // Use fieldInfo.range instead of diagnostic.range for more accurate replacement
       const replacementRange = fieldInfo.range || diagnostic.range;

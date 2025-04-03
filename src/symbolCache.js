@@ -10,7 +10,7 @@ const { getSrcExtractionPath } = require("./utils/configManager"); // Import the
 const readFile = util.promisify(fs.readFile);
 const writeFile = util.promisify(fs.writeFile);
 const mkdir = util.promisify(fs.mkdir);
-const readdir = util.promisify(fs.readdir); // Re-enabled for checkIfAppCanBeSkipped
+// const readdir = util.promisify(fs.readdir); // No longer needed here
 
 class SymbolCache {
   constructor() {
@@ -55,14 +55,34 @@ class SymbolCache {
       const symbolsFilePath = path.join(this.cachePath, "symbols.json");
       const proceduresFilePath = path.join(this.cachePath, "procedures.json");
 
+      console.log("SymbolCache: Loading cache from:", {
+        symbolsPath: symbolsFilePath,
+        proceduresPath: proceduresFilePath,
+      });
+
       if (fs.existsSync(symbolsFilePath)) {
         const symbolsData = await readFile(symbolsFilePath, "utf8");
         this.symbols = JSON.parse(symbolsData);
+        console.log("SymbolCache: Loaded symbols:", {
+          count: Object.keys(this.symbols).length,
+          types: [...new Set(Object.values(this.symbols).map((s) => s.Type))],
+          sampleNames: Object.keys(this.symbols).slice(0, 5),
+        });
+      } else {
+        console.log("SymbolCache: No symbols file found at:", symbolsFilePath);
       }
 
       if (fs.existsSync(proceduresFilePath)) {
         const proceduresData = await readFile(proceduresFilePath, "utf8");
         this.procedures = JSON.parse(proceduresData);
+        console.log("SymbolCache: Loaded procedures:", {
+          count: Object.keys(this.procedures).length,
+        });
+      } else {
+        console.log(
+          "SymbolCache: No procedures file found at:",
+          proceduresFilePath
+        );
       }
 
       return true;
@@ -147,37 +167,24 @@ class SymbolCache {
       // Continue without extraction for .app files
     }
 
+    console.log("[CacheRefresh] Starting background refresh..."); // Log start
     try {
       await vscode.window.withProgress(
         {
-          location: vscode.ProgressLocation.Window, // changed from Notification to Window
+          location: vscode.ProgressLocation.Window,
           title: "Refreshing AL Symbol Cache",
           cancellable: false,
         },
         async (progress) => {
+          console.log("[CacheRefresh] Progress reported, starting workers..."); // Log progress start
           progress.report({ increment: 0, message: "Starting..." });
 
-          const workerPromises = this.appPaths.map((appPath) =>
-            // First check if we can skip this app
-            this.checkIfAppCanBeSkipped(
-              appPath,
-              enableSrcExtraction,
-              srcExtractionPath
-            ).then((skipApp) => {
-              if (skipApp) {
-                processedCount++;
-                const increment = (1 / totalApps) * 100;
-                progress.report({
-                  increment,
-                  message: `Skipped ${path.basename(
-                    appPath
-                  )} (already processed)...`,
-                });
-                return Promise.resolve();
-              }
-
-              // If not skipping, create and handle the worker
+          const workerPromises = this.appPaths.map(
+            (appPath) => {
+              // Add explicit block for map callback
+              // Always create and handle the worker
               return new Promise((resolve) => {
+                // Explicitly return the promise
                 const workerPath = path.join(__dirname, "symbolCacheWorker.js");
 
                 // Create worker with inspector disabled to avoid port conflicts
@@ -190,28 +197,40 @@ class SymbolCache {
                 worker.on("message", (message) => {
                   switch (message.type) {
                     case "success":
+                      console.log(
+                        // Log worker success
+                        `[CacheRefresh] Worker success for ${
+                          message.appPath
+                        }. Symbols: ${
+                          Object.keys(message.symbols || {}).length
+                        }, Procedures: ${
+                          Object.keys(message.procedures || {}).length
+                        }`
+                      );
                       Object.assign(newSymbols, message.symbols);
                       if (message.procedures) {
                         Object.assign(this.procedures, message.procedures);
                       }
                       break;
                     case "error":
-                      console.error(
-                        `Worker error for ${message.appPath}: ${message.message}`,
-                        message.stack
-                      );
-                      // Filter out specific known non-critical errors
-                      const isZipFileError = message.message
-                        .toLowerCase()
-                        .includes("is this a zip file");
-                      if (!isZipFileError) {
-                        const errorMessage = `Error processing ${path.basename(
-                          message.appPath
-                        )}: ${message.message.trim()}`;
-                        vscode.window.showErrorMessage(errorMessage, {
-                          modal: false,
-                          detail: message.stack,
-                        });
+                      {
+                        console.error(
+                          `Worker error for ${message.appPath}: ${message.message}`,
+                          message.stack
+                        );
+                        // Filter out specific known non-critical errors
+                        const isZipFileError = message.message
+                          .toLowerCase()
+                          .includes("is this a zip file");
+                        if (!isZipFileError) {
+                          const errorMessage = `Error processing ${path.basename(
+                            message.appPath
+                          )}: ${message.message.trim()}`;
+                          vscode.window.showErrorMessage(errorMessage, {
+                            modal: false,
+                            detail: message.stack,
+                          });
+                        }
                       }
                       break;
                     case "progress":
@@ -295,15 +314,27 @@ class SymbolCache {
                     srcExtractionPath,
                   },
                 });
-              });
-            })
-          );
+              }); // Close Promise callback
+            } // Close map callback block
+          ); // Close map call
 
           // Wait for all workers to complete
           await Promise.all(workerPromises);
 
           // Update main symbols and procedures objects and save cache
+          console.log(
+            // Log before updating main cache
+            `[CacheRefresh] Finished processing all workers. Total new symbols found: ${
+              Object.keys(newSymbols).length
+            }`
+          );
           this.symbols = newSymbols;
+          console.log(
+            // Log after updating main cache
+            `[CacheRefresh] Updated main symbol cache. Current count: ${
+              Object.keys(this.symbols).length
+            }`
+          );
           await this.saveCache();
 
           // Report final progress then return immediately
@@ -324,48 +355,17 @@ class SymbolCache {
     }
   }
 
-  async checkIfAppCanBeSkipped(
-    appPath,
-    enableSrcExtraction,
-    srcExtractionPath
-  ) {
-    if (!enableSrcExtraction || !srcExtractionPath) {
-      return false;
-    }
-
-    try {
-      // Calculate the expected source extraction directory path
-      const fileName = path.parse(appPath).name;
-      if (!fileName) return false;
-
-      const nameParts = fileName.split("_");
-      const extractedAppName =
-        nameParts.length > 1 ? nameParts[1] || "Unknown" : fileName;
-      const extractedAppVersion =
-        nameParts.length > 2 ? nameParts[2] || "1.0" : "1.0";
-      const sanitizedAppName = extractedAppName.replace(/[<>:"/\\|?*]/g, "_");
-      const extractDir = path.join(
-        srcExtractionPath,
-        sanitizedAppName,
-        extractedAppVersion
-      );
-
-      // Check if target directory exists and contains AL files
-      if (fs.existsSync(extractDir)) {
-        const files = await readdir(extractDir);
-        return files.some((file) => file.endsWith(".al"));
-      }
-    } catch (err) {
-      console.error(`Error checking if app can be skipped: ${err.message}`);
-    }
-
-    return false;
-  }
-
+  // Removed checkIfAppCanBeSkipped function
   // Removed promptForSrcPath() as it's now in configManager.js
 
   getObjectInfo(objectName) {
-    return this.symbols[objectName] || null;
+    const info = this.symbols[objectName] || null;
+    console.log("SymbolCache: Getting object info:", {
+      objectName,
+      found: !!info,
+      info,
+    });
+    return info;
   }
 
   getObjectId(objectName) {

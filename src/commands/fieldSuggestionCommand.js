@@ -198,7 +198,7 @@ async function suggestFieldNames(recordName, fieldName) {
   }
 
   // Find similar fields (get more suggestions for this view)
-  const suggestions = stringSimilarity.findSimilarFieldNames(
+  const suggestions = stringSimilarity.findSimilarNames(
     fieldName,
     validFields,
     10
