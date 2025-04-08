@@ -111,10 +111,11 @@ async function processAppFile(appPath, options) {
           });
 
           // Try to parse each .al file
+          let shortFileName ='';
           for (const filePath of alFiles) {
             try {
               const content = fs.readFileSync(filePath, "utf8");
-              const shortFileName = path.basename(filePath);
+              shortFileName = path.basename(filePath);
               console.log(`[Worker] Processing AL file: ${shortFileName}`); // Log which file is being processed
 
               if (!alParser.isCAL(content)) {

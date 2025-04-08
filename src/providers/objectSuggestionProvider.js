@@ -156,20 +156,6 @@ class ObjectSuggestionActionProvider {
           originalType_lower.startsWith(symbolType_lower);
         const matches = symbolTypeMatches || originalTypeMatches;
 
-        // Log detailed matching info for debugging
-        console.log(`[Filter] Symbol Details:
-          Name: ${symbol.Name}
-          Type: ${symbol.Type} (normalized: ${type_lower})
-          OriginalType: ${
-            symbol.OriginalType || "none"
-          } (normalized: ${originalType_lower})
-          Required Type: ${symbolType} (normalized: ${symbolType_lower})
-          Matches:
-            - Type Match: ${symbolTypeMatches}
-            - OriginalType Match: ${originalTypeMatches}
-            - Final Result: ${matches}
-        `);
-
         return matches;
       });
 
@@ -186,10 +172,22 @@ class ObjectSuggestionActionProvider {
         matchingSymbolsCount: matchingSymbols.length,
       });
 
+      // --- BEGIN TIMING LOG ---
+      const startTime = performance.now();
+      console.log(
+        `[Timing] Calling findSimilarNames for '${incorrectName}' with ${names.length} names...`
+      );
+      // --- END TIMING LOG ---
       const suggestions = stringSimilarity.findSimilarNames(
         incorrectName,
         names
       );
+      // --- BEGIN TIMING LOG ---
+      const endTime = performance.now();
+      console.log(
+        `[Timing] findSimilarNames took ${(endTime - startTime).toFixed(2)} ms`
+      );
+      // --- END TIMING LOG ---
 
       console.log("Found suggestions:", suggestions);
 
