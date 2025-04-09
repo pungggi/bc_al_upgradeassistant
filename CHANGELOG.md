@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.109]
+
+- Enhanced symbol caching for faster performance: Includes improved detection of cache updates and a configurable processing delay (`alUpgradeAssistant.symbolCacheProcessingDelay`) for better responsiveness.
+
 ## [0.0.107]
 
 ### Added
