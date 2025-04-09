@@ -15,7 +15,7 @@
     "onLanguage:al",
     "onLanguage:plaintext"
   ],
-  "main": "./dist/extension.js",
+  "main": "./src/extension.js",
   "contributes": {
     "commands": [
       {
