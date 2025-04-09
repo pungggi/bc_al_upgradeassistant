@@ -12,6 +12,8 @@ A Visual Studio Code extension to assist in upgrading from older NAV or BC Versi
 
 A tutorial of how to use those features will be released.
 
+For any feedback use https://ngsoftware.canny.io/requests
+
 ## Requirements
 
 - Visual Studio Code 1.80.0 or higher

@@ -167,7 +167,7 @@ class SymbolCache {
       // Continue without extraction for .app files
     }
 
-    console.log("[CacheRefresh] Starting background refresh..."); // Log start
+    console.log("[CacheRefresh] Starting background refresh...");
     try {
       await vscode.window.withProgress(
         {
@@ -354,9 +354,6 @@ class SymbolCache {
       this.isRefreshing = false;
     }
   }
-
-  // Removed checkIfAppCanBeSkipped function
-  // Removed promptForSrcPath() as it's now in configManager.js
 
   getObjectInfo(objectName) {
     const info = this.symbols[objectName] || null;
