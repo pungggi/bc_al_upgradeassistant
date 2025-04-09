@@ -2,7 +2,7 @@
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
   "description": "Assists you in upgrading old or obsolete code and more",
-  "version": "0.0.109",
+  "version": "0.0.110",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
@@ -718,6 +718,12 @@
           "type": "number",
           "default": 600,
           "description": "Field cache timeout in seconds (how often to refresh the field definitions)"
+        },
+        "bc-al-upgradeassistant.symbolCache.processingDelay": {
+          "type": "number",
+          "default": 25000,
+          "minimum": 100,
+          "description": "Delay in milliseconds before processing symbol cache updates after file changes. Default is 25000 (25 seconds). Minimum is 100ms."
         }
       }
     },
