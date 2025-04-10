@@ -5,6 +5,8 @@ module.exports = {
   entry: {
     extension: "./src/extension.js",
     symbolCacheWorker: "./src/symbolCacheWorker.js",
+    alparser: "./al-parser-lib/alparser.js",
+    calParser: "./al-parser-lib/calParser.js",
   },
   target: "node",
   mode: "production",
