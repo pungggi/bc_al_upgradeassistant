@@ -42,12 +42,12 @@ When using the VS Code Language Model API backend:
 
 The following settings apply to both Claude API and VS Code Language Model API backends:
 
-- `bc-al-upgradeassistant.claude.defaultSystemPrompt`: Default system prompt to use with AI models
-- `bc-al-upgradeassistant.claude.defaultLanguage`: Default language code (e.g., "de-DE") to use in prompts as the translation language
-- `bc-al-upgradeassistant.claude.prompts`: Collection of prompts for AI models
-- `bc-al-upgradeassistant.claude.autoSaveAlCode`: When enabled, automatically saves AL code blocks from AI responses
-- `bc-al-upgradeassistant.claude.codeSaveMode`: How to handle multiple AL code blocks ("ask" or "saveAll")
-- `bc-al-upgradeassistant.claude.debugMode`: When enabled, shows the prompt being sent to the AI model in a document for review before sending
+- `bc-al-upgradeassistant.defaultSystemPrompt`: Default system prompt to use with AI models
+- `bc-al-upgradeassistant.defaultLanguage`: Default language code (e.g., "de-DE") to use in prompts as the translation language
+- `bc-al-upgradeassistant.prompts`: Collection of prompts for AI models
+- `bc-al-upgradeassistant.autoSaveAlCode`: When enabled, automatically saves AL code blocks from AI responses
+- `bc-al-upgradeassistant.codeSaveMode`: How to handle multiple AL code blocks ("ask" or "saveAll")
+- `bc-al-upgradeassistant.debugMode`: When enabled, shows the prompt being sent to the AI model in a document for review before sending
 
 ### Claude API Specific Settings
 
@@ -119,7 +119,7 @@ The summary is generated when running the command `BC/AL Upgrade Assistant: Gene
 You can customize the AI prompts through the settings, for example:
 
 ```json
-"bc-al-upgradeassistant.claude.prompts": [
+"bc-al-upgradeassistant.prompts": [
   {
     "commandName": "convertCALToAL",
     "commandDescription": "Convert C/AL code to modern AL syntax",
@@ -154,12 +154,12 @@ Each prompt has the following properties:
 
 > The extension will fall back to your default model from `bc-al-upgradeassistant.claude.model` if no valid model is specified.
 
-### Debugging Claude Prompts
+### Debugging AI Prompts
 
 When working with complex prompts, you can enable the debug mode to review exactly what is being sent to the Claude API:
 
-1. Set `bc-al-upgradeassistant.claude.debugMode` to `true` in your VS Code settings
-2. Run any Claude prompt
+1. Set `bc-al-upgradeassistant.debugMode` to `true` in your VS Code settings
+2. Run any AI prompt
 3. A new document will open showing the system prompt, user prompt with your code inserted, and configuration details
 
 ## Upgrade specific analysis and code suggestions

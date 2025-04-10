@@ -488,17 +488,17 @@
           "maximum": 1,
           "description": "Temperature parameter for Claude API (0-1). Lower values produce more deterministic outputs, higher values more creative ones."
         },
-        "bc-al-upgradeassistant.claude.defaultSystemPrompt": {
+        "bc-al-upgradeassistant.defaultSystemPrompt": {
           "type": "string",
           "default": "You are an expert AL and C/AL programming assistant for Microsoft Dynamics 365 Business Central. Provide accurate, concise, and helpful responses focused on best practices.",
           "description": "Default system prompt to use with AI models when a prompt definition doesn't include one"
         },
-        "bc-al-upgradeassistant.claude.defaultLanguage": {
+        "bc-al-upgradeassistant.defaultLanguage": {
           "type": "string",
           "default": "de-DE",
           "description": "Default language code to use in prompts with {{language}} placeholder"
         },
-        "bc-al-upgradeassistant.claude.prompts": {
+        "bc-al-upgradeassistant.prompts": {
           "type": "array",
           "default": [
             {
@@ -591,12 +591,12 @@
             }
           }
         },
-        "bc-al-upgradeassistant.claude.autoSaveAlCode": {
+        "bc-al-upgradeassistant.autoSaveAlCode": {
           "type": "boolean",
           "default": false,
           "description": "Automatically save AL code blocks from AI model responses"
         },
-        "bc-al-upgradeassistant.claude.codeSaveMode": {
+        "bc-al-upgradeassistant.codeSaveMode": {
           "type": "string",
           "default": "ask",
           "enum": [
@@ -609,7 +609,7 @@
           ],
           "description": "How to handle multiple AL code blocks in AI responses"
         },
-        "bc-al-upgradeassistant.claude.debugMode": {
+        "bc-al-upgradeassistant.debugMode": {
           "type": "boolean",
           "default": false,
           "description": "When enabled, shows the prompt being sent to the AI model in an editor window"

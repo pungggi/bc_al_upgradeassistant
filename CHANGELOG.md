@@ -1,13 +1,6 @@
 # Changelog
 
-## [0.0.114]
-
-### Added
-
-- Support for VS Code Language Model API as an alternative to the Claude API
-- New setting to select between Claude API and VS Code Language Model API backends
-
-## [0.0.111]
+## [0.0.115]
 
 ### Added
 

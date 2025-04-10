@@ -16,7 +16,7 @@ const {
  * @returns {Array} Array of prompt objects
  */
 function getAvailablePrompts() {
-  const configPrompts = configManager.getConfigValue("claude.prompts", []);
+  const configPrompts = configManager.getConfigValue("prompts", []);
 
   // Filter out disabled prompts
   return configPrompts.filter((prompt) => !prompt.disabled);
@@ -94,7 +94,7 @@ async function executePrompt(prompt, code, progressCallback = null) {
     );
 
   // Check if debug mode is enabled
-  const debugMode = configManager.getConfigValue("claude.debugMode", false);
+  const debugMode = configManager.getConfigValue("debugMode", false);
 
   // Apply ID range filtering if specified in the prompt
   let processedCode = code;
@@ -123,7 +123,7 @@ async function executePrompt(prompt, code, progressCallback = null) {
 
   // Replace language placeholder if present
   const defaultLanguage = configManager.getConfigValue(
-    "claude.defaultLanguage",
+    "defaultLanguage",
     "en-US"
   );
   userPrompt = userPrompt.replace("{{language}}", defaultLanguage);
@@ -503,7 +503,7 @@ async function extractAndSaveAlCodeBlocks(content, orginFilePath) {
   }
 
   // If there are multiple blocks, handle them based on settings
-  const saveMode = configManager.getConfigValue("claude.codeSaveMode", "ask");
+  const saveMode = configManager.getConfigValue("codeSaveMode", "ask");
 
   if (saveMode === "saveAll") {
     // Save all code blocks automatically

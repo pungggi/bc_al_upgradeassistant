@@ -96,10 +96,7 @@ function registerPromptClaudeCommand(context) {
       }
 
       // Check if auto-save is enabled
-      const autoSave = configManager.getConfigValue(
-        "claude.autoSaveAlCode",
-        false
-      );
+      const autoSave = configManager.getConfigValue("autoSaveAlCode", false);
 
       // If auto-save is enabled, don't create an editor for the response
       let document = null;
