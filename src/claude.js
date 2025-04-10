@@ -5,6 +5,7 @@ const modelHelper = require("./modelHelper");
 const configManager = require("./utils/configManager");
 const alFileSaver = require("./utils/alFileSaver");
 const { filterToIdRanges } = require("./utils/alCodeFilter");
+const { EXTENSION_ID } = require("./constants"); // Added for config reading
 const {
   callClaudeApi,
   extractContentFromResponse,
@@ -62,13 +63,20 @@ async function showPromptSelectionDialog() {
  * @returns {Promise<string>} Response from the AI
  */
 async function executePrompt(prompt, code, progressCallback = null) {
-  // Get API key from configuration
-  const apiKey = configManager.getConfigValue("claude.apiKey");
+  // Determine the backend to use
+  const backendSettingValue = vscode.workspace
+    .getConfiguration(EXTENSION_ID)
+    .get("languageModelBackend", "Claude API");
 
-  if (!apiKey || apiKey === "your-claude-api-key") {
-    throw new Error(
-      "Claude API key not configured. Please update your settings."
-    );
+  // Get API key only if needed for Claude API
+  let apiKey = null;
+  if (backendSettingValue === "Claude API") {
+    apiKey = configManager.getConfigValue("claude.apiKey");
+    if (!apiKey || apiKey === "your-claude-api-key") {
+      throw new Error(
+        "Claude API key not configured for the selected backend. Please update your settings."
+      );
+    }
   }
 
   // Get the model to use (from prompt or default)
@@ -190,38 +198,271 @@ ${userPrompt}
   }
 
   try {
-    // Get maximum tokens and temperature from config or use defaults
-    const maxTokens = configManager.getConfigValue("claude.maxTokens", 4096);
-    const temperature = configManager.getConfigValue("claude.temperature", 0.5);
+    let responseContent = "";
 
-    if (progressCallback) {
-      progressCallback({
-        increment: 20,
-        message: `Processing with ${model.name}...`,
+    if (backendSettingValue === "Claude API") {
+      // --- Claude API Path ---
+      const maxTokens = configManager.getConfigValue("claude.maxTokens", 4096);
+      const temperature = configManager.getConfigValue(
+        "claude.temperature",
+        0.5
+      );
+
+      if (progressCallback) {
+        progressCallback({
+          increment: 20,
+          message: `Processing with Claude (${model.name})...`,
+        });
+      }
+
+      const response = await callClaudeApi({
+        apiKey,
+        model: model.apiName,
+        systemPrompt,
+        userPrompt,
+        maxTokens,
+        temperature,
       });
+
+      if (progressCallback) {
+        progressCallback({ increment: 70, message: "Processing response..." });
+      }
+      responseContent = extractContentFromResponse(response);
+    } else if (backendSettingValue === "VS Code Language Model API") {
+      // --- VS Code LM API Path ---
+      if (!vscode.lm) {
+        throw new Error(
+          "VS Code Language Model API (vscode.lm) is not available in this version of VS Code."
+        );
+      }
+
+      if (progressCallback) {
+        progressCallback({
+          increment: 20,
+          message: "Processing with VS Code Language Model API...",
+        });
+      }
+
+      try {
+        // Shorter prompts are more reliable
+        if (userPrompt.length > 10000) {
+          userPrompt =
+            userPrompt.substring(0, 10000) +
+            "\n\n[Content truncated for size...]";
+        }
+
+        // Prepare messages for the chat model
+        const messages = [];
+
+        // Add system prompt if it exists (keep it short)
+        if (systemPrompt && systemPrompt.trim()) {
+          const trimmedSystemPrompt =
+            systemPrompt.length > 500
+              ? systemPrompt.substring(0, 500) + "..."
+              : systemPrompt;
+
+          messages.push({
+            role: "system",
+            content: trimmedSystemPrompt,
+          });
+        }
+
+        // Add user prompt
+        messages.push({
+          role: "user",
+          content: userPrompt,
+        });
+
+        // First get available models
+        const models = await vscode.lm.selectChatModels();
+
+        if (!models || models.length === 0) {
+          throw new Error("No language models available");
+        }
+
+        // Find specified model or use the first available one
+        const configModelId = configManager.getConfigValue(
+          "vscodeLanguageModelId",
+          ""
+        );
+        let selectedModel = null;
+
+        if (configModelId) {
+          selectedModel = models.find(
+            (m) =>
+              m.id === configModelId ||
+              m.name === configModelId ||
+              m.id.includes(configModelId) ||
+              m.name.includes(configModelId)
+          );
+        }
+
+        if (!selectedModel && models.length > 0) {
+          selectedModel = models[0];
+        }
+
+        if (!selectedModel) {
+          throw new Error("Could not select a language model");
+        }
+
+        // Use a longer timeout for large prompts
+        const timeout = Math.min(120000, 30000 + userPrompt.length / 10);
+        const cts = new vscode.CancellationTokenSource();
+        setTimeout(() => cts.cancel(), timeout);
+
+        const chatResponse = await selectedModel.sendRequest(
+          messages,
+          { timeout },
+          cts.token
+        );
+
+        if (progressCallback) {
+          progressCallback({
+            increment: 40,
+            message: "Receiving response...",
+          });
+        }
+
+        // Process the response
+        let fullResponse = "";
+        if (!chatResponse || !chatResponse.stream) {
+          throw new Error("Model returned invalid response format");
+        }
+
+        let chunkCount = 0;
+
+        try {
+          for await (const chunk of chatResponse.stream) {
+            chunkCount++;
+
+            // Handle different chunk formats
+            if (chunk && typeof chunk === "object") {
+              if (chunk.content) {
+                fullResponse += chunk.content;
+              } else if (chunk.text) {
+                fullResponse += chunk.text;
+              } else if (chunk.value) {
+                fullResponse += chunk.value;
+              }
+            } else if (typeof chunk === "string") {
+              fullResponse += chunk;
+            }
+          }
+        } catch (streamError) {
+          // If we got some content before the error, use it
+          if (fullResponse && fullResponse.trim().length > 0) {
+            console.error("Stream error, but partial response received:", {
+              error: streamError,
+              response: fullResponse,
+            });
+          } else {
+            throw streamError;
+          }
+        }
+
+        // Retry once if we received no content
+        if ((!fullResponse || fullResponse.trim() === "") && chunkCount === 0) {
+          // Create a simpler prompt for retry
+          const retryMessages = [
+            {
+              role: "system",
+              content: "You are an assistant that helps with AL programming.",
+            },
+            {
+              role: "user",
+              content:
+                userPrompt.substring(0, 5000) +
+                "\n\n[Prompt truncated for reliability]",
+            },
+          ];
+
+          // Try again with simpler prompt
+          const cts2 = new vscode.CancellationTokenSource();
+          setTimeout(() => cts2.cancel(), 60000); // 60 second timeout
+
+          const retryResponse = await selectedModel.sendRequest(
+            retryMessages,
+            { timeout: 60000 },
+            cts2.token
+          );
+
+          // Process retry response
+          if (retryResponse && retryResponse.stream) {
+            for await (const chunk of retryResponse.stream) {
+              if (chunk && typeof chunk === "object") {
+                if (chunk.content) fullResponse += chunk.content;
+                else if (chunk.text) fullResponse += chunk.text;
+                else if (chunk.value) fullResponse += chunk.value;
+              } else if (typeof chunk === "string") {
+                fullResponse += chunk;
+              }
+            }
+          }
+        }
+
+        if (!fullResponse || fullResponse.trim() === "") {
+          // Check if text property is available on the response
+          if (chatResponse.text) {
+            let textContent = "";
+            try {
+              for await (const text of chatResponse.text) {
+                textContent += text;
+              }
+              if (textContent && textContent.trim() !== "") {
+                fullResponse = textContent;
+              }
+            } catch (textError) {
+              // Handle error in text stream
+              console.error("Error processing text stream:", textError);
+            }
+          }
+
+          // If still empty, throw error
+          if (!fullResponse || fullResponse.trim() === "") {
+            throw new Error(
+              "Received an empty response from the VS Code Language Model API"
+            );
+          }
+        }
+
+        if (progressCallback) {
+          progressCallback({
+            increment: 30,
+            message: "Processing response...",
+          });
+        }
+
+        responseContent = fullResponse;
+      } catch (err) {
+        // Check for common error conditions
+        if (err.message && err.message.includes("consent")) {
+          throw new Error(
+            "The model requires user consent. Please accept the prompt in VS Code."
+          );
+        }
+
+        if (err.message && err.message.includes("quota")) {
+          throw new Error("You've exceeded your quota limits for this model.");
+        }
+
+        if (err instanceof vscode.LanguageModelError) {
+          throw new Error(`VS Code LM error: ${err.message}`);
+        } else {
+          throw err;
+        }
+      }
+    } else {
+      throw new Error(
+        `Unsupported language model backend: ${backendSettingValue}`
+      );
     }
 
-    // Make the API call to Claude
-    const response = await callClaudeApi({
-      apiKey,
-      model: model.apiName,
-      systemPrompt,
-      userPrompt,
-      maxTokens,
-      temperature,
-    });
-
-    if (progressCallback) {
-      // Don't show "Completed" message, just increment progress to 100%
-      progressCallback({ increment: 70, message: "Processing response..." });
-    }
-
-    // Extract the content from the response
-    const content = extractContentFromResponse(response);
-
-    return content;
+    return responseContent;
   } catch (error) {
-    throw new Error(`Error calling Claude API: ${error.message}`);
+    // Add backend info to the error message
+    const backendInfo =
+      backendSettingValue === "Claude API" ? "Claude API" : "VS Code LM API";
+    throw new Error(`Error calling ${backendInfo}: ${error.message}`);
   }
 }
 

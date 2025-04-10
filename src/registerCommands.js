@@ -69,7 +69,7 @@ function registerSplitCalObjectsByPathCommand(context) {
 }
 
 function registerPromptClaudeCommand(context) {
-  registerCommandOnce(context, `${EXTENSION_ID}.runClaudePrompt`, async () => {
+  registerCommandOnce(context, `${EXTENSION_ID}.runPrompt`, async () => {
     try {
       // Get the active editor
       const editor = vscode.window.activeTextEditor;
@@ -135,6 +135,15 @@ function registerPromptClaudeCommand(context) {
             message: `Preparing code (${codeSizeKB} KB)...`,
           });
 
+          // Read the configured language model backend
+          const backendSetting = vscode.workspace
+            .getConfiguration("bc_al_upgradeassistant")
+            .get("languageModelBackend", "Claude API");
+          const backendName =
+            backendSetting === "VS Code Language Model API"
+              ? "VS Code LM API"
+              : "Claude API";
+
           try {
             // Call Claude API with enhanced progress callback
             const response = await claude.executePrompt(
@@ -149,7 +158,7 @@ function registerPromptClaudeCommand(context) {
                     (processedChunks / totalChunks) * 100
                   );
                   progress.report({
-                    message: `Processing: ${processedChunks}/${totalChunks} chunks (${percent}%) of ${codeSizeKB} KB`,
+                    message: `Processing with ${backendName}: ${processedChunks}/${totalChunks} chunks (${percent}%) of ${codeSizeKB} KB`,
                     increment: progressData.increment,
                   });
                 } else {
@@ -256,7 +265,7 @@ function registerPromptClaudeCommand(context) {
             if (autoSave) {
               // Just show error message if auto-save is enabled
               vscode.window.showErrorMessage(
-                `Claude API error: ${error.message}`
+                `${backendName} error: ${error.message}`
               );
             } else if (document) {
               // Update the response document with the error
@@ -269,7 +278,7 @@ function registerPromptClaudeCommand(context) {
 
               await vscode.workspace.applyEdit(edit);
               vscode.window.showErrorMessage(
-                `Claude API error: ${error.message}`
+                `${backendName} error: ${error.message}`
               );
             }
           }

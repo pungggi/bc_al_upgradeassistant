@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased]
+
+###
+
+- VS Code Language Model API integration with model selection
+
+## [0.0.111]
+
+### Added
+
+- Configuration setting (`bc_al_upgradeassistant.languageModelBackend`) to select the language model backend: "Claude API" (external) or "VS Code Language Model API" (built-in `vscode.lm`).
+
+### Changed
+
+- Renamed command title from "Run Claude Prompt" to "Run Configured AI Prompt" to accurately reflect that it uses the configured language model backend (`bc_al_upgradeassistant.languageModelBackend`).
+
 ## [0.0.109]
 
 - Enhanced symbol caching for faster performance: Includes improved detection of cache updates and a configurable processing delay (`alUpgradeAssistant.symbolCacheProcessingDelay`) for better responsiveness.

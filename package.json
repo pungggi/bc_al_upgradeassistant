@@ -2,11 +2,11 @@
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
   "description": "Assists you in upgrading old or obsolete code and more",
-  "version": "0.0.111",
+  "version": "0.0.112",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
-    "vscode": "^1.80.0"
+    "vscode": "^1.99.2"
   },
   "categories": [
     "Other"
@@ -29,8 +29,8 @@
         "category": "BC/AL Upgrade Assistant"
       },
       {
-        "command": "bc-al-upgradeassistant.runClaudePrompt",
-        "title": "Run Claude Prompt",
+        "command": "bc-al-upgradeassistant.runPrompt",
+        "title": "Run Configured AI Prompt",
         "category": "BC/AL Upgrade Assistant"
       },
       {
@@ -724,6 +724,40 @@
           "default": 25000,
           "minimum": 100,
           "description": "Delay in milliseconds before processing symbol cache updates after file changes. Default is 25000 (25 seconds). Minimum is 100ms."
+        },
+        "bc-al-upgradeassistant.languageModelBackend": {
+          "type": "string",
+          "default": "VS Code Language Model API",
+          "description": "Determines the language model backend used for prompt processing.",
+          "enum": [
+            "Claude API",
+            "VS Code Language Model API"
+          ],
+          "enumDescriptions": [
+            "Use the Claude API for processing prompts.",
+            "Use the integrated VS Code Language Model API for processing prompts."
+          ]
+        },
+        "bc-al-upgradeassistant.vscodeLanguageModelId": {
+          "type": "string",
+          "default": "claude-3.5-sonnet",
+          "description": "Select the model identifier to use for prompt processing",
+          "enum": [
+            "gpt-4o-mini",
+            "o3-mini",
+            "claude-3.5-sonnet",
+            "claude-3.7-sonnet",
+            "claude-3.7-sonnet-thought",
+            "gemini-2.0-flash-001"
+          ],
+          "enumDescriptions": [
+            "GPT-4o mini - Efficient model for general coding and analysis tasks",
+            "o3-mini - Fast and lightweight model suitable for simple tasks",
+            "Claude 3.5 Sonnet - Balanced model with strong reasoning and coding capabilities",
+            "Claude 3.7 Sonnet - Best coding capabilities",
+            "Claude 3.7 Sonnet - Thinking - Best coding capabilities with reasoning",
+            "Gemini 2.0 Flash - Quick responses with good accuracy for common development tasks"
+          ]
         }
       }
     },
