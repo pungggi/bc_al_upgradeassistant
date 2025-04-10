@@ -1,10 +1,11 @@
 # Changelog
 
-## [Unreleased]
+## [0.0.114]
 
-###
+### Added
 
-- VS Code Language Model API integration with model selection
+- Support for VS Code Language Model API as an alternative to the Claude API
+- New setting to select between Claude API and VS Code Language Model API backends
 
 ## [0.0.111]
 

@@ -129,8 +129,8 @@ async function executePrompt(prompt, code, progressCallback = null) {
   userPrompt = userPrompt.replace("{{language}}", defaultLanguage);
 
   if (debugMode) {
-    // Create debug content showing what will be sent to the API
-    const debugContent = `# Claude API Debug - ${prompt.commandName}
+    // Create debug content showing what will be sent to the AI
+    const debugContent = `# AI Prompt Debug - ${prompt.commandName}
     
 ## Model
 ${model.name} (${model.apiName})
@@ -146,8 +146,13 @@ ${userPrompt}
 \`\`\`
 
 ## Configuration
-- Max Tokens: ${configManager.getConfigValue("claude.maxTokens", 4096)}
-- Temperature: ${configManager.getConfigValue("claude.temperature", 0.5)}
+- Backend: ${backendSettingValue}
+${
+  backendSettingValue === "Claude API"
+    ? `- Max Tokens: ${configManager.getConfigValue("claude.maxTokens", 4096)}
+- Temperature: ${configManager.getConfigValue("claude.temperature", 0.5)}`
+    : ""
+}
 - ID Ranges Only: ${prompt.idRangesOnly === true ? "Yes" : "No"}
 `;
 
@@ -193,7 +198,7 @@ ${userPrompt}
   if (progressCallback) {
     progressCallback({
       increment: 10,
-      message: "Sending request to Claude API...",
+      message: `Sending request to ${backendSettingValue}...`,
     });
   }
 

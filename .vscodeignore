@@ -11,6 +11,8 @@ webpack.*.js
 *.vsix
 .github/**
 docs/**
+al-parser-lib/**
+**/examples/**
 examples/**
 media/**/*.psd
 media/**/*.ai

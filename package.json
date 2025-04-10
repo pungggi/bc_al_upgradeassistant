@@ -2,7 +2,7 @@
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
   "description": "Assists you in upgrading old or obsolete code and more",
-  "version": "0.0.113",
+  "version": "0.0.114",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
@@ -491,7 +491,7 @@
         "bc-al-upgradeassistant.claude.defaultSystemPrompt": {
           "type": "string",
           "default": "You are an expert AL and C/AL programming assistant for Microsoft Dynamics 365 Business Central. Provide accurate, concise, and helpful responses focused on best practices.",
-          "description": "Default system prompt to use with Claude API when a prompt definition doesn't include one"
+          "description": "Default system prompt to use with AI models when a prompt definition doesn't include one"
         },
         "bc-al-upgradeassistant.claude.defaultLanguage": {
           "type": "string",
@@ -532,7 +532,7 @@
               "example": ""
             }
           ],
-          "description": "Collection of prompts for Claude API",
+          "description": "Collection of prompts for AI models",
           "items": {
             "type": "object",
             "required": [
@@ -550,7 +550,7 @@
               },
               "model": {
                 "type": "string",
-                "description": "Specific Claude model to use for this prompt",
+                "description": "Specific model to use for this prompt",
                 "enum": [
                   "claude-3-7-sonnet-20250219",
                   "claude-3-5-sonnet-20241022",
@@ -573,11 +573,11 @@
               },
               "systemPrompt": {
                 "type": "string",
-                "description": "System prompt for Claude API"
+                "description": "System prompt for AI models"
               },
               "userPrompt": {
                 "type": "string",
-                "description": "User prompt template for Claude API"
+                "description": "User prompt template for AI models"
               },
               "idRangesOnly": {
                 "type": "boolean",
@@ -594,7 +594,7 @@
         "bc-al-upgradeassistant.claude.autoSaveAlCode": {
           "type": "boolean",
           "default": false,
-          "description": "Automatically save AL code blocks from Claude responses"
+          "description": "Automatically save AL code blocks from AI model responses"
         },
         "bc-al-upgradeassistant.claude.codeSaveMode": {
           "type": "string",
@@ -607,12 +607,12 @@
             "Ask which code blocks to save",
             "Save all code blocks automatically"
           ],
-          "description": "How to handle multiple AL code blocks in the response"
+          "description": "How to handle multiple AL code blocks in AI responses"
         },
         "bc-al-upgradeassistant.claude.debugMode": {
           "type": "boolean",
           "default": false,
-          "description": "When enabled, shows the prompt being sent to the Claude API in an editor window"
+          "description": "When enabled, shows the prompt being sent to the AI model in an editor window"
         },
         "bc-al-upgradeassistant.documentationIds": {
           "type": "array",
