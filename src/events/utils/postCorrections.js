@@ -313,8 +313,9 @@ function formatAsComments(documentation) {
       return "//";
     }
     // Preserve indentation by keeping leading spaces
-    const indentation = line.match(/^(\s*)/)[0];
-    return `//${indentation}${line.trimStart()}`;
+    // const indentation = line.match(/^(\s*)/)[0];
+    // return `//${indentation}${line.trimStart()}`;
+    return `// ${line.trimStart()}`;
   });
 
   return commentedLines.join("\n");

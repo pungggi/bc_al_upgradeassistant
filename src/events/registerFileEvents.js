@@ -632,6 +632,7 @@ function handleTxtFileRename(basePath, oldFilename, newFilename) {
 function registerfileEvents(context) {
   const disposable = fileEvents((fileInfo) => {
     updateFileIndex(fileInfo);
+    createIndexFolder();
     postCorrections(fileInfo);
   });
 
@@ -643,6 +644,28 @@ function registerfileEvents(context) {
     context.subscriptions.push(disposable);
   }
 }
+
+const createIndexFolder = () => {
+  try {
+    const upgradedObjectFolders = getConfigValue(
+      // Use destructured function
+      "upgradedObjectFolders",
+      null
+    );
+    if (upgradedObjectFolders && upgradedObjectFolders.basePath) {
+      const indexFolderPath = path.join(
+        upgradedObjectFolders.basePath,
+        ".index"
+      );
+      if (!fs.existsSync(indexFolderPath)) {
+        fs.mkdirSync(indexFolderPath, { recursive: true });
+        console.log(`Created index folder at: ${indexFolderPath}`);
+      }
+    }
+  } catch (error) {
+    console.error("Error creating index folder:", error);
+  }
+};
 
 module.exports = {
   registerfileEvents,

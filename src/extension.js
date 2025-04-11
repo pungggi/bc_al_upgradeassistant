@@ -1,10 +1,9 @@
 const vscode = require("vscode");
 const { registerCommands } = require("./registerCommands");
-const { registerEvents } = require("./registerEvents");
+const { registerfileEvents } = require("./events/registerFileEvents");
 const {
   syncWorkspaceToExtractionPath,
-  createIndexFolder, // Import createIndexFolder
-} = require("./events/registerFileEvents"); // Import the sync function
+} = require("./events/registerFileEvents");
 const modelHelper = require("./modelHelper");
 const path = require("path");
 const fs = require("fs");
@@ -42,12 +41,16 @@ async function activate(context) {
   console.log(`Activating ${EXTENSION_ID} extension`);
 
   try {
-    // Register all commands, events or views  at once
+    // First, register file events which will create the index folder
+    console.log("Registering events...");
+    registerfileEvents(context);
+
+    // Then proceed with other registrations
+    console.log("Registering commands...");
     registerCommands(context);
-    registerEvents(context);
+
+    console.log("Registering views...");
     const { fileReferenceProvider } = registerViews(context);
-    // Ensure the index folder exists before registering views that might need it
-    createIndexFolder();
 
     // Initialize symbol cache
     // Initialize symbol cache (this likely sets up the worker)
