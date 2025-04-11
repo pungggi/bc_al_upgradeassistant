@@ -3,12 +3,16 @@ const { registerCommands } = require("./registerCommands");
 const { registerEvents } = require("./registerEvents");
 const {
   syncWorkspaceToExtractionPath,
+  createIndexFolder, // Import createIndexFolder
 } = require("./events/registerFileEvents"); // Import the sync function
 const modelHelper = require("./modelHelper");
 const path = require("path");
 const fs = require("fs");
 const { readJsonFile } = require("./jsonUtils");
-const { initializeSymbolCache } = require("./utils/cacheHelper"); // Import from new location
+const {
+  initializeSymbolCache,
+  initializeFieldCache,
+} = require("./utils/cacheHelper"); // Import from new location
 const ExtendedObjectHoverProvider = require("./hover/extendedObjectHoverProvider");
 const { EXTENSION_ID } = require("./constants");
 const { registerViews } = require("./views/registerViews");
@@ -24,7 +28,6 @@ const {
 const {
   ObjectSuggestionActionProvider,
 } = require("./providers/objectSuggestionProvider");
-const fieldCollector = require("./utils/fieldCollector");
 
 let globalStatusBarItems = {};
 
@@ -43,9 +46,15 @@ async function activate(context) {
     registerCommands(context);
     registerEvents(context);
     const { fileReferenceProvider } = registerViews(context);
+    // Ensure the index folder exists before registering views that might need it
+    createIndexFolder();
 
     // Initialize symbol cache
-    await initializeSymbolCache();
+    // Initialize symbol cache (this likely sets up the worker)
+    await initializeSymbolCache(context); // Pass context if needed by worker setup
+
+    // Initialize field cache (loads persisted, triggers worker update)
+    await initializeFieldCache(context);
 
     // Set up watchers for symbol downloads
     setupSymbolsWatchers(context);
@@ -1208,10 +1217,7 @@ async function activate(context) {
         )
       );
 
-      // Initialize field cache in the background
-      fieldCollector.updateFieldsCache().catch((err) => {
-        console.error("Failed to initialize field cache:", err);
-      });
+      // Field cache initialization is now handled by initializeFieldCache called earlier
     }
 
     console.log(`${EXTENSION_ID} extension activated successfully`);
@@ -1278,18 +1284,45 @@ function setupSymbolsWatchers(context) {
       // Handle new symbol files
       symbolsFolderWatcher.onDidCreate(async (uri) => {
         console.log("New .app file detected:", uri.fsPath);
-        // Refresh symbol cache when new app files are detected
-        setTimeout(async () => {
+        // Refresh symbol and field caches when new .app files are detected
+        // Use a debounce mechanism if this triggers too frequently on download
+        symbolsFolderWatcher.onDidChange(async (uri) =>
+          triggerAppFileRefresh(uri, context)
+        );
+        symbolsFolderWatcher.onDidCreate(async (uri) =>
+          triggerAppFileRefresh(uri, context)
+        );
+        // Consider onDidDelete if necessary to prune cache
+      });
+
+      // Debounced function to handle .app file changes
+      let appRefreshDebounceTimer;
+      async function triggerAppFileRefresh(uri, context) {
+        clearTimeout(appRefreshDebounceTimer);
+        appRefreshDebounceTimer = setTimeout(async () => {
+          console.log(
+            `.app file changed/created: ${uri.fsPath}. Triggering cache refresh.`
+          );
           try {
-            await initializeSymbolCache(true);
+            // Re-initialize/refresh symbol cache (which now uses the worker)
+            // Pass true to force reprocessing of this specific app path if needed,
+            // or let the mtime check handle it. Let's rely on mtime for now.
+            const symbolCache = require("./symbolCache"); // Get the instance
+            await symbolCache.refreshCacheInBackground(); // This triggers the worker for symbols
+
+            // Re-initialize field cache (sends message to worker)
+            await initializeFieldCache(context);
           } catch (error) {
-            console.error("Error updating symbol cache:", error);
+            console.error(
+              "Error triggering cache refresh on .app change:",
+              error
+            );
             vscode.window.showErrorMessage(
-              `Failed to update symbol cache: ${error.message}`
+              `Failed to trigger cache refresh: ${error.message}`
             );
           }
-        }, 1000); // Small delay to make sure file is completely written
-      });
+        }, 1500); // Delay to ensure file write is complete and debounce rapid changes
+      }
 
       context.subscriptions.push(symbolsFolderWatcher);
       console.log(`Watching for symbol changes in: ${packagePath}`);

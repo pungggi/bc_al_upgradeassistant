@@ -9,22 +9,22 @@ const { findAppJsonFile } = require("../utils/appJsonReader");
 const { readJsonFile } = require("../jsonUtils");
 const { updateIndexAfterObjectChange } = require("./utils/indexManager");
 const { findMigrationReferences } = require("../utils/migrationHelper");
-const {
-  updateFieldsCache,
-  updateFieldsCacheForFile,
-} = require("../utils/fieldCollector");
-const {
-  updateProceduresCache,
-  updateProceduresCacheForFile,
-} = require("../utils/procedureExtractor");
+const { initializeFieldCache } = require("../utils/cacheHelper");
 
 /**
  * Process changes to an existing AL file
  * @param {string} filePath - Path to the changed AL file
  * @param {string} newContent - Content of the file after saving
  * @param {string} previousContent - Previous content of the file when opening
+ * @param {vscode.ExtensionContext} context - Extension context for triggering cache updates
  */
-async function handleAlFileChange(filePath, newContent, previousContent) {
+async function handleAlFileChange(
+  filePath,
+  newContent,
+  previousContent,
+  context
+) {
+  // Added context parameter
   // Made async
   if (!filePath || !newContent) {
     console.error(
@@ -123,69 +123,21 @@ async function handleAlFileChange(filePath, newContent, previousContent) {
 
     await copyWorkspaceAlFileToExtractionPath(filePath);
 
-    // --- Targeted cache updates ---
-    // Use the new targeted update approach instead of full cache refreshes
-    const isUpdated = {
-      symbols: false,
-      fields: false,
-      procedures: false,
-    };
-
-    // Update the field cache for this file
-    isUpdated.fields = updateFieldsCacheForFile(filePath, newContent);
-
-    // Update the procedure cache for this file
-    isUpdated.procedures = updateProceduresCacheForFile(filePath, newContent);
-
-    // Update symbol cache if file is copied to extraction path
-    const appJsonPath = findAppJsonFile();
-    if (appJsonPath) {
-      const extractionPath = await getSrcExtractionPath();
-      if (extractionPath) {
-        // We might need to update the symbol cache if this is done
-        // at the file system level and impacts searchable symbols
-        isUpdated.symbols = true;
-      }
-    }
-
-    // Only perform a full refresh if necessary (file format not supported by targeted updates)
-    if (!isUpdated.fields && !isUpdated.procedures) {
+    // --- Trigger Field Cache Update ---
+    if (context) {
       console.log(
-        `No targeted updates applied for ${filePath}, determining if full refresh needed`
+        `[HandleChange] Triggering field cache update for changed file: ${filePath}`
       );
-
-      // Check if this is a type that needs cache refresh
-      const fileRequiresRefresh =
-        /\.(table|page|codeunit|report|query|xmlport)$/i.test(filePath) ||
-        objectType.includes("table") ||
-        objectType.includes("page");
-
-      if (fileRequiresRefresh) {
-        console.log(
-          `File ${path.basename(filePath)} may need full cache refresh`
-        );
-        // Consider a partial refresh based on object type
-        if (
-          !isUpdated.fields &&
-          (objectType.includes("table") || objectType.includes("page"))
-        ) {
-          await updateFieldsCache();
-          isUpdated.fields = true;
-        }
-
-        if (
-          !isUpdated.procedures &&
-          ["codeunit", "page", "table", "report", "query", "xmlport"].includes(
-            objectType
-          )
-        ) {
-          await updateProceduresCache();
-          isUpdated.procedures = true;
-        }
-      }
+      await initializeFieldCache(context); // Trigger worker update
+    } else {
+      console.warn(
+        `[HandleChange] Cannot trigger field cache update for ${filePath}: context not provided.`
+      );
     }
+    // --- End Trigger ---
 
-    return infoData;
+    // Return infoData if it was successfully updated or created
+    return infoData; // Assuming infoData holds the relevant index info
   } catch (error) {
     console.error(`Error updating index after object change:`, error);
   }

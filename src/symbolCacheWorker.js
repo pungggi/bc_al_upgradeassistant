@@ -3,11 +3,314 @@ const path = require("path");
 const util = require("util");
 const JSZip = require("jszip");
 
+const { promises: fsPromises } = require("fs"); // Use fs.promises
 const readFile = util.promisify(fs.readFile);
 const writeFile = util.promisify(fs.writeFile);
 const mkdir = util.promisify(fs.mkdir);
 const readdir = util.promisify(fs.readdir);
 const rmdir = util.promisify(fs.rmdir);
+
+/**
+ * Parse AL table content to extract field names
+ * @param {string} content - Content of the AL file
+ * @returns {Object|null} - Object with tableName and fields array, or null
+ */
+function extractFieldsFromTableContent(content) {
+  try {
+    // Skip if not a table definition
+    if (!content.includes("table ") && !content.includes("tableextension ")) {
+      return null;
+    }
+
+    // Extract table name
+    let tableName = null;
+    let tableMatch = content.match(/table\s+(\d+)\s+["']([^"']+)["']/i);
+
+    if (tableMatch) {
+      tableName = tableMatch[2];
+    } else {
+      // Try tableextension
+      tableMatch = content.match(
+        /tableextension\s+(\d+)\s+["']([^"']+)["']\s+extends\s+["']([^"']+)["']/i
+      );
+      if (tableMatch) {
+        tableName = tableMatch[3]; // Use the base table name
+      }
+    }
+
+    if (!tableName) {
+      return null;
+    }
+
+    // Extract field definitions
+    const fields = [];
+
+    // Match field definitions
+    const fieldRegex = /field\s*\(\s*\d+\s*;\s*["']([^"']+)["']/gi;
+    let match;
+    while ((match = fieldRegex.exec(content)) !== null) {
+      fields.push(match[1]);
+    }
+
+    return { tableName, fields };
+  } catch (error) {
+    // Log error within worker context if needed
+    console.error(`[Worker] Error extracting fields from content:`, error);
+    return null;
+  }
+}
+
+/**
+ * Parse AL page content to extract source table
+ * @param {string} content - Content of the AL file
+ * @returns {Object|null} - Object with pageName and sourceTable, or null
+ */
+function extractSourceTableFromPageContent(content) {
+  try {
+    // Skip if not a page definition
+    if (!content.includes("page ")) {
+      return null;
+    }
+
+    // Extract page name
+    const pageMatch = content.match(/page\s+(\d+)\s+["']([^"']+)["']/i);
+    if (!pageMatch) {
+      return null;
+    }
+
+    const pageName = pageMatch[2];
+
+    // Extract source table
+    const sourceTableMatch = content.match(
+      /SourceTable\s*=\s*["']([^"']+)["']/i
+    );
+    if (!sourceTableMatch) {
+      // It's a page, but might not have a SourceTable (e.g., RoleCenter)
+      return { pageName, sourceTable: null }; // Return pageName even without sourceTable
+    }
+
+    return {
+      pageName,
+      sourceTable: sourceTableMatch[1],
+    };
+  } catch (error) {
+    // Log error within worker context if needed
+    console.error(
+      `[Worker] Error extracting source table from content:`,
+      error
+    );
+    return null;
+  }
+}
+
+/**
+ * Main function to update the field cache (incremental, persistent)
+ * @param {object} options - Options containing paths, appName, etc.
+ */
+async function _updateFieldsCacheInternal(options) {
+  console.log("[Worker] Starting _updateFieldsCacheInternal...");
+  const { srcExtractionPath, globalStoragePath, appName } = options;
+
+  if (!srcExtractionPath || !globalStoragePath || !appName) {
+    console.error("[Worker] Missing required options for field cache update.");
+    process.send({
+      type: "fieldCacheError",
+      message: "Missing required options.",
+    });
+    return;
+  }
+
+  const metadataFilePath = path.join(
+    globalStoragePath,
+    "fieldCacheMetadata.json"
+  );
+  const tableCacheFilePath = path.join(
+    globalStoragePath,
+    "fieldTableCache.json"
+  );
+  const pageCacheFilePath = path.join(globalStoragePath, "fieldPageCache.json");
+
+  let metadata = {};
+  let tableFieldsCache = {};
+  let pageSourceTableCache = {};
+
+  // 1. Load existing cache and metadata
+  try {
+    if (fs.existsSync(metadataFilePath)) {
+      metadata = JSON.parse(
+        await fsPromises.readFile(metadataFilePath, "utf8")
+      );
+    }
+    if (fs.existsSync(tableCacheFilePath)) {
+      tableFieldsCache = JSON.parse(
+        await fsPromises.readFile(tableCacheFilePath, "utf8")
+      );
+    }
+    if (fs.existsSync(pageCacheFilePath)) {
+      pageSourceTableCache = JSON.parse(
+        await fsPromises.readFile(pageCacheFilePath, "utf8")
+      );
+    }
+    console.log("[Worker] Loaded existing cache/metadata.");
+  } catch (err) {
+    console.error("[Worker] Error loading existing cache/metadata:", err);
+    // Start fresh if loading fails
+    metadata = {};
+    tableFieldsCache = {};
+    pageSourceTableCache = {};
+  }
+
+  const processedFiles = new Set(); // Keep track of files found in this run
+
+  // 2. Scan srcExtractionPath (using async methods)
+  try {
+    console.log(`[Worker] Scanning ${srcExtractionPath}...`);
+    const scanDirectory = async (dir) => {
+      try {
+        const entries = await fsPromises.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            await scanDirectory(fullPath);
+          } else if (
+            entry.isFile() &&
+            entry.name.toLowerCase().endsWith(".al")
+          ) {
+            processedFiles.add(fullPath); // Track found file
+            try {
+              const stats = await fsPromises.stat(fullPath);
+              const currentMtime = stats.mtimeMs;
+              const storedMtime = metadata[fullPath];
+
+              // 3. Compare timestamps and parse if needed
+              if (!storedMtime || currentMtime > storedMtime) {
+                console.log(
+                  `[Worker] Processing modified/new file: ${entry.name}`
+                );
+                const content = await fsPromises.readFile(fullPath, "utf8");
+
+                // Parse table fields
+                const tableResult = extractFieldsFromTableContent(content);
+                if (tableResult && tableResult.tableName) {
+                  // If table already in cache, combine the fields (handle extensions)
+                  if (tableFieldsCache[tableResult.tableName]) {
+                    tableFieldsCache[tableResult.tableName] = [
+                      ...new Set([
+                        ...tableFieldsCache[tableResult.tableName],
+                        ...(tableResult.fields || []), // Ensure fields array exists
+                      ]),
+                    ];
+                  } else {
+                    tableFieldsCache[tableResult.tableName] =
+                      tableResult.fields || [];
+                  }
+                }
+
+                // Parse page source tables
+                const pageResult = extractSourceTableFromPageContent(content);
+                if (pageResult && pageResult.pageName) {
+                  // Check pageName exists
+                  // Only update if sourceTable is found, otherwise keep existing if any
+                  if (pageResult.sourceTable !== null) {
+                    pageSourceTableCache[pageResult.pageName] =
+                      pageResult.sourceTable;
+                  } else if (
+                    !Object.prototype.hasOwnProperty.call(
+                      pageSourceTableCache,
+                      pageResult.pageName
+                    )
+                  ) {
+                    // If page has no source table and isn't in cache, add it with null
+                    pageSourceTableCache[pageResult.pageName] = null;
+                  }
+                }
+
+                // Update metadata
+                metadata[fullPath] = currentMtime;
+              } else {
+                // console.log(`[Worker] Skipping unchanged file: ${entry.name}`);
+              }
+            } catch (fileError) {
+              console.error(
+                `[Worker] Error processing file ${fullPath}:`,
+                fileError
+              );
+            }
+          }
+        }
+      } catch (scanErr) {
+        console.error(`[Worker] Error scanning directory ${dir}:`, scanErr);
+        // Decide if we should stop or continue
+      }
+    };
+
+    await scanDirectory(srcExtractionPath);
+    console.log("[Worker] Finished scanning.");
+
+    // 4. Identify and remove deleted files from cache/metadata
+    let deletedCount = 0;
+    for (const filePath in metadata) {
+      if (!processedFiles.has(filePath)) {
+        console.log(
+          `[Worker] Removing deleted file from cache: ${path.basename(
+            filePath
+          )}`
+        );
+        delete metadata[filePath];
+        // Need to remove associated data from tableFieldsCache and pageSourceTableCache
+        // This is complex as one file can contribute to multiple cache entries (e.g., table extensions)
+        // For simplicity initially, we might just rebuild fully if deletions are detected,
+        // or accept potentially stale data until the next full rebuild/app change.
+        // Let's just remove from metadata for now.
+        deletedCount++;
+      }
+    }
+    if (deletedCount > 0) {
+      console.log(`[Worker] Identified ${deletedCount} deleted files.`);
+      // Consider forcing a full rebuild or notifying main thread if deletion handling is critical
+    }
+
+    // 5. Save updated cache and metadata
+    try {
+      await fsPromises.mkdir(globalStoragePath, { recursive: true }); // Ensure directory exists
+      await fsPromises.writeFile(
+        metadataFilePath,
+        JSON.stringify(metadata, null, 2)
+      );
+      await fsPromises.writeFile(
+        tableCacheFilePath,
+        JSON.stringify(tableFieldsCache, null, 2)
+      );
+      await fsPromises.writeFile(
+        pageCacheFilePath,
+        JSON.stringify(pageSourceTableCache, null, 2)
+      );
+      console.log("[Worker] Saved updated cache/metadata.");
+    } catch (saveError) {
+      console.error("[Worker] Error saving cache/metadata:", saveError);
+      process.send({
+        type: "fieldCacheError",
+        message: "Failed to save cache data.",
+      });
+      return; // Don't send success if saving failed
+    }
+
+    // 6. Send updated data back to main thread
+    process.send({
+      type: "fieldCacheData",
+      tableFieldsCache,
+      pageSourceTableCache,
+      metadata, // Send metadata back too, maybe useful for main thread
+    });
+    console.log("[Worker] Sent updated fieldCacheData to main thread.");
+  } catch (err) {
+    console.error("[Worker] Error during field cache update process:", err);
+    process.send({
+      type: "fieldCacheError",
+      message: `Error updating field cache: ${err.message}`,
+    });
+  }
+}
 
 // Extracted from symbolCache.js, modified for worker context
 async function processAppFile(appPath, options) {
@@ -111,7 +414,7 @@ async function processAppFile(appPath, options) {
           });
 
           // Try to parse each .al file
-          let shortFileName ='';
+          let shortFileName = "";
           for (const filePath of alFiles) {
             try {
               const content = fs.readFileSync(filePath, "utf8");
@@ -489,8 +792,15 @@ process.on("message", async (message) => {
   try {
     if (message.type === "process") {
       await processAppFile(message.appPath, message.options);
-      // Explicit successful exit
-      process.exit(0);
+      // Removed explicit exit - worker should stay alive for more messages
+      // process.exit(0);
+    } else if (message.type === "updateFieldCache") {
+      // Placeholder for new field cache logic
+      console.log("[Worker] Received updateFieldCache message");
+      await _updateFieldsCacheInternal(message.options);
+      // Potentially send completion message or exit differently?
+      // For now, let's assume it completes and stays alive for other tasks.
+      // process.exit(0); // Might not want to exit if worker handles multiple tasks
     }
   } catch (error) {
     console.error("Unhandled error in worker:", error);

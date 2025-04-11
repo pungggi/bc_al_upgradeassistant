@@ -17,46 +17,7 @@ For any feedback use https://ngsoftware.canny.io/requests
 ## Requirements
 
 - Visual Studio Code 1.99.2 or higher
-- Claude API key for AI-powered features (when using Claude API backend)
-
-## AI Model Backend Selection
-
-The extension supports two AI model backends:
-
-- **Claude API**: External API connection to Anthropic's Claude models (requires API key)
-- **VS Code Language Model API**: Built-in VS Code language models (no additional API key required)
-
-You can select your preferred backend through the `bc-al-upgradeassistant.languageModelBackend` setting:
-
-```json
-"bc-al-upgradeassistant.languageModelBackend": "VS Code Language Model API"
-```
-
-### VS Code Language Model API Settings
-
-When using the VS Code Language Model API backend:
-
-- `bc-al-upgradeassistant.vscodeLanguageModelId`: Select the VS Code language model to use (e.g., "claude-3.5-sonnet", "gpt-4o-mini")
-
-### AI Model Settings
-
-The following settings apply to both Claude API and VS Code Language Model API backends:
-
-- `bc-al-upgradeassistant.defaultSystemPrompt`: Default system prompt to use with AI models
-- `bc-al-upgradeassistant.defaultLanguage`: Default language code (e.g., "de-DE") to use in prompts as the translation language
-- `bc-al-upgradeassistant.prompts`: Collection of prompts for AI models
-- `bc-al-upgradeassistant.autoSaveAlCode`: When enabled, automatically saves AL code blocks from AI responses
-- `bc-al-upgradeassistant.codeSaveMode`: How to handle multiple AL code blocks ("ask" or "saveAll")
-- `bc-al-upgradeassistant.debugMode`: When enabled, shows the prompt being sent to the AI model in a document for review before sending
-
-### Claude API Specific Settings
-
-The following settings only apply when using the Claude API backend:
-
-- `bc-al-upgradeassistant.claude.apiKey`: API Key for accessing Claude API
-- `bc-al-upgradeassistant.claude.model`: Claude model to use for API requests
-- `bc-al-upgradeassistant.claude.maxTokens`: Maximum number of tokens Claude can generate (default: 4096)
-- `bc-al-upgradeassistant.claude.temperature`: Creativity control (0-1), lower values produce more deterministic outputs (default: 0.5)
+- Claude API key or a Github Copilot Subscription for AI-powered features
 
 ### Documentation Reference Management
 
@@ -113,6 +74,45 @@ The summary is generated when running the command `BC/AL Upgrade Assistant: Gene
 - `bc-al-upgradeassistant.upgradedObjectFolders`: Locations where to save upgraded AL objects by type
   - Includes a `basePath` property which specifies the base folder for all object types
 - `bc-al-upgradeassistant.workingObjectFolders`: Locations where working AL objects are located
+
+## AI Model Backend Selection
+
+The extension supports two AI model backends:
+
+- **Claude API**: External API connection to Anthropic's Claude models (requires API key)
+- **VS Code Language Model API**: Built-in VS Code language models (requires Github Copilot Subscription)
+
+You can select your preferred backend through the `bc-al-upgradeassistant.languageModelBackend` setting:
+
+```json
+"bc-al-upgradeassistant.languageModelBackend": "VS Code Language Model API"
+```
+
+### VS Code Language Model API Settings
+
+When using the VS Code Language Model API backend:
+
+- `bc-al-upgradeassistant.vscodeLanguageModelId`: Select the VS Code language model to use (e.g., "claude-3.5-sonnet", "gpt-4o-mini")
+
+### AI Model Settings
+
+The following settings apply to both Claude API and VS Code Language Model API backends:
+
+- `bc-al-upgradeassistant.defaultSystemPrompt`: Default system prompt to use with AI models
+- `bc-al-upgradeassistant.defaultLanguage`: Default language code (e.g., "de-DE") to use in prompts as the translation language
+- `bc-al-upgradeassistant.prompts`: Collection of prompts for AI models
+- `bc-al-upgradeassistant.autoSaveAlCode`: When enabled, automatically saves AL code blocks from AI responses
+- `bc-al-upgradeassistant.codeSaveMode`: How to handle multiple AL code blocks ("ask" or "saveAll")
+- `bc-al-upgradeassistant.debugMode`: When enabled, shows the prompt being sent to the AI model in a document for review before sending
+
+### Claude API Specific Settings
+
+The following settings only apply when using the Claude API backend:
+
+- `bc-al-upgradeassistant.claude.apiKey`: API Key for accessing Claude API
+- `bc-al-upgradeassistant.claude.model`: Claude model to use for API requests
+- `bc-al-upgradeassistant.claude.maxTokens`: Maximum number of tokens Claude can generate (default: 4096)
+- `bc-al-upgradeassistant.claude.temperature`: Creativity control (0-1), lower values produce more deterministic outputs (default: 0.5)
 
 ### Configuring Custom Prompts
 
@@ -199,5 +199,5 @@ When an unknown or misspelled field is used, the extension will show quick fix s
 
 ### AI Prompting
 
-- `BC/AL Upgrade Assistant: Run Claude Prompt`: Runs a selected Claude AI prompt on the current code.
+- `BC/AL Upgrade Assistant: Run Configured AI Prompt`: Runs a selected AI prompt on the current code.
 - `BC/AL Upgrade Assistant: Set Default Claude Model`: Sets the default Claude model to be used for AI prompts.

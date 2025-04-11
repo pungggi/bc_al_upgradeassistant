@@ -3,14 +3,14 @@ const path = require("path");
 const util = require("util");
 const os = require("os");
 const vscode = require("vscode");
-const { fork } = require("child_process"); // Added fork
+const { fork } = require("child_process");
+
 const configManager = require("./utils/configManager");
-const { getSrcExtractionPath } = require("./utils/configManager"); // Import the new function
 
 const readFile = util.promisify(fs.readFile);
 const writeFile = util.promisify(fs.writeFile);
 const mkdir = util.promisify(fs.mkdir);
-// const readdir = util.promisify(fs.readdir); // No longer needed here
+const fieldCollector = require("./utils/fieldCollector");
 
 class SymbolCache {
   constructor() {
@@ -24,16 +24,16 @@ class SymbolCache {
       "bc_al_upgradeassistant",
       "extract"
     );
-    this.metadataPath = path.join(this.cachePath, "cache_metadata.json"); // Path for metadata
+    this.metadataPath = path.join(this.cachePath, "cache_metadata.json");
     this.symbols = {};
     this.procedures = {}; // Store procedures by objectType:objectName
     this.metadata = {}; // Store { appPath: { mtimeMs: number } }
     this.appPaths = [];
-    this.isRefreshing = false;
+    this.isRefreshing = false; // Tracks if symbol refresh is active
   }
 
   async initialize(appPaths = []) {
-    this.appPaths = appPaths;
+    this.appPaths = appPaths || [];
 
     // Ensure cache directories exist
     try {
@@ -49,7 +49,8 @@ class SymbolCache {
       }
     }
 
-    await this.loadCache();
+    await this.loadCache(); // Load symbols, procedures, metadata
+    ensureWorkerIsRunning(); // Ensure worker is running after loading cache
   }
 
   async loadCache() {
@@ -157,333 +158,141 @@ class SymbolCache {
   }
 
   async refreshCacheInBackground() {
-    if (this.isRefreshing) {
+    // Use the new logic with single worker and message passing
+    if (this.isRefreshing || activeRefreshJobs.size > 0) {
       vscode.window.showInformationMessage(
         "Symbol cache refresh already in progress."
       );
       return;
     }
     if (!this.appPaths || this.appPaths.length === 0) {
-      console.log("No app paths configured for symbol caching.");
+      console.log("[CacheRefresh] No app paths configured for symbol caching.");
       return;
     }
 
-    this.isRefreshing = true;
-    const totalApps = this.appPaths.length;
-    let processedCount = 0;
-    let skippedCount = 0; // Initialize skipped count
-    const newSymbols = {}; // Accumulate symbols from workers here
-    const newProcedures = {}; // Accumulate procedures from workers here
-    const updatedMetadataEntries = {}; // Track metadata updates for this run
+    this.isRefreshing = true; // Mark as refreshing
+    activeRefreshJobs.clear(); // Clear previous job tracking
+    let skippedCount = 0;
+    let jobsSent = 0;
 
     // Get srcExtractionPath using the new centralized function
+    const { getSrcExtractionPath } = require("./utils/configManager"); // Import inside method
     const enableSrcExtraction = configManager.getConfigValue(
       "enableSrcExtraction",
       false
     );
     const srcExtractionPath = enableSrcExtraction
-      ? await getSrcExtractionPath() // This handles prompting and saving
-      : null;
+      ? await getSrcExtractionPath()
+      : null; // Use await here
 
-    // If extraction is enabled but path is still null (e.g., user cancelled prompt), show warning
     if (enableSrcExtraction && !srcExtractionPath) {
       vscode.window.showWarningMessage(
-        "Source extraction path not configured or provided. Cannot extract sources from .app files."
+        "Source extraction path not configured. Cannot extract sources."
       );
-      // Continue without extraction for .app files
     }
 
-    console.log("[CacheRefresh] Starting background refresh...");
+    console.log(
+      `[CacheRefresh] Starting background refresh for ${this.appPaths.length} apps...`
+    );
+    ensureWorkerIsRunning(); // Ensure worker is ready
+
     try {
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Window,
           title: "Refreshing AL Symbol Cache",
-          cancellable: false,
+          cancellable: false, // Consider making cancellable later if needed
         },
-        async (progress) => {
-          console.log("[CacheRefresh] Progress reported, starting workers..."); // Log progress start
-          progress.report({ increment: 0, message: "Starting..." });
+        async (progress, token) => {
+          progressReporter = progress; // Store for handleWorkerMessage
+          progress.report({ increment: 0, message: "Checking apps..." });
 
-          const workerPromises = this.appPaths.map((appPath) => {
-            return new Promise((resolve) => {
-              // Removed async from executor
-              // IIAFE to handle async operations safely
-              (async () => {
-                let currentMtimeMs; // Declare here to be accessible later
-                try {
-                  // --- Optimization Start ---
-                  const stats = await fs.promises.stat(appPath);
-                  currentMtimeMs = stats.mtimeMs; // Assign here
-                  const cachedMtimeMs = this.metadata[appPath]?.mtimeMs;
-
-                  if (cachedMtimeMs && currentMtimeMs === cachedMtimeMs) {
-                    console.log(
-                      `[CacheRefresh] Skipping ${path.basename(
-                        appPath
-                      )} - already cached and unchanged.`
-                    );
-                    skippedCount++;
-                    processedCount++; // Increment processed count even for skipped files
-                    const increment = (1 / totalApps) * 100;
-                    progress.report({
-                      increment,
-                      message: `Processed ${processedCount}/${totalApps} apps (skipped ${skippedCount})...`,
-                    });
-                    resolve(); // Resolve outer promise immediately
-                    return; // Exit IIAFE
-                  }
-                  // --- Optimization End ---
-
-                  // --- Add Configurable Delay Start ---
-                  const isNewOrChanged = !(
-                    cachedMtimeMs && currentMtimeMs === cachedMtimeMs
-                  );
-                  if (isNewOrChanged) {
-                    const config = vscode.workspace.getConfiguration(
-                      "bc-al-upgradeassistant"
-                    );
-                    let processingDelay = config.get(
-                      "symbolCache.processingDelay",
-                      25000
-                    );
-                    if (
-                      typeof processingDelay !== "number" ||
-                      processingDelay < 100
-                    ) {
-                      console.warn(
-                        `[CacheRefresh] Invalid processingDelay value (${processingDelay}). Using default 25000ms.`
-                      );
-                      processingDelay = 25000;
-                    }
-                    console.log(
-                      `[CacheRefresh] Applying ${processingDelay}ms delay for new/changed app: ${path.basename(
-                        appPath
-                      )}`
-                    );
-                    await new Promise((resolveDelay) =>
-                      setTimeout(resolveDelay, processingDelay)
-                    );
-                    console.log(
-                      `[CacheRefresh] Delay finished for: ${path.basename(
-                        appPath
-                      )}`
-                    );
-                  }
-                  // --- Add Delay End ---
-
-                  const workerPath = path.join(
-                    __dirname,
-                    "symbolCacheWorker.js"
-                  );
-                  const worker = fork(workerPath, [], {
-                    stdio: "pipe",
-                    execArgv: [],
-                  });
-
-                  let workerSucceeded = false;
-
-                  worker.on("message", (message) => {
-                    switch (message.type) {
-                      case "success":
-                        console.log(
-                          `[CacheRefresh] Worker success for ${path.basename(
-                            message.appPath
-                          )}. Symbols: ${
-                            Object.keys(message.symbols || {}).length
-                          }, Procedures: ${
-                            Object.keys(message.procedures || {}).length
-                          }`
-                        );
-                        Object.assign(newSymbols, message.symbols);
-                        if (message.procedures) {
-                          Object.assign(newProcedures, message.procedures);
-                        }
-                        // Store metadata only if worker succeeded
-                        updatedMetadataEntries[message.appPath] = {
-                          mtimeMs: currentMtimeMs, // Use currentMtimeMs captured in IIAFE scope
-                        };
-                        workerSucceeded = true;
-                        break;
-                      case "error":
-                        console.error(
-                          `Worker error for ${message.appPath}: ${message.message}`,
-                          message.stack
-                        );
-                        if (
-                          !message.message
-                            ?.toLowerCase()
-                            .includes("is this a zip file")
-                        ) {
-                          vscode.window.showErrorMessage(
-                            `Error processing ${path.basename(
-                              message.appPath
-                            )}: ${message.message?.trim() || "Unknown error"}`,
-                            { modal: false, detail: message.stack }
-                          );
-                        }
-                        break;
-                      case "progress":
-                        progress.report({
-                          message: `Processing ${path.basename(appPath)}: ${
-                            message.message
-                          }`,
-                        });
-                        break;
-                      case "warning":
-                        console.warn(
-                          `Worker warning for ${appPath}: ${message.message}`
-                        );
-                        vscode.window.showWarningMessage(
-                          `Warning processing ${path.basename(appPath)}: ${
-                            message.message
-                          }`
-                        );
-                        break;
-                    }
-                  });
-
-                  worker.on("exit", (code) => {
-                    processedCount++;
-                    const increment = (1 / totalApps) * 100;
-                    progress.report({
-                      increment,
-                      message: `Processed ${processedCount}/${totalApps} apps (skipped ${skippedCount})...`,
-                    });
-                    if (code !== 0 && !workerSucceeded) {
-                      console.error(
-                        `Worker for ${appPath} exited with code ${code}`
-                      );
-                      vscode.window.showErrorMessage(
-                        `Worker for ${path.basename(
-                          appPath
-                        )} exited unexpectedly (code ${code}).`
-                      );
-                      // Ensure metadata isn't kept if worker failed after potentially succeeding initially
-                      delete updatedMetadataEntries[appPath];
-                    }
-                    resolve(); // Resolve outer promise
-                  });
-
-                  worker.on("error", (err) => {
-                    // This handles errors *starting* the worker (e.g., fork fails)
-                    processedCount++;
-                    console.error(
-                      `Failed to start worker for ${appPath}:`,
-                      err
-                    );
-                    vscode.window.showErrorMessage(
-                      `Failed to start worker for ${path.basename(appPath)}: ${
-                        err.message
-                      }`
-                    );
-                    const increment = (1 / totalApps) * 100;
-                    progress.report({
-                      increment,
-                      message: `Processed ${processedCount}/${totalApps} apps (skipped ${skippedCount})...`,
-                    });
-                    resolve(); // Resolve outer promise
-                  });
-
-                  worker.stdout.on("data", (data) =>
-                    console.log(
-                      `Worker stdout (${path.basename(appPath)}): ${data}`
-                    )
-                  );
-                  worker.stderr.on("data", (data) =>
-                    console.error(
-                      `Worker stderr (${path.basename(appPath)}): ${data}`
-                    )
-                  );
-
-                  // Send message to worker only after listeners are attached
-                  worker.send({
-                    type: "process",
-                    appPath,
-                    options: {
-                      cachePath: this.cachePath,
-                      extractPath: this.extractPath,
-                      enableSrcExtraction,
-                      srcExtractionPath,
-                    },
-                  });
-                } catch (statError) {
-                  // Handle error getting file stats (e.g., file deleted during refresh)
-                  console.error(
-                    `[CacheRefresh] Error getting stats for ${appPath}:`,
-                    statError
-                  );
-                  processedCount++;
-                  const increment = (1 / totalApps) * 100;
-                  progress.report({
-                    increment,
-                    message: `Processed ${processedCount}/${totalApps} apps (skipped ${skippedCount})...`,
-                  });
-                  resolve(); // Resolve the outer promise even if stat fails
-                }
-              })(); // Invoke the IIAFE
-            }); // Close Promise constructor call
-          }); // Close map call
-
-          // Wait for all workers to complete
-          await Promise.all(workerPromises);
-
-          // Update main symbols, procedures, and metadata objects, then save cache
-          console.log(
-            `[CacheRefresh] Finished processing workers. Found ${
-              Object.keys(newSymbols).length
-            } new symbols, ${
-              Object.keys(newProcedures).length
-            } new procedure sets. Skipped ${skippedCount} unchanged apps.`
-          );
-
-          // Merge new data with existing cache (important if skipping files)
-          // Overwrite existing symbols/procedures for processed apps, keep others
-          this.symbols = { ...this.symbols, ...newSymbols };
-          this.procedures = { ...this.procedures, ...newProcedures };
-          // Prune metadata for apps that are no longer in the configured appPaths
-          const currentAppPathsSet = new Set(this.appPaths);
-          const prunedMetadata = {};
-          for (const appPath in this.metadata) {
-            if (currentAppPathsSet.has(appPath)) {
-              prunedMetadata[appPath] = this.metadata[appPath];
-            } else {
-              console.log(
-                `[CacheRefresh] Pruning metadata for removed app: ${appPath}`
-              );
+          for (const appPath of this.appPaths) {
+            if (token.isCancellationRequested) {
+              console.log("[CacheRefresh] Cancellation requested.");
+              break;
             }
-          }
+            try {
+              const stats = await fs.promises.stat(appPath);
+              const currentMtimeMs = stats.mtimeMs;
+              const cachedMtimeMs = this.metadata[appPath]?.mtimeMs;
 
-          this.metadata = { ...prunedMetadata, ...updatedMetadataEntries }; // Update metadata after pruning and merging new entries
+              if (cachedMtimeMs && currentMtimeMs === cachedMtimeMs) {
+                // console.log(`[CacheRefresh] Skipping ${path.basename(appPath)} - unchanged.`); // Verbose
+                skippedCount++;
+                continue;
+              }
 
-          // Optional: Prune metadata for apps that no longer exist in appPaths?
-          // Could be done here by comparing Object.keys(this.metadata) with this.appPaths
+              // Optional delay (consider removing or making very short)
+              const config = vscode.workspace.getConfiguration(
+                "bc-al-upgradeassistant"
+              );
+              let processingDelay = config.get(
+                "symbolCache.processingDelay",
+                0
+              ); // Default to 0 delay
+              if (typeof processingDelay !== "number" || processingDelay < 0)
+                processingDelay = 0;
+              if (processingDelay > 0) {
+                // console.log(`[CacheRefresh] Applying ${processingDelay}ms delay for ${path.basename(appPath)}`); // Verbose
+                await new Promise((resolveDelay) =>
+                  setTimeout(resolveDelay, processingDelay)
+                );
+              }
+
+              // Track job and send message
+              activeRefreshJobs.set(appPath, { mtimeMs: currentMtimeMs }); // Track before sending
+              jobsSent++;
+              workerInstance.send({
+                type: "process",
+                appPath,
+                options: {
+                  cachePath: this.cachePath,
+                  extractPath: this.extractPath,
+                  enableSrcExtraction,
+                  srcExtractionPath,
+                },
+              });
+              progress.report({
+                message: `Processing ${path.basename(
+                  appPath
+                )}... (${jobsSent}/${this.appPaths.length - skippedCount})`,
+              });
+            } catch (statError) {
+              console.error(
+                `[CacheRefresh] Error getting stats for ${appPath}:`,
+                statError
+              );
+              // Optionally remove from metadata if file is inaccessible?
+              // delete this.metadata[appPath];
+            }
+          } // End for loop
 
           console.log(
-            `[CacheRefresh] Updated main cache. Symbol count: ${
-              Object.keys(this.symbols).length
-            }, Procedure count: ${
-              Object.keys(this.procedures).length
-            }, Metadata count: ${Object.keys(this.metadata).length}`
+            `[CacheRefresh] Finished sending messages. ${jobsSent} jobs sent, ${skippedCount} skipped.`
           );
+          progress.report({ message: `Processing ${jobsSent} apps...` });
 
-          await this.saveCache(); // Save symbols, procedures, AND metadata
-
-          // Report final progress then return immediately
-          progress.report({
-            increment: 100,
-            message: "Cache refresh complete",
-          });
-          return; // removed delay to ensure message disappears promptly
+          // If no jobs were sent (all skipped or errors), complete immediately
+          if (activeRefreshJobs.size === 0) {
+            console.log(
+              "[CacheRefresh] No apps needed processing or all failed stats check."
+            );
+            checkRefreshCompletion(); // Will save cache, set isRefreshing=false etc.
+          }
+          // Otherwise, completion is handled by checkRefreshCompletion when last job finishes
         }
       );
     } catch (error) {
-      console.error("Error refreshing symbol cache:", error);
+      console.error("[CacheRefresh] Error during withProgress:", error);
       vscode.window.showErrorMessage(
         `Symbol cache refresh failed: ${error.message}`
       );
+      this.isRefreshing = false; // Ensure flag is reset on error
+      progressReporter = null;
+      activeRefreshJobs.clear(); // Clear jobs on error
     } finally {
-      this.isRefreshing = false;
+      // Ensure isRefreshing is eventually set to false, handled by checkRefreshCompletion or error catch
     }
   }
 
@@ -503,4 +312,192 @@ class SymbolCache {
   }
 }
 
-module.exports = new SymbolCache();
+// --- Instance Creation and Helper Functions ---
+
+const symbolCacheInstance = new SymbolCache(); // Create the singleton instance
+
+let workerInstance = null; // Module-level variable for the single worker
+let activeRefreshJobs = new Map(); // Track ongoing app processing jobs { appPath: { mtimeMs: number } }
+let progressReporter = null; // To hold the progress object from withProgress
+
+/**
+ * Handles messages received from the single worker process.
+ * Updates the symbolCacheInstance state.
+ * @param {object} message - The message object from the worker.
+ */
+function handleWorkerMessage(message) {
+  // console.log(`[Main] Received worker message: ${message.type}`); // Verbose logging
+
+  if (!symbolCacheInstance) {
+    console.error(
+      "[Main] handleWorkerMessage called before symbolCacheInstance is initialized."
+    );
+    return;
+  }
+
+  switch (message.type) {
+    // --- Symbol Processing ---
+    case "success":
+      // console.log(`[Main] Worker success for ${path.basename(message.appPath || 'N/A')}`); // Verbose
+      // Update instance state
+      Object.assign(symbolCacheInstance.symbols, message.symbols);
+      Object.assign(symbolCacheInstance.procedures, message.procedures);
+
+      // Update metadata using mtime stored when the job started
+      if (activeRefreshJobs.has(message.appPath)) {
+        const jobInfo = activeRefreshJobs.get(message.appPath);
+        symbolCacheInstance.metadata[message.appPath] = {
+          mtimeMs: jobInfo.mtimeMs,
+        };
+        activeRefreshJobs.delete(message.appPath); // Mark job as complete
+        // console.log(`[Main] Completed symbol job for ${path.basename(message.appPath)}. Remaining jobs: ${activeRefreshJobs.size}`); // Verbose
+        checkRefreshCompletion(); // Check if all jobs are done
+      } else {
+        console.warn(
+          `[Main] Received success for untracked/already completed job: ${message.appPath}`
+        );
+      }
+      break;
+    case "error":
+      console.error(
+        `[Main] Worker error for ${message.appPath || "N/A"}: ${
+          message.message
+        }`,
+        message.stack
+      );
+      if (!message.message?.toLowerCase().includes("is this a zip file")) {
+        // Don't show user error for non-zip files
+        vscode.window.showErrorMessage(
+          `Error processing ${path.basename(message.appPath || "App")}: ${
+            message.message?.trim() || "Unknown error"
+          }`,
+          { modal: false, detail: message.stack } // Keep showing details
+        );
+      }
+      // Mark job as complete even on error to avoid hanging
+      if (activeRefreshJobs.has(message.appPath)) {
+        activeRefreshJobs.delete(message.appPath);
+        // console.log(`[Main] Completed symbol job (with error) for ${path.basename(message.appPath)}. Remaining jobs: ${activeRefreshJobs.size}`); // Verbose
+        checkRefreshCompletion();
+      } else {
+        console.warn(
+          `[Main] Received error for untracked/already completed job: ${message.appPath}`
+        );
+      }
+      break;
+    case "progress":
+      // Update progress UI if the reporter is available
+      if (progressReporter) {
+        progressReporter.report({ message: message.message });
+      }
+      break;
+    case "warning":
+      console.warn(
+        `[Main] Worker warning for ${message.appPath || "N/A"}: ${
+          message.message
+        }`
+      );
+      vscode.window.showWarningMessage(
+        // Keep showing warnings
+        `Warning processing ${path.basename(message.appPath || "App")}: ${
+          message.message
+        }`
+      );
+      break;
+
+    // --- Field Cache Processing ---
+    case "fieldCacheData":
+      console.log(
+        `[Main] Received field cache data. Tables: ${
+          Object.keys(message.tableFieldsCache || {}).length
+        }, Pages: ${Object.keys(message.pageSourceTableCache || {}).length}`
+      );
+      // Update in-memory cache via fieldCollector setters
+      fieldCollector.setTableFieldsCache(message.tableFieldsCache);
+      fieldCollector.setPageSourceTableCache(message.pageSourceTableCache);
+      break;
+    case "fieldCacheError":
+      console.error(`[Main] Field cache worker error: ${message.message}`);
+      vscode.window.showErrorMessage(
+        `Field cache update failed: ${message.message}`
+      );
+      break;
+
+    default:
+      console.warn(
+        `[Main] Received unknown worker message type: ${message.type}`
+      );
+  }
+}
+
+/**
+ * Checks if all tracked symbol refresh jobs are complete and saves the cache if so.
+ */
+async function checkRefreshCompletion() {
+  if (
+    symbolCacheInstance &&
+    symbolCacheInstance.isRefreshing &&
+    activeRefreshJobs.size === 0
+  ) {
+    console.log("[Main] All symbol refresh jobs completed.");
+    await symbolCacheInstance.saveCache(); // Save the final state
+    symbolCacheInstance.isRefreshing = false;
+    progressReporter = null; // Clear reporter
+    vscode.window.setStatusBarMessage("Symbol cache refresh complete.", 5000);
+  }
+}
+
+/**
+ * Ensures the single worker process is running and attaches the message handler.
+ */
+function ensureWorkerIsRunning() {
+  if (workerInstance && !workerInstance.killed && workerInstance.connected) {
+    // console.log('[Main] Worker already running.');
+    return; // Worker is active
+  }
+
+  console.log("[Main] Starting symbol/field cache worker...");
+  const workerPath = path.join(__dirname, "symbolCacheWorker.js");
+  workerInstance = fork(workerPath, [], { stdio: "pipe", execArgv: [] });
+
+  workerInstance.on("message", handleWorkerMessage);
+
+  workerInstance.on("exit", (code) => {
+    console.error(`[Main] Worker exited with code ${code}`);
+    workerInstance = null; // Reset instance so it can be restarted
+    // Optionally notify user or attempt restart
+    vscode.window.showErrorMessage(
+      `Symbol/Field Cache worker process stopped unexpectedly (code ${code}). Some features might be unavailable until restart.`
+    );
+  });
+
+  workerInstance.on("error", (err) => {
+    console.error("[Main] Worker failed to start or crashed:", err);
+    workerInstance = null; // Reset instance
+    vscode.window.showErrorMessage(
+      `Symbol/Field Cache worker process failed: ${err.message}`
+    );
+  });
+
+  workerInstance.stdout.on("data", (data) =>
+    console.log(`Worker stdout: ${data}`)
+  );
+  workerInstance.stderr.on("data", (data) =>
+    console.error(`Worker stderr: ${data}`)
+  );
+
+  console.log("[Main] Worker started.");
+}
+
+/**
+ * Gets the current worker instance. Used by cacheHelper.
+ * @returns {ChildProcess | null} The worker process instance or null.
+ */
+function getSymbolCacheWorker() {
+  return workerInstance;
+}
+
+// --- Exports ---
+module.exports = symbolCacheInstance; // Export the singleton instance
+module.exports.getSymbolCacheWorker = getSymbolCacheWorker;
+module.exports.ensureWorkerIsRunning = ensureWorkerIsRunning;

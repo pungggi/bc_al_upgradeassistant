@@ -7,7 +7,7 @@ const {
 } = require("../utils/configManager"); // Added getSrcExtractionPath
 const { findAppJsonFile } = require("../utils/appJsonReader"); // Added findAppJsonFile
 const { readJsonFile } = require("../jsonUtils"); // Added readJsonFile
-const { initializeSymbolCache } = require("../utils/cacheHelper"); // Import from new location
+const { initializeFieldCache } = require("../utils/cacheHelper"); // Import field cache initializer
 const { fileEvents } = require("../utils/alFileSaver");
 const { postCorrections } = require("./utils/postCorrections");
 const {
@@ -17,28 +17,6 @@ const {
 } = require("./handleAlFileChange");
 
 const fileContentCache = new Map();
-
-function createIndexFolder() {
-  try {
-    const upgradedObjectFolders = getConfigValue(
-      // Use destructured function
-      "upgradedObjectFolders",
-      null
-    );
-    if (upgradedObjectFolders && upgradedObjectFolders.basePath) {
-      const indexFolderPath = path.join(
-        upgradedObjectFolders.basePath,
-        ".index"
-      );
-      if (!fs.existsSync(indexFolderPath)) {
-        fs.mkdirSync(indexFolderPath, { recursive: true });
-        console.log(`Created index folder at: ${indexFolderPath}`);
-      }
-    }
-  } catch (error) {
-    console.error("Error creating index folder:", error);
-  }
-}
 
 /**
  * Updates the index for AL files by processing either a single file or scanning an entire directory
@@ -287,7 +265,7 @@ function setupFileWatcher(context) {
         const previousContent = fileContentCache.get(uri.fsPath) || "";
 
         // Process the changed file with both contents
-        handleAlFileChange(uri.fsPath, newContent, previousContent);
+        handleAlFileChange(uri.fsPath, newContent, previousContent, context); // Pass context
 
         // Update cache with new content
         fileContentCache.set(uri.fsPath, newContent);
@@ -306,7 +284,7 @@ function setupFileWatcher(context) {
         fileContentCache.set(uri.fsPath, content);
 
         // Process the new file
-        handleAlFileCreate(uri.fsPath, content);
+        handleAlFileCreate(uri.fsPath, content, context); // Pass context
       } catch (error) {
         console.error(`Error handling file creation for ${uri.fsPath}:`, error);
       }
@@ -322,7 +300,7 @@ function setupFileWatcher(context) {
         fileContentCache.delete(uri.fsPath);
 
         // Process the deleted file
-        handleAlFileDelete(uri.fsPath);
+        handleAlFileDelete(uri.fsPath, context); // Pass context
       } catch (error) {
         console.error(`Error handling file deletion for ${uri.fsPath}:`, error);
       }
@@ -340,8 +318,10 @@ function setupFileWatcher(context) {
  * Process the creation of a new AL file
  * @param {string} filePath - Path to the new AL file
  * @param {string} content - Content of the file
+ * @param {vscode.ExtensionContext} context - Extension context
  */
-async function handleAlFileCreate(filePath, content) {
+async function handleAlFileCreate(filePath, content, context) {
+  // Added context
   // Made async
   try {
     // --- Add file copying logic ---
@@ -376,6 +356,18 @@ async function handleAlFileCreate(filePath, content) {
 
     // Create a new index entry for this file
     createNewIndexEntry(filePath, objectType, objectNumber, indexPath);
+
+    // Trigger field cache update
+    if (context) {
+      console.log(
+        `[HandleCreate] Triggering field cache update for new file: ${filePath}`
+      );
+      await initializeFieldCache(context);
+    } else {
+      console.warn(
+        `[HandleCreate] Cannot trigger field cache update for ${filePath}: context not provided.`
+      );
+    }
   } catch (error) {
     console.error(`Error handling AL file creation for ${filePath}:`, error);
   }
@@ -384,8 +376,10 @@ async function handleAlFileCreate(filePath, content) {
 /**
  * Handle the deletion of an AL file
  * @param {string} filePath - Path to the deleted AL file
+ * @param {vscode.ExtensionContext} context - Extension context
  */
-async function handleAlFileDelete(filePath) {
+async function handleAlFileDelete(filePath, context) {
+  // Added context
   // Made async
   try {
     // --- Add file deletion logic ---
@@ -454,14 +448,19 @@ async function handleAlFileDelete(filePath) {
     console.error(`Error handling AL file deletion for ${filePath}:`, error);
   }
 
-  // --- Trigger full cache refresh ---
-  console.log(
-    `AL file deleted (${path.basename(
-      filePath
-    )}), triggering full symbol cache refresh...`
-  );
-  await initializeSymbolCache(true); // Force refresh
-  // --- End cache refresh ---
+  // --- Trigger Field Cache Update ---
+  // Symbol cache refresh is handled by the .app watcher or manual command now
+  if (context) {
+    console.log(
+      `[HandleDelete] Triggering field cache update for deleted file: ${filePath}`
+    );
+    await initializeFieldCache(context); // Trigger worker update
+  } else {
+    console.warn(
+      `[HandleDelete] Cannot trigger field cache update for ${filePath}: context not provided.`
+    );
+  }
+  // --- End Trigger ---
 }
 
 /**
@@ -632,7 +631,6 @@ function handleTxtFileRename(basePath, oldFilename, newFilename) {
 
 function registerfileEvents(context) {
   const disposable = fileEvents((fileInfo) => {
-    createIndexFolder();
     updateFileIndex(fileInfo);
     postCorrections(fileInfo);
   });

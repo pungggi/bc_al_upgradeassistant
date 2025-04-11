@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.117]
+
+### Changed
+
+- The "Referenced Migration Files" node in the BC/AL References view is now expanded by default if it contains items.
+
 ## [0.0.115]
 
 ### Added

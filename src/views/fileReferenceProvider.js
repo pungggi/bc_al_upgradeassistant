@@ -2976,7 +2976,7 @@ class EnhancedMigrationFilesItem extends TreeItem {
   constructor(files, migrationFileRefs) {
     super(
       "Referenced Migration Files",
-      vscode.TreeItemCollapsibleState.Collapsed
+      vscode.TreeItemCollapsibleState.Expanded
     );
     this.files = files;
     this.migrationFileRefs = migrationFileRefs;
@@ -3005,7 +3005,7 @@ class MigrationFileItem extends TreeItem {
     super(
       path.basename(file),
       docRefs.length > 0
-        ? vscode.TreeItemCollapsibleState.Collapsed
+        ? vscode.TreeItemCollapsibleState.Expanded
         : vscode.TreeItemCollapsibleState.None
     );
     this.filePath = file;
