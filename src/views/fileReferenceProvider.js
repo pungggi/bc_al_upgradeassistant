@@ -268,14 +268,54 @@ class FileReferenceProvider {
       }
 
       // Find the .index folder
-      const indexFolder = this._findIndexFolder();
+      let indexFolder = this._findIndexFolder();
       if (!indexFolder) {
-        return [
-          new TreeItem(
-            "No index folder found",
-            vscode.TreeItemCollapsibleState.None
-          ),
-        ];
+        try {
+          // Determine where to create the index folder
+          let basePath;
+
+          // First try to use configured path
+          this.configManager = require("../utils/configManager");
+          const upgradedObjectFolders = this.configManager.getConfigValue(
+            "upgradedObjectFolders",
+            null
+          );
+
+          if (upgradedObjectFolders && upgradedObjectFolders.basePath) {
+            basePath = upgradedObjectFolders.basePath;
+          } else if (
+            vscode.workspace.workspaceFolders &&
+            vscode.workspace.workspaceFolders.length > 0
+          ) {
+            // Default to first workspace folder
+            basePath = vscode.workspace.workspaceFolders[0].uri.fsPath;
+          } else {
+            return [
+              new TreeItem(
+                "Cannot create index folder - no workspace open",
+                vscode.TreeItemCollapsibleState.None
+              ),
+            ];
+          }
+
+          // Create the index folder
+          indexFolder = path.join(basePath, ".index");
+          fs.mkdirSync(indexFolder, { recursive: true });
+
+          // Notify the user
+          vscode.window.showInformationMessage(
+            `Created index folder at ${indexFolder}`
+          );
+          console.log(`Created index folder at ${indexFolder}`);
+        } catch (error) {
+          console.error("Error creating index folder:", error);
+          return [
+            new TreeItem(
+              `Error creating index folder: ${error.message}`,
+              vscode.TreeItemCollapsibleState.None
+            ),
+          ];
+        }
       }
 
       // Look for reference file in the index folder

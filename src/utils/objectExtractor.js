@@ -68,7 +68,7 @@ class ObjectSplitterTransform extends Transform {
   _startNewObject(line, isCalObject) {
     this.isInsideObject = true;
     this.currentObject = {
-      content: [line],
+      content: [],
       type: "",
       id: "",
       name: "",
