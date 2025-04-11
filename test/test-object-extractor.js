@@ -3,7 +3,7 @@ const path = require("path");
 const { Transform, Writable } = require("stream");
 
 /**
- * Transform stream that splits input into C/AL objects with optimized buffering
+ * Transform stream that splits input into C/AL objects
  */
 class ObjectSplitterTransform extends Transform {
   constructor(options = {}) {
@@ -70,12 +70,16 @@ class ObjectSplitterTransform extends Transform {
       );
 
     if (isCalObject || isAlExtensionObject) {
+      // Finish current object if exists
       if (this.currentObject.content.length > 0) {
         this.push(this._finalizeCurrentObject());
       }
       this._startNewObject(line, isCalObject);
-    } else if (this.currentObject.content.length > 0 || trimmedLine) {
-      this.currentObject.content.push(line);
+    } else {
+      // Only add non-object lines to content
+      if (this.currentObject.content.length > 0 || trimmedLine) {
+        this.currentObject.content.push(line);
+      }
     }
   }
 
