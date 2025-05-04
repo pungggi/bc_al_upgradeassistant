@@ -10,6 +10,9 @@ const mkdir = util.promisify(fs.mkdir);
 const readdir = util.promisify(fs.readdir);
 const rmdir = util.promisify(fs.rmdir);
 
+// Import the logger
+const { logger } = require("./utils/logger");
+
 /**
  * Parse AL table content to extract field names
  * @param {string} content - Content of the AL file
@@ -55,7 +58,7 @@ function extractFieldsFromTableContent(content) {
     return { tableName, fields };
   } catch (error) {
     // Log error within worker context if needed
-    console.error(`[Worker] Error extracting fields from content:`, error);
+    logger.error(`[Worker] Error extracting fields from content:`, error);
     return null;
   }
 }
@@ -95,10 +98,7 @@ function extractSourceTableFromPageContent(content) {
     };
   } catch (error) {
     // Log error within worker context if needed
-    console.error(
-      `[Worker] Error extracting source table from content:`,
-      error
-    );
+    logger.error(`[Worker] Error extracting source table from content:`, error);
     return null;
   }
 }
@@ -108,11 +108,16 @@ function extractSourceTableFromPageContent(content) {
  * @param {object} options - Options containing paths, appName, etc.
  */
 async function _updateFieldsCacheInternal(options) {
-  console.log("[Worker] Starting _updateFieldsCacheInternal...");
-  const { srcExtractionPath, globalStoragePath, appName } = options;
+  logger.info("[Worker] Starting _updateFieldsCacheInternal...");
+  const { srcExtractionPath, globalStoragePath, appName, logLevel } = options;
+
+  // Update log level if provided
+  if (logLevel) {
+    logger.setLogLevel(logLevel);
+  }
 
   if (!srcExtractionPath || !globalStoragePath || !appName) {
-    console.error("[Worker] Missing required options for field cache update.");
+    logger.error("[Worker] Missing required options for field cache update.");
     process.send({
       type: "fieldCacheError",
       message: "Missing required options.",
@@ -151,9 +156,9 @@ async function _updateFieldsCacheInternal(options) {
         await fsPromises.readFile(pageCacheFilePath, "utf8")
       );
     }
-    console.log("[Worker] Loaded existing cache/metadata.");
+    logger.info("[Worker] Loaded existing cache/metadata.");
   } catch (err) {
-    console.error("[Worker] Error loading existing cache/metadata:", err);
+    logger.error("[Worker] Error loading existing cache/metadata:", err);
     // Start fresh if loading fails
     metadata = {};
     tableFieldsCache = {};
@@ -164,7 +169,7 @@ async function _updateFieldsCacheInternal(options) {
 
   // 2. Scan srcExtractionPath (using async methods)
   try {
-    console.log(`[Worker] Scanning ${srcExtractionPath}...`);
+    logger.info(`[Worker] Scanning ${srcExtractionPath}...`);
     const scanDirectory = async (dir) => {
       try {
         const entries = await fsPromises.readdir(dir, { withFileTypes: true });
@@ -184,7 +189,7 @@ async function _updateFieldsCacheInternal(options) {
 
               // 3. Compare timestamps and parse if needed
               if (!storedMtime || currentMtime > storedMtime) {
-                console.log(
+                logger.verbose(
                   `[Worker] Processing modified/new file: ${entry.name}`
                 );
                 const content = await fsPromises.readFile(fullPath, "utf8");
@@ -228,10 +233,10 @@ async function _updateFieldsCacheInternal(options) {
                 // Update metadata
                 metadata[fullPath] = currentMtime;
               } else {
-                // console.log(`[Worker] Skipping unchanged file: ${entry.name}`);
+                // Skipping unchanged file - no need to log at all
               }
             } catch (fileError) {
-              console.error(
+              logger.error(
                 `[Worker] Error processing file ${fullPath}:`,
                 fileError
               );
@@ -239,19 +244,19 @@ async function _updateFieldsCacheInternal(options) {
           }
         }
       } catch (scanErr) {
-        console.error(`[Worker] Error scanning directory ${dir}:`, scanErr);
+        logger.error(`[Worker] Error scanning directory ${dir}:`, scanErr);
         // Decide if we should stop or continue
       }
     };
 
     await scanDirectory(srcExtractionPath);
-    console.log("[Worker] Finished scanning.");
+    logger.info("[Worker] Finished scanning.");
 
     // 4. Identify and remove deleted files from cache/metadata
     let deletedCount = 0;
     for (const filePath in metadata) {
       if (!processedFiles.has(filePath)) {
-        console.log(
+        logger.verbose(
           `[Worker] Removing deleted file from cache: ${path.basename(
             filePath
           )}`
@@ -266,7 +271,7 @@ async function _updateFieldsCacheInternal(options) {
       }
     }
     if (deletedCount > 0) {
-      console.log(`[Worker] Identified ${deletedCount} deleted files.`);
+      logger.info(`[Worker] Identified ${deletedCount} deleted files.`);
       // Consider forcing a full rebuild or notifying main thread if deletion handling is critical
     }
 
@@ -285,9 +290,9 @@ async function _updateFieldsCacheInternal(options) {
         pageCacheFilePath,
         JSON.stringify(pageSourceTableCache, null, 2)
       );
-      console.log("[Worker] Saved updated cache/metadata.");
+      logger.info("[Worker] Saved updated cache/metadata.");
     } catch (saveError) {
-      console.error("[Worker] Error saving cache/metadata:", saveError);
+      logger.error("[Worker] Error saving cache/metadata:", saveError);
       process.send({
         type: "fieldCacheError",
         message: "Failed to save cache data.",
@@ -302,9 +307,9 @@ async function _updateFieldsCacheInternal(options) {
       pageSourceTableCache,
       metadata, // Send metadata back too, maybe useful for main thread
     });
-    console.log("[Worker] Sent updated fieldCacheData to main thread.");
+    logger.info("[Worker] Sent updated fieldCacheData to main thread.");
   } catch (err) {
-    console.error("[Worker] Error during field cache update process:", err);
+    logger.error("[Worker] Error during field cache update process:", err);
     process.send({
       type: "fieldCacheError",
       message: `Error updating field cache: ${err.message}`,
@@ -314,7 +319,18 @@ async function _updateFieldsCacheInternal(options) {
 
 // Extracted from symbolCache.js, modified for worker context
 async function processAppFile(appPath, options) {
-  const { extractPath, enableSrcExtraction, srcExtractionPath } = options;
+  const {
+    extractPath,
+    enableSrcExtraction,
+    srcExtractionPath,
+    appCachePath,
+    logLevel,
+  } = options;
+
+  // Update log level if provided
+  if (logLevel) {
+    logger.setLogLevel(logLevel);
+  }
 
   const appFileName = path.basename(appPath);
   let extractDir = null; // Declare outside, initialize to null
@@ -324,6 +340,11 @@ async function processAppFile(appPath, options) {
   let sourceDir = null; // Declare sourceDir outside
 
   try {
+    // Create app-specific cache directory if it doesn't exist
+    if (appCachePath) {
+      await mkdir(appCachePath, { recursive: true });
+    }
+
     // Single main try block
     // Create a unique temp directory for this extraction
     extractDir = path.join(extractPath, appFileName.replace(/\./g, "_")); // Assign to outer variable
@@ -405,7 +426,7 @@ async function processAppFile(appPath, options) {
           };
 
           alFiles = findAlFiles(sourceDir); // Assign to the outer variable
-          console.log(
+          logger.info(
             `[Worker] Found ${alFiles.length} .al files in ${sourceDir}`
           ); // Log found AL files
           process.send({
@@ -419,14 +440,14 @@ async function processAppFile(appPath, options) {
             try {
               const content = fs.readFileSync(filePath, "utf8");
               shortFileName = path.basename(filePath);
-              console.log(`[Worker] Processing AL file: ${shortFileName}`); // Log which file is being processed
+              logger.verbose(`[Worker] Processing AL file: ${shortFileName}`); // Log which file is being processed
 
               if (!alParser.isCAL(content)) {
                 const objectDef = alParser.getObjectDefinition(content);
                 // Diagnostic log removed
                 if (objectDef) {
                   symbols[objectDef.Name] = objectDef;
-                  console.log(
+                  logger.verbose(
                     // Log successful parsing
                     `[Worker] Parsed object: ${objectDef.Type} ${objectDef.Id} "${objectDef.Name}" from ${shortFileName}`
                   );
@@ -435,19 +456,19 @@ async function processAppFile(appPath, options) {
                     message: `Loaded ${objectDef.Type} "${objectDef.Name}" from source`,
                   });
                 } else {
-                  console.log(
+                  logger.verbose(
                     // Log if parser returned null
                     `[Worker] No object definition returned by parser for: ${shortFileName}`
                   );
                 }
               } else {
-                console.log(
+                logger.verbose(
                   // Log if C/AL detected
                   `[Worker] Skipping C/AL file detection for: ${shortFileName}`
                 );
               }
             } catch (err) {
-              console.error(
+              logger.error(
                 // Log parsing errors
                 `[Worker] Error parsing AL file ${shortFileName}: ${err.message}`
               );
@@ -480,7 +501,7 @@ async function processAppFile(appPath, options) {
         type: "progress",
         message: `Extracting procedures from ${alFiles.length} source files...`,
       });
-      console.log(
+      logger.info(
         `[Worker] Using ${alFiles.length} .al files found during symbol parsing for procedure extraction in ${sourceDir}`
       );
 
@@ -489,7 +510,7 @@ async function processAppFile(appPath, options) {
         try {
           const content = fs.readFileSync(filePath, "utf8");
           const shortFileName = path.basename(filePath);
-          console.log(
+          logger.verbose(
             `[Worker] Processing AL file for procedures: ${shortFileName}`
           );
 
@@ -563,12 +584,12 @@ async function processAppFile(appPath, options) {
               });
             }
           } else {
-            console.log(
+            logger.verbose(
               `[Worker] Skipping procedure extraction for ${shortFileName} as object definition was not found.`
             );
           }
         } catch (err) {
-          console.error(
+          logger.error(
             `[Worker] Error extracting procedures from AL file ${path.basename(
               filePath
             )}: ${err.message}`
@@ -584,12 +605,12 @@ async function processAppFile(appPath, options) {
     } else if (enableSrcExtraction && srcExtractionPath) {
       // Log why procedure extraction might be skipped if source dir existed but no alFiles were found, or dir didn't exist
       if (!fs.existsSync(sourceDir)) {
-        console.log(
+        logger.info(
           `[Worker] Source directory for procedures not found: ${sourceDir}`
         );
       } else if (alFiles.length === 0) {
         // Check length explicitly
-        console.log(
+        logger.info(
           `[Worker] No .al files were found in ${sourceDir} during symbol parsing, skipping procedure extraction.`
         );
       }
@@ -745,7 +766,7 @@ async function extractSourceFiles(appPath, zip, basePath) {
 
 async function removeDirectory(dir) {
   const entries = await readdir(dir, { withFileTypes: true }).catch((err) => {
-    console.error(`Error reading directory ${dir}:`, err);
+    logger.error(`Error reading directory ${dir}:`, err);
     return [];
   });
 
@@ -756,19 +777,19 @@ async function removeDirectory(dir) {
       await removeDirectory(fullPath);
     } else {
       await fs.promises.unlink(fullPath).catch((err) => {
-        console.error(`Error removing file ${fullPath}:`, err);
+        logger.error(`Error removing file ${fullPath}:`, err);
       });
     }
   }
 
   await rmdir(dir).catch((err) => {
-    console.error(`Error removing directory ${dir}:`, err);
+    logger.error(`Error removing directory ${dir}:`, err);
   });
 }
 
 // Enhanced error handling for worker process
 process.on("uncaughtException", (error) => {
-  console.error("Uncaught exception in worker:", error);
+  logger.error("Uncaught exception in worker:", error);
   process.send({
     type: "error",
     message: `Uncaught exception in worker: ${error.message}`,
@@ -778,7 +799,7 @@ process.on("uncaughtException", (error) => {
 });
 
 process.on("unhandledRejection", (error) => {
-  console.error("Unhandled promise rejection in worker:", error);
+  logger.error("Unhandled promise rejection in worker:", error);
   process.send({
     type: "error",
     message: `Unhandled promise rejection in worker: ${error.message}`,
@@ -790,20 +811,38 @@ process.on("unhandledRejection", (error) => {
 // Listen for messages from the main process with enhanced error handling
 process.on("message", async (message) => {
   try {
+    // Handle log level setting
+    if (message.type === "setLogLevel" && message.logLevel) {
+      logger.setLogLevel(message.logLevel);
+      logger.info(`[Worker] Log level set to: ${logger.getLogLevel()}`);
+      return;
+    }
+
     if (message.type === "process") {
+      // If options include logLevel, update it
+      if (message.options && message.options.logLevel) {
+        logger.setLogLevel(message.options.logLevel);
+        logger.info(`[Worker] Log level set to: ${logger.getLogLevel()}`);
+      }
+
       await processAppFile(message.appPath, message.options);
       // Removed explicit exit - worker should stay alive for more messages
       // process.exit(0);
     } else if (message.type === "updateFieldCache") {
-      // Placeholder for new field cache logic
-      console.log("[Worker] Received updateFieldCache message");
+      // If options include logLevel, update it
+      if (message.options && message.options.logLevel) {
+        logger.setLogLevel(message.options.logLevel);
+        logger.info(`[Worker] Log level set to: ${logger.getLogLevel()}`);
+      }
+
+      logger.info("[Worker] Received updateFieldCache message");
       await _updateFieldsCacheInternal(message.options);
       // Potentially send completion message or exit differently?
       // For now, let's assume it completes and stays alive for other tasks.
       // process.exit(0); // Might not want to exit if worker handles multiple tasks
     }
   } catch (error) {
-    console.error("Unhandled error in worker:", error);
+    logger.error("Unhandled error in worker:", error);
     process.send({
       type: "error",
       message: `Unhandled error in worker: ${error.message}`,

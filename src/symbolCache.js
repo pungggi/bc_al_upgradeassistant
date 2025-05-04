@@ -7,6 +7,8 @@ const { fork } = require("child_process");
 const { readJsonFile } = require("./jsonUtils");
 
 const configManager = require("./utils/configManager");
+const { getSrcExtractionPath } = require("./utils/configManager");
+const { logger } = require("./utils/logger");
 
 const readFile = util.promisify(fs.readFile);
 const writeFile = util.promisify(fs.writeFile);
@@ -26,6 +28,8 @@ class SymbolCache {
       "extract"
     );
     this.metadataPath = path.join(this.cachePath, "cache_metadata.json");
+    // Add per-app cache paths
+    this.appCachesPath = path.join(this.cachePath, "app_caches");
     this.symbols = {};
     this.procedures = {}; // Store procedures by objectType:objectName
     this.metadata = {}; // Store { appPath: { mtimeMs: number } }
@@ -42,10 +46,11 @@ class SymbolCache {
     try {
       await mkdir(this.cachePath, { recursive: true });
       await mkdir(this.extractPath, { recursive: true });
+      await mkdir(this.appCachesPath, { recursive: true });
     } catch (err) {
       // Ignore EEXIST, log others
       if (err.code !== "EEXIST") {
-        console.error("Error creating cache/extract directories:", err);
+        logger.error("Error creating cache directories:", err);
         vscode.window.showErrorMessage(
           `Failed to create cache directories: ${err.message}`
         );
@@ -56,62 +61,77 @@ class SymbolCache {
     ensureWorkerIsRunning(); // Ensure worker is running after loading cache
   }
 
+  // Get app-specific cache file paths
+  getAppCachePaths(appPath) {
+    const appFileName = path.basename(appPath);
+    const appCacheDir = path.join(
+      this.appCachesPath,
+      appFileName.replace(/\./g, "_")
+    );
+    return {
+      symbolsPath: path.join(appCacheDir, "symbols.json"),
+      proceduresPath: path.join(appCacheDir, "procedures.json"),
+      metadataPath: path.join(appCacheDir, "metadata.json"),
+    };
+  }
+
   async loadCache() {
     try {
-      const symbolsFilePath = path.join(this.cachePath, "symbols.json");
-      const proceduresFilePath = path.join(this.cachePath, "procedures.json");
-
-      console.log("SymbolCache: Loading cache from:", {
-        symbolsPath: symbolsFilePath,
-        proceduresPath: proceduresFilePath,
-        metadataPath: this.metadataPath,
-      });
-
-      // Load Symbols
-      if (fs.existsSync(symbolsFilePath)) {
-        const symbolsData = await readFile(symbolsFilePath, "utf8");
-        this.symbols = JSON.parse(symbolsData);
-        console.log("SymbolCache: Loaded symbols:", {
-          count: Object.keys(this.symbols).length,
-        });
-      } else {
-        console.log("SymbolCache: No symbols file found.");
-        this.symbols = {};
-      }
-
-      // Load Procedures
-      if (fs.existsSync(proceduresFilePath)) {
-        const proceduresData = await readFile(proceduresFilePath, "utf8");
-        this.procedures = JSON.parse(proceduresData);
-        console.log("SymbolCache: Loaded procedures:", {
-          count: Object.keys(this.procedures).length,
-        });
-      } else {
-        console.log("SymbolCache: No procedures file found.");
-        this.procedures = {};
-      }
-
-      // Load Metadata
+      // Load global metadata first
       if (fs.existsSync(this.metadataPath)) {
         const metadataData = await readFile(this.metadataPath, "utf8");
         this.metadata = JSON.parse(metadataData);
-        console.log("SymbolCache: Loaded metadata:", {
-          count: Object.keys(this.metadata).length,
+        logger.info("SymbolCache: Loaded metadata:", {
+          appCount: Object.keys(this.metadata).length,
         });
       } else {
-        console.log("SymbolCache: No metadata file found.");
+        logger.info("SymbolCache: No metadata file found.");
         this.metadata = {};
       }
 
-      return true;
+      // Load each app's cache if it exists
+      for (const appPath of this.appPaths) {
+        await this.loadAppCache(appPath);
+      }
     } catch (error) {
-      console.error("Failed to load symbol cache:", error);
-      // Reset caches on load error to prevent using corrupted data
+      logger.error("SymbolCache: Error loading cache:", error);
       this.symbols = {};
       this.procedures = {};
-      this.metadata = {};
     }
-    return false;
+  }
+
+  async loadAppCache(appPath) {
+    try {
+      const { symbolsPath, proceduresPath } = this.getAppCachePaths(appPath);
+
+      if (fs.existsSync(symbolsPath)) {
+        const symbolsData = await readFile(symbolsPath, "utf8");
+        const appSymbols = JSON.parse(symbolsData);
+        // Merge with main symbols cache
+        Object.assign(this.symbols, appSymbols);
+        logger.info(
+          `SymbolCache: Loaded symbols for ${path.basename(appPath)}:`,
+          {
+            count: Object.keys(appSymbols).length,
+          }
+        );
+      }
+
+      if (fs.existsSync(proceduresPath)) {
+        const proceduresData = await readFile(proceduresPath, "utf8");
+        const appProcedures = JSON.parse(proceduresData);
+        // Merge with main procedures cache
+        Object.assign(this.procedures, appProcedures);
+        logger.info(
+          `SymbolCache: Loaded procedures for ${path.basename(appPath)}:`,
+          {
+            count: Object.keys(appProcedures).length,
+          }
+        );
+      }
+    } catch (error) {
+      logger.error(`SymbolCache: Error loading cache for ${appPath}:`, error);
+    }
   }
 
   async saveCache() {
@@ -125,10 +145,10 @@ class SymbolCache {
         writeFile(proceduresFilePath, JSON.stringify(this.procedures, null, 2)),
         writeFile(this.metadataPath, JSON.stringify(this.metadata, null, 2)), // Save metadata
       ]);
-      console.log("SymbolCache: Saved symbols, procedures, and metadata.");
+      logger.info("SymbolCache: Saved symbols, procedures, and metadata.");
       return true;
     } catch (error) {
-      console.error("Failed to save symbol cache:", error);
+      logger.error("Failed to save symbol cache:", error);
       vscode.window.showErrorMessage(
         `Failed to save symbol cache: ${error.message}`
       );
@@ -137,7 +157,7 @@ class SymbolCache {
   }
 
   async clearCache() {
-    console.log("SymbolCache: Clearing cache and metadata.");
+    logger.info("SymbolCache: Clearing cache and metadata.");
     this.symbols = {};
     this.procedures = {};
     this.metadata = {}; // Clear metadata object
@@ -161,7 +181,6 @@ class SymbolCache {
   }
 
   async refreshCacheInBackground() {
-    // Use the new logic with single worker and message passing
     if (this.isRefreshing || activeRefreshJobs.size > 0) {
       vscode.window.showInformationMessage(
         "Symbol cache refresh already in progress."
@@ -169,24 +188,28 @@ class SymbolCache {
       return;
     }
     if (!this.appPaths || this.appPaths.length === 0) {
-      console.log("[CacheRefresh] No app paths configured for symbol caching.");
+      logger.info("[CacheRefresh] No app paths configured for symbol caching.");
       return;
     }
 
-    this.isRefreshing = true; // Mark as refreshing
-    activeRefreshJobs.clear(); // Clear previous job tracking
+    this.isRefreshing = true;
+    activeRefreshJobs.clear();
     let skippedCount = 0;
     let jobsSent = 0;
 
-    // Get srcExtractionPath using the new centralized function
-    const { getSrcExtractionPath } = require("./utils/configManager");
     const enableSrcExtraction = configManager.getConfigValue(
       "enableSrcExtraction",
       false
     );
     const srcExtractionPath = enableSrcExtraction
       ? await getSrcExtractionPath()
-      : null; // Use await here
+      : null;
+
+    // Get the configured log level
+    const logLevel = configManager.getConfigValue("logLevel", "normal");
+
+    // Initialize the logger with the configured log level
+    logger.setLogLevel(logLevel);
 
     if (enableSrcExtraction && !srcExtractionPath) {
       vscode.window.showWarningMessage(
@@ -194,10 +217,10 @@ class SymbolCache {
       );
     }
 
-    console.log(
+    logger.info(
       `[CacheRefresh] Starting background refresh for ${this.appPaths.length} apps...`
     );
-    ensureWorkerIsRunning(); // Ensure worker is ready
+    ensureWorkerIsRunning();
 
     try {
       await vscode.window.withProgress(
@@ -207,7 +230,7 @@ class SymbolCache {
           cancellable: true,
         },
         async (progress, token) => {
-          progressReporter = progress; // Store for handleWorkerMessage
+          progressReporter = progress;
           progress.report({ increment: 0, message: "Checking apps..." });
 
           for (const appPath of this.appPaths) {
@@ -218,9 +241,6 @@ class SymbolCache {
             try {
               // Check if app version matches dependencies
               const appDir = path.dirname(appPath);
-              const srcExtractionPath = await getSrcExtractionPath();
-
-              // Skip if app version is not in dependencies
               const appVersion = this.getAppVersionFromPath(
                 appDir,
                 srcExtractionPath
@@ -239,15 +259,24 @@ class SymbolCache {
                 continue;
               }
 
+              // Check if app cache exists and is up to date
               const stats = await fs.promises.stat(appPath);
               const currentMtimeMs = stats.mtimeMs;
               const cachedMtimeMs = this.metadata[appPath]?.mtimeMs;
+              const { symbolsPath, proceduresPath } =
+                this.getAppCachePaths(appPath);
+              const cacheExists =
+                fs.existsSync(symbolsPath) && fs.existsSync(proceduresPath);
 
-              if (cachedMtimeMs && currentMtimeMs === cachedMtimeMs) {
+              if (
+                cacheExists &&
+                cachedMtimeMs &&
+                currentMtimeMs === cachedMtimeMs
+              ) {
                 console.log(
                   `[CacheRefresh] Skipping ${path.basename(
                     appPath
-                  )} - unchanged mtime`
+                  )} - cache exists`
                 );
                 skippedCount++;
                 continue;
@@ -256,24 +285,7 @@ class SymbolCache {
               // Track job
               activeRefreshJobs.set(appPath, { mtimeMs: currentMtimeMs });
 
-              // Optional delay (consider removing or making very short)
-              const config = vscode.workspace.getConfiguration(
-                "bc-al-upgradeassistant"
-              );
-              let processingDelay = config.get(
-                "symbolCache.processingDelay",
-                0
-              ); // Default to 0 delay
-              if (typeof processingDelay !== "number" || processingDelay < 0)
-                processingDelay = 0;
-              if (processingDelay > 0) {
-                // console.log(`[CacheRefresh] Applying ${processingDelay}ms delay for ${path.basename(appPath)}`); // Verbose
-                await new Promise((resolveDelay) =>
-                  setTimeout(resolveDelay, processingDelay)
-                );
-              }
-
-              // Track job and send message
+              // Send message to worker with app-specific cache paths
               jobsSent++;
               workerInstance.send({
                 type: "process",
@@ -283,6 +295,8 @@ class SymbolCache {
                   extractPath: this.extractPath,
                   enableSrcExtraction,
                   srcExtractionPath,
+                  appCachePath: path.dirname(symbolsPath),
+                  logLevel, // Pass the configured log level to the worker
                 },
               });
               progress.report({
@@ -290,22 +304,18 @@ class SymbolCache {
                   appPath
                 )}... (${jobsSent}/${this.appPaths.length - skippedCount})`,
               });
-            } catch (statError) {
+            } catch (error) {
               console.error(
-                `[CacheRefresh] Error getting stats for ${appPath}:`,
-                statError
+                `[CacheRefresh] Error processing ${appPath}:`,
+                error
               );
-              // Optionally remove from metadata if file is inaccessible?
-              // delete this.metadata[appPath];
             }
-          } // End for loop
-
+          }
           console.log(
             `[CacheRefresh] Finished sending messages. ${jobsSent} jobs sent, ${skippedCount} skipped.`
           );
           progress.report({ message: `Processing ${jobsSent} apps...` });
 
-          // If no jobs were sent (all skipped or errors), complete immediately
           if (activeRefreshJobs.size === 0) {
             console.log(
               "[CacheRefresh] No apps needed processing or all failed stats check."
@@ -412,10 +422,10 @@ let progressReporter = null; // To hold the progress object from withProgress
  * @param {object} message - The message object from the worker.
  */
 function handleWorkerMessage(message) {
-  // console.log(`[Main] Received worker message: ${message.type}`); // Verbose logging
+  // logger.verbose(`[Main] Received worker message: ${message.type}`); // Verbose logging
 
   if (!symbolCacheInstance) {
-    console.error(
+    logger.error(
       "[Main] handleWorkerMessage called before symbolCacheInstance is initialized."
     );
     return;
@@ -424,7 +434,7 @@ function handleWorkerMessage(message) {
   switch (message.type) {
     // --- Symbol Processing ---
     case "success":
-      // console.log(`[Main] Worker success for ${path.basename(message.appPath || 'N/A')}`); // Verbose
+      // logger.verbose(`[Main] Worker success for ${path.basename(message.appPath || 'N/A')}`); // Verbose
       // Update instance state
       Object.assign(symbolCacheInstance.symbols, message.symbols);
       Object.assign(symbolCacheInstance.procedures, message.procedures);
@@ -436,16 +446,16 @@ function handleWorkerMessage(message) {
           mtimeMs: jobInfo.mtimeMs,
         };
         activeRefreshJobs.delete(message.appPath); // Mark job as complete
-        // console.log(`[Main] Completed symbol job for ${path.basename(message.appPath)}. Remaining jobs: ${activeRefreshJobs.size}`); // Verbose
+        // logger.verbose(`[Main] Completed symbol job for ${path.basename(message.appPath)}. Remaining jobs: ${activeRefreshJobs.size}`); // Verbose
         checkRefreshCompletion(); // Check if all jobs are done
       } else {
-        console.warn(
+        logger.warn(
           `[Main] Received success for untracked/already completed job: ${message.appPath}`
         );
       }
       break;
     case "error":
-      console.error(
+      logger.error(
         `[Main] Worker error for ${message.appPath || "N/A"}: ${
           message.message
         }`,
@@ -463,10 +473,10 @@ function handleWorkerMessage(message) {
       // Mark job as complete even on error to avoid hanging
       if (activeRefreshJobs.has(message.appPath)) {
         activeRefreshJobs.delete(message.appPath);
-        // console.log(`[Main] Completed symbol job (with error) for ${path.basename(message.appPath)}. Remaining jobs: ${activeRefreshJobs.size}`); // Verbose
+        // logger.verbose(`[Main] Completed symbol job (with error) for ${path.basename(message.appPath)}. Remaining jobs: ${activeRefreshJobs.size}`); // Verbose
         checkRefreshCompletion();
       } else {
-        console.warn(
+        logger.warn(
           `[Main] Received error for untracked/already completed job: ${message.appPath}`
         );
       }
@@ -478,7 +488,7 @@ function handleWorkerMessage(message) {
       }
       break;
     case "warning":
-      console.warn(
+      logger.warn(
         `[Main] Worker warning for ${message.appPath || "N/A"}: ${
           message.message
         }`
@@ -493,7 +503,7 @@ function handleWorkerMessage(message) {
 
     // --- Field Cache Processing ---
     case "fieldCacheData":
-      console.log(
+      logger.info(
         `[Main] Received field cache data. Tables: ${
           Object.keys(message.tableFieldsCache || {}).length
         }, Pages: ${Object.keys(message.pageSourceTableCache || {}).length}`
@@ -503,14 +513,14 @@ function handleWorkerMessage(message) {
       fieldCollector.setPageSourceTableCache(message.pageSourceTableCache);
       break;
     case "fieldCacheError":
-      console.error(`[Main] Field cache worker error: ${message.message}`);
+      logger.error(`[Main] Field cache worker error: ${message.message}`);
       vscode.window.showErrorMessage(
         `Field cache update failed: ${message.message}`
       );
       break;
 
     default:
-      console.warn(
+      logger.warn(
         `[Main] Received unknown worker message type: ${message.type}`
       );
   }
@@ -525,7 +535,7 @@ async function checkRefreshCompletion() {
     symbolCacheInstance.isRefreshing &&
     activeRefreshJobs.size === 0
   ) {
-    console.log("[Main] All symbol refresh jobs completed.");
+    logger.info("[Main] All symbol refresh jobs completed.");
     await symbolCacheInstance.saveCache(); // Save the final state
     symbolCacheInstance.isRefreshing = false;
     progressReporter = null; // Clear reporter
@@ -538,18 +548,25 @@ async function checkRefreshCompletion() {
  */
 function ensureWorkerIsRunning() {
   if (workerInstance && !workerInstance.killed && workerInstance.connected) {
-    // console.log('[Main] Worker already running.');
+    // logger.verbose('[Main] Worker already running.');
     return; // Worker is active
   }
 
-  console.log("[Main] Starting symbol/field cache worker...");
+  logger.info("[Main] Starting symbol/field cache worker...");
   const workerPath = path.join(__dirname, "symbolCacheWorker.js");
   workerInstance = fork(workerPath, [], { stdio: "pipe", execArgv: [] });
+
+  // Set the log level in the worker
+  const logLevel = configManager.getConfigValue("logLevel", "normal");
+  workerInstance.send({
+    type: "setLogLevel",
+    logLevel,
+  });
 
   workerInstance.on("message", handleWorkerMessage);
 
   workerInstance.on("exit", (code) => {
-    console.error(`[Main] Worker exited with code ${code}`);
+    logger.error(`[Main] Worker exited with code ${code}`);
     workerInstance = null; // Reset instance so it can be restarted
     // Optionally notify user or attempt restart
     vscode.window.showErrorMessage(
@@ -558,7 +575,7 @@ function ensureWorkerIsRunning() {
   });
 
   workerInstance.on("error", (err) => {
-    console.error("[Main] Worker failed to start or crashed:", err);
+    logger.error("[Main] Worker failed to start or crashed:", err);
     workerInstance = null; // Reset instance
     vscode.window.showErrorMessage(
       `Symbol/Field Cache worker process failed: ${err.message}`
@@ -566,13 +583,13 @@ function ensureWorkerIsRunning() {
   });
 
   workerInstance.stdout.on("data", (data) =>
-    console.log(`Worker stdout: ${data}`)
+    logger.verbose(`Worker stdout: ${data}`)
   );
   workerInstance.stderr.on("data", (data) =>
-    console.error(`Worker stderr: ${data}`)
+    logger.error(`Worker stderr: ${data}`)
   );
 
-  console.log("[Main] Worker started.");
+  logger.info("[Main] Worker started.");
 }
 
 /**

@@ -2,6 +2,7 @@ const vscode = require("vscode");
 const configManager = require("./utils/configManager");
 const { getModelDataFromPackage } = require("./utils/packageReader");
 const { EXTENSION_ID } = require("./constants");
+const { logger } = require("./utils/logger");
 
 /**
  * Get available AI models from package.json configuration
@@ -13,7 +14,7 @@ function getAvailableModels() {
     const models = getModelDataFromPackage();
 
     if (models.length === 0) {
-      console.warn("No models found in package.json");
+      logger.warn("No models found in package.json");
       return [];
     }
 
@@ -27,7 +28,7 @@ function getAvailableModels() {
       };
     });
   } catch (error) {
-    console.error("Error parsing model configuration:", error);
+    logger.error("Error parsing model configuration:", error);
     return [];
   }
 }
@@ -99,7 +100,7 @@ async function setCurrentModel(modelId) {
     }
     return false;
   } catch (error) {
-    console.error("Error setting model:", error);
+    logger.error("Error setting model:", error);
     return false;
   }
 }

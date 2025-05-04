@@ -1,3 +1,5 @@
+const { logger } = require("./logger");
+
 // Cache for table fields by table name
 let tableFieldsCache = {};
 
@@ -286,7 +288,7 @@ async function guessTableType(documentText, variableName) {
  */
 function setTableFieldsCache(newCache) {
   tableFieldsCache = newCache || {};
-  console.log(
+  logger.info(
     `[Cache] In-memory table fields cache updated (${
       Object.keys(tableFieldsCache).length
     } tables).`
@@ -299,7 +301,7 @@ function setTableFieldsCache(newCache) {
  */
 function setPageSourceTableCache(newCache) {
   pageSourceTableCache = newCache || {};
-  console.log(
+  logger.info(
     `[Cache] In-memory page source table cache updated (${
       Object.keys(pageSourceTableCache).length
     } pages).`

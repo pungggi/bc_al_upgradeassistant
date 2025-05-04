@@ -758,6 +758,21 @@
             "Claude 3.7 Sonnet - Thinking - Best coding capabilities with reasoning",
             "Gemini 2.0 Flash - Quick responses with good accuracy for common development tasks"
           ]
+        },
+        "bc-al-upgradeassistant.logLevel": {
+          "type": "string",
+          "default": "minimal",
+          "description": "Controls the verbosity of console output",
+          "enum": [
+            "verbose",
+            "normal",
+            "minimal"
+          ],
+          "enumDescriptions": [
+            "Show all debug messages and processing details",
+            "Show important messages and errors",
+            "Show only errors and critical information"
+          ]
         }
       }
     },

@@ -8,6 +8,7 @@ const fieldCollector = require("./fieldCollector");
 const { getSymbolCacheWorker } = require("../symbolCache");
 const { getObjectDefinition } = require("../../al-parser-lib/alparser");
 const { extractProceduresFromObjects } = require("./procedureExtractor");
+const { logger } = require("./logger");
 
 /**
  * Initialize symbol cache.
@@ -17,14 +18,14 @@ const { extractProceduresFromObjects } = require("./procedureExtractor");
  */
 async function initializeSymbolCache(force = false) {
   try {
-    console.log("[Cache] Initializing symbol cache. Force:", force);
+    logger.info("[Cache] Initializing symbol cache. Force:", force);
 
     if (force) {
-      console.log("[Cache] Forcing cache clear");
+      logger.info("[Cache] Forcing cache clear");
       symbolCache.clearCache();
     }
 
-    console.log(
+    logger.info(
       "[Cache] Current symbol count:",
       Object.keys(symbolCache.symbols).length
     );
@@ -55,7 +56,7 @@ async function initializeSymbolCache(force = false) {
             }
           }
         } catch (err) {
-          console.error(`Error reading settings.json:`, err);
+          logger.error(`Error reading settings.json:`, err);
         }
 
         // Check for app.json
@@ -68,7 +69,7 @@ async function initializeSymbolCache(force = false) {
             continue;
           }
         } catch (err) {
-          console.error(`Error checking for app.json:`, err);
+          logger.error(`Error checking for app.json:`, err);
         }
 
         // Default to .alpackages if no other configuration found
@@ -77,18 +78,18 @@ async function initializeSymbolCache(force = false) {
     }
 
     // Find all app files
-    console.log("[Cache] Default locations to search:", defaultLocations); // Log the patterns we will search
+    logger.info("[Cache] Default locations to search:", defaultLocations); // Log the patterns we will search
     for (const pattern of defaultLocations) {
-      console.log(`[Cache] Searching for .app files with pattern: ${pattern}`); // Log the current pattern
+      logger.info(`[Cache] Searching for .app files with pattern: ${pattern}`); // Log the current pattern
       try {
         const files = glob(pattern); // Note: glob.sync was imported, so no await needed
-        console.log(
+        logger.info(
           `[Cache] Found ${files.length} files for pattern ${pattern}:`,
           files
         ); // Log the result of glob
         appPaths = [...appPaths, ...files];
       } catch (err) {
-        console.error(
+        logger.error(
           `[Cache] Error finding app files with pattern ${pattern}:`,
           err
         );
@@ -96,9 +97,9 @@ async function initializeSymbolCache(force = false) {
     }
 
     // Initialize the cache with found paths
-    console.log("[Cache] Found app paths:", appPaths);
+    logger.info("[Cache] Found app paths:", appPaths);
     await symbolCache.initialize(appPaths);
-    console.log(
+    logger.info(
       "[Cache] After initialization symbol count:",
       Object.keys(symbolCache.symbols).length
     );
@@ -112,12 +113,12 @@ async function initializeSymbolCache(force = false) {
       await symbolCache.refreshCacheInBackground();
       processed = appPaths.length; // Return the number of paths that were processed
     } else {
-      console.log("No .app paths found, skipping background cache refresh.");
+      logger.info("No .app paths found, skipping background cache refresh.");
     }
 
     return processed;
   } catch (error) {
-    console.error("Error initializing symbol cache:", error);
+    logger.error("Error initializing symbol cache:", error);
     vscode.window.showErrorMessage(
       `Failed to initialize symbol cache: ${error.message}`
     );
@@ -146,7 +147,7 @@ async function updateSymbolCacheForFile(filePath) {
 
     return true;
   } catch (error) {
-    console.error(`Error updating symbol cache for file ${filePath}:`, error);
+    logger.error(`Error updating symbol cache for file ${filePath}:`, error);
     return false;
   }
 }
@@ -156,7 +157,7 @@ async function updateSymbolCacheForFile(filePath) {
  * @param {vscode.ExtensionContext} context - Extension context
  */
 async function initializeFieldCache(context) {
-  console.log("[Cache] Initializing field cache...");
+  logger.info("[Cache] Initializing field cache...");
   const globalStoragePath = context.globalStorageUri.fsPath;
   const metadataFilePath = path.join(
     globalStoragePath,
@@ -180,7 +181,7 @@ async function initializeFieldCache(context) {
       loadedMetadata = JSON.parse(
         await fs.promises.readFile(metadataFilePath, "utf8")
       );
-      console.log(
+      logger.info(
         `[Cache] Loaded field cache metadata (${
           Object.keys(loadedMetadata).length
         } entries).`
@@ -190,7 +191,7 @@ async function initializeFieldCache(context) {
       loadedTableCache = JSON.parse(
         await fs.promises.readFile(tableCacheFilePath, "utf8")
       );
-      console.log(
+      logger.info(
         `[Cache] Loaded persisted table field cache (${
           Object.keys(loadedTableCache).length
         } tables).`
@@ -200,7 +201,7 @@ async function initializeFieldCache(context) {
       loadedPageCache = JSON.parse(
         await fs.promises.readFile(pageCacheFilePath, "utf8")
       );
-      console.log(
+      logger.info(
         `[Cache] Loaded persisted page source table cache (${
           Object.keys(loadedPageCache).length
         } pages).`
@@ -212,7 +213,7 @@ async function initializeFieldCache(context) {
     fieldCollector.setPageSourceTableCache(loadedPageCache);
     // We don't store metadata in fieldCollector, it's mainly for the worker
   } catch (err) {
-    console.error("[Cache] Error loading persisted field cache/metadata:", err);
+    logger.error("[Cache] Error loading persisted field cache/metadata:", err);
     // Start fresh if loading fails, clear potentially corrupt in-memory caches
     fieldCollector.setTableFieldsCache({});
     fieldCollector.setPageSourceTableCache({});
@@ -236,48 +237,52 @@ async function initializeFieldCache(context) {
           const appJson = readJsonFile(appJsonPath);
           appName = appJson?.name ?? appName;
         } catch (appJsonErr) {
-          console.error(
+          logger.error(
             `[Cache] Error reading app.json at ${appJsonPath}:`,
             appJsonErr
           );
         }
       } else {
-        console.warn(
+        logger.warn(
           `[Cache] app.json not found in workspace root: ${rootPath}`
         );
       }
     } else {
-      console.warn("[Cache] No workspace folder found to determine app name.");
+      logger.warn("[Cache] No workspace folder found to determine app name.");
     }
 
     if (!srcExtractionPath) {
-      console.warn(
+      logger.warn(
         "[Cache] srcExtractionPath not configured. Field cache update skipped."
       );
       return;
     }
 
+    // Get the configured log level
+    const logLevel = config.get("logLevel", "normal");
+
     const workerOptions = {
       srcExtractionPath,
       globalStoragePath,
       appName,
+      logLevel, // Pass the log level to the worker
     };
 
     // Get worker instance and send message
     const worker = getSymbolCacheWorker(); // Need to ensure this function exists and returns the worker process
     if (worker) {
-      console.log("[Cache] Sending updateFieldCache message to worker.");
+      logger.info("[Cache] Sending updateFieldCache message to worker.");
       worker.send({ type: "updateFieldCache", options: workerOptions });
 
       // Add message handler for worker responses *here* or ensure it's handled elsewhere
       // Example: worker.on('message', handleWorkerFieldCacheMessage);
     } else {
-      console.error(
+      logger.error(
         "[Cache] Could not get symbol cache worker instance to update field cache."
       );
     }
   } catch (err) {
-    console.error("[Cache] Error triggering field cache worker update:", err);
+    logger.error("[Cache] Error triggering field cache worker update:", err);
     vscode.window.showErrorMessage(
       `Failed to trigger field cache update: ${err.message}`
     );
@@ -308,14 +313,14 @@ async function findWorkspaceAlFiles() {
         alFiles.push(file.fsPath);
       });
     } catch (error) {
-      console.error(
+      logger.error(
         `[Cache] Error finding AL files in workspace folder ${folder.uri.fsPath}:`,
         error
       );
     }
   }
 
-  console.log(`[Cache] Found ${alFiles.length} AL files in workspace`);
+  logger.info(`[Cache] Found ${alFiles.length} AL files in workspace`);
   return alFiles;
 }
 
@@ -328,11 +333,11 @@ async function processWorkspaceAlFiles() {
     const alFiles = await findWorkspaceAlFiles();
 
     if (alFiles.length === 0) {
-      console.log("[Cache] No AL files found in workspace");
+      logger.info("[Cache] No AL files found in workspace");
       return;
     }
 
-    console.log(`[Cache] Processing ${alFiles.length} AL files...`);
+    logger.info(`[Cache] Processing ${alFiles.length} AL files...`);
     let symbolsAdded = 0;
     let proceduresAdded = 0;
 
@@ -359,18 +364,18 @@ async function processWorkspaceAlFiles() {
           }
         }
       } catch (fileError) {
-        console.error(
+        logger.error(
           `[Cache] Error processing AL file ${filePath}:`,
           fileError
         );
       }
     }
 
-    console.log(
+    logger.info(
       `[Cache] Added ${symbolsAdded} symbols and ${proceduresAdded} procedures from AL files`
     );
   } catch (error) {
-    console.error("[Cache] Error processing workspace AL files:", error);
+    logger.error("[Cache] Error processing workspace AL files:", error);
   }
 }
 
@@ -408,7 +413,7 @@ async function processAlFile(filePath) {
 
     return true;
   } catch (error) {
-    console.error(`[Cache] Error processing AL file ${filePath}:`, error);
+    logger.error(`[Cache] Error processing AL file ${filePath}:`, error);
     return false;
   }
 }

@@ -27,6 +27,7 @@ const {
 const {
   ObjectSuggestionActionProvider,
 } = require("./providers/objectSuggestionProvider");
+const { logger } = require("./utils/logger");
 
 let globalStatusBarItems = {};
 
@@ -38,18 +39,21 @@ const fileDecorationEventEmitter = new vscode.EventEmitter();
  * @param {vscode.ExtensionContext} context - Extension context
  */
 async function activate(context) {
-  console.log(`Activating ${EXTENSION_ID} extension`);
+  // Initialize the logger
+  logger.initialize();
+
+  logger.info(`Activating ${EXTENSION_ID} extension`);
 
   try {
     // First, register file events which will create the index folder
-    console.log("Registering events...");
+    logger.info("Registering events...");
     registerfileEvents(context);
 
     // Then proceed with other registrations
-    console.log("Registering commands...");
+    logger.info("Registering commands...");
     registerCommands(context);
 
-    console.log("Registering views...");
+    logger.info("Registering views...");
     const { fileReferenceProvider } = registerViews(context);
 
     // Initialize symbol cache
@@ -452,7 +456,7 @@ async function activate(context) {
             };
           }
         } catch (error) {
-          console.error("Error providing file decoration:", error);
+          logger.error("Error providing file decoration:", error);
           return null;
         }
       },
@@ -1223,9 +1227,9 @@ async function activate(context) {
       // Field cache initialization is now handled by initializeFieldCache called earlier
     }
 
-    console.log(`${EXTENSION_ID} extension activated successfully`);
+    logger.info(`${EXTENSION_ID} extension activated successfully`);
   } catch (error) {
-    console.error("Error during extension activation:", error);
+    logger.error("Error during extension activation:", error);
     vscode.window.showErrorMessage(
       `Error activating extension: ${error.message}`
     );
@@ -1264,7 +1268,7 @@ function setupSymbolsWatchers(context) {
         }
       }
     } catch (err) {
-      console.error(`Error reading settings.json:`, err);
+      logger.error(`Error reading settings.json:`, err);
     }
 
     // If no path found, check for app.json and use .alpackages
@@ -1275,7 +1279,7 @@ function setupSymbolsWatchers(context) {
           packagePath = path.join(folder.uri.fsPath, ".alpackages");
         }
       } catch (err) {
-        console.error(`Error checking for app.json:`, err);
+        logger.error(`Error checking for app.json:`, err);
       }
     }
 
@@ -1286,7 +1290,7 @@ function setupSymbolsWatchers(context) {
 
       // Handle new symbol files
       symbolsFolderWatcher.onDidCreate(async (uri) => {
-        console.log("New .app file detected:", uri.fsPath);
+        logger.info("New .app file detected:", uri.fsPath);
         // Refresh symbol and field caches when new .app files are detected
         // Use a debounce mechanism if this triggers too frequently on download
         symbolsFolderWatcher.onDidChange(async (uri) =>
@@ -1303,7 +1307,7 @@ function setupSymbolsWatchers(context) {
       async function triggerAppFileRefresh(uri, context) {
         clearTimeout(appRefreshDebounceTimer);
         appRefreshDebounceTimer = setTimeout(async () => {
-          console.log(
+          logger.info(
             `.app file changed/created: ${uri.fsPath}. Triggering cache refresh.`
           );
           try {
@@ -1316,7 +1320,7 @@ function setupSymbolsWatchers(context) {
             // Re-initialize field cache (sends message to worker)
             await initializeFieldCache(context);
           } catch (error) {
-            console.error(
+            logger.error(
               "Error triggering cache refresh on .app change:",
               error
             );
@@ -1328,7 +1332,7 @@ function setupSymbolsWatchers(context) {
       }
 
       context.subscriptions.push(symbolsFolderWatcher);
-      console.log(`Watching for symbol changes in: ${packagePath}`);
+      logger.info(`Watching for symbol changes in: ${packagePath}`);
     }
   }
 }
@@ -1339,7 +1343,7 @@ function setupSymbolsWatchers(context) {
  * Extension deactivation handler
  */
 function deactivate() {
-  console.log(`${EXTENSION_ID} extension deactivated`);
+  logger.info(`${EXTENSION_ID} extension deactivated`);
 
   // Clean up all status bar items
   for (const filePath in globalStatusBarItems) {
@@ -1417,7 +1421,7 @@ function updateAllTabsForFile(filePath, provider) {
                 refs.every((ref) => ref.done || ref.notImplemented);
               updateTabIcon(tab, allDone ? "done-icon" : "default-icon");
             } catch (err) {
-              console.error(`Error reading file ${filePath}:`, err);
+              logger.error(`Error reading file ${filePath}:`, err);
             }
           }
         }
@@ -1435,7 +1439,7 @@ function updateAllTabsForFile(filePath, provider) {
       );
     }, 100);
   } catch (error) {
-    console.error("Error updating tabs for file:", error);
+    logger.error("Error updating tabs for file:", error);
   }
 }
 
@@ -1975,7 +1979,7 @@ async function addReferenceToFile(filePath, objectInfo, provider) {
 
     return true;
   } catch (error) {
-    console.error("Error adding reference:", error);
+    logger.error("Error adding reference:", error);
     return false;
   }
 }

@@ -10,6 +10,7 @@ const {
   callClaudeApi,
   extractContentFromResponse,
 } = require("./utils/claudeApiHelper");
+const { logger } = require("./utils/logger");
 
 /**
  * Get available prompts from extension configuration
@@ -131,7 +132,7 @@ async function executePrompt(prompt, code, progressCallback = null) {
   if (debugMode) {
     // Create debug content showing what will be sent to the AI
     const debugContent = `# AI Prompt Debug - ${prompt.commandName}
-    
+
 ## Model
 ${model.name} (${model.apiName})
 
@@ -356,7 +357,7 @@ ${
         } catch (streamError) {
           // If we got some content before the error, use it
           if (fullResponse && fullResponse.trim().length > 0) {
-            console.error("Stream error, but partial response received:", {
+            logger.error("Stream error, but partial response received:", {
               error: streamError,
               response: fullResponse,
             });
@@ -418,7 +419,7 @@ ${
               }
             } catch (textError) {
               // Handle error in text stream
-              console.error("Error processing text stream:", textError);
+              logger.error("Error processing text stream:", textError);
             }
           }
 

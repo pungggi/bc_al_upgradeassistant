@@ -1,5 +1,6 @@
 const path = require("path");
 const fs = require("fs");
+// We can't use the logger here because it would create a circular dependency
 
 /**
  * Read values from package.json
