@@ -12,7 +12,7 @@ A Visual Studio Code extension to assist in upgrading from older NAV or BC Versi
 
 A tutorial of how to use those features will be released.
 
-For any feedback use https://ngsoftware.canny.io/requests
+Any [feedback](https://ngsoftware.canny.io/requests) is welcome.
 
 ## Requirements
 

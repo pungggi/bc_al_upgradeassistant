@@ -6,6 +6,8 @@ const symbolCache = require("../symbolCache");
 const { readJsonFile } = require("../jsonUtils");
 const fieldCollector = require("./fieldCollector");
 const { getSymbolCacheWorker } = require("../symbolCache");
+const { getObjectDefinition } = require("../../al-parser-lib/alparser");
+const { extractProceduresFromObjects } = require("./procedureExtractor");
 
 /**
  * Initialize symbol cache.
@@ -100,6 +102,9 @@ async function initializeSymbolCache(force = false) {
       "[Cache] After initialization symbol count:",
       Object.keys(symbolCache.symbols).length
     );
+
+    // Process AL files in the workspace
+    await processWorkspaceAlFiles();
 
     let processed = 0;
     // Only refresh if paths were found or force is true
@@ -279,8 +284,140 @@ async function initializeFieldCache(context) {
   }
 }
 
+/**
+ * Find all AL files in the workspace
+ * @returns {Promise<string[]>} Array of AL file paths
+ */
+async function findWorkspaceAlFiles() {
+  if (!vscode.workspace.workspaceFolders) {
+    return [];
+  }
+
+  const alFiles = [];
+
+  for (const folder of vscode.workspace.workspaceFolders) {
+    try {
+      const folderPath = folder.uri.fsPath;
+      const pattern = new vscode.RelativePattern(folderPath, "**/*.al");
+      const files = await vscode.workspace.findFiles(
+        pattern,
+        "**/node_modules/**"
+      );
+
+      files.forEach((file) => {
+        alFiles.push(file.fsPath);
+      });
+    } catch (error) {
+      console.error(
+        `[Cache] Error finding AL files in workspace folder ${folder.uri.fsPath}:`,
+        error
+      );
+    }
+  }
+
+  console.log(`[Cache] Found ${alFiles.length} AL files in workspace`);
+  return alFiles;
+}
+
+/**
+ * Process AL files in the workspace and add their symbols/procedures to the cache
+ * @returns {Promise<void>}
+ */
+async function processWorkspaceAlFiles() {
+  try {
+    const alFiles = await findWorkspaceAlFiles();
+
+    if (alFiles.length === 0) {
+      console.log("[Cache] No AL files found in workspace");
+      return;
+    }
+
+    console.log(`[Cache] Processing ${alFiles.length} AL files...`);
+    let symbolsAdded = 0;
+    let proceduresAdded = 0;
+
+    for (const filePath of alFiles) {
+      try {
+        const content = await fs.promises.readFile(filePath, "utf8");
+
+        // Extract object definition
+        const objectDef = getObjectDefinition(content);
+        if (objectDef) {
+          // Add to symbols cache
+          symbolCache.symbols[objectDef.Name] = objectDef;
+          symbolsAdded++;
+
+          // Extract procedures
+          const proceduresResult = extractProceduresFromObjects(filePath);
+          if (proceduresResult && proceduresResult.procedures.length > 0) {
+            symbolCache.setProcedures(
+              proceduresResult.objectType,
+              proceduresResult.objectName,
+              proceduresResult.procedures
+            );
+            proceduresAdded += proceduresResult.procedures.length;
+          }
+        }
+      } catch (fileError) {
+        console.error(
+          `[Cache] Error processing AL file ${filePath}:`,
+          fileError
+        );
+      }
+    }
+
+    console.log(
+      `[Cache] Added ${symbolsAdded} symbols and ${proceduresAdded} procedures from AL files`
+    );
+  } catch (error) {
+    console.error("[Cache] Error processing workspace AL files:", error);
+  }
+}
+
+/**
+ * Process a single AL file and update the cache
+ * @param {string} filePath - Path to the AL file
+ * @returns {Promise<boolean>} - True if the cache was updated
+ */
+async function processAlFile(filePath) {
+  try {
+    if (!filePath || !filePath.toLowerCase().endsWith(".al")) {
+      return false;
+    }
+
+    const content = await fs.promises.readFile(filePath, "utf8");
+
+    // Extract object definition
+    const objectDef = getObjectDefinition(content);
+    if (!objectDef) {
+      return false;
+    }
+
+    // Add to symbols cache
+    symbolCache.symbols[objectDef.Name] = objectDef;
+
+    // Extract procedures
+    const proceduresResult = extractProceduresFromObjects(filePath);
+    if (proceduresResult && proceduresResult.procedures.length > 0) {
+      symbolCache.setProcedures(
+        proceduresResult.objectType,
+        proceduresResult.objectName,
+        proceduresResult.procedures
+      );
+    }
+
+    return true;
+  } catch (error) {
+    console.error(`[Cache] Error processing AL file ${filePath}:`, error);
+    return false;
+  }
+}
+
 module.exports = {
   initializeSymbolCache,
   updateSymbolCacheForFile,
   initializeFieldCache,
+  processWorkspaceAlFiles,
+  processAlFile,
+  findWorkspaceAlFiles,
 };

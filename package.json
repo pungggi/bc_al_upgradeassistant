@@ -2,7 +2,7 @@
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
   "description": "Assists you in upgrading old or obsolete code and more",
-  "version": "0.0.120",
+  "version": "0.0.122",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
@@ -801,6 +801,7 @@
     "axios": "^1.6.0",
     "glob": "^7.2.3",
     "jszip": "^3.10.0",
-    "fastest-levenshtein": "^1.0.16"
+    "fastest-levenshtein": "^1.0.16",
+    "xml2js": "^0.6.2"
   }
 }

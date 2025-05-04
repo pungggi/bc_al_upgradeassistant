@@ -9,7 +9,7 @@ const { findAppJsonFile } = require("../utils/appJsonReader");
 const { readJsonFile } = require("../jsonUtils");
 const { updateIndexAfterObjectChange } = require("./utils/indexManager");
 const { findMigrationReferences } = require("../utils/migrationHelper");
-const { initializeFieldCache } = require("../utils/cacheHelper");
+const { initializeFieldCache, processAlFile } = require("../utils/cacheHelper");
 
 /**
  * Process changes to an existing AL file
@@ -122,6 +122,17 @@ async function handleAlFileChange(
     }
 
     await copyWorkspaceAlFileToExtractionPath(filePath);
+
+    // Update symbol cache with the AL file
+    try {
+      await processAlFile(filePath);
+      console.log(`[HandleChange] Updated symbol cache for ${filePath}`);
+    } catch (symbolError) {
+      console.error(
+        `[HandleChange] Error updating symbol cache for ${filePath}:`,
+        symbolError
+      );
+    }
 
     // --- Trigger Field Cache Update ---
     if (context) {

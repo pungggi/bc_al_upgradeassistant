@@ -4,6 +4,7 @@ const util = require("util");
 const os = require("os");
 const vscode = require("vscode");
 const { fork } = require("child_process");
+const { readJsonFile } = require("./jsonUtils");
 
 const configManager = require("./utils/configManager");
 
@@ -28,12 +29,14 @@ class SymbolCache {
     this.symbols = {};
     this.procedures = {}; // Store procedures by objectType:objectName
     this.metadata = {}; // Store { appPath: { mtimeMs: number } }
+    this.dependencies = []; // Store app version dependencies from app.json
     this.appPaths = [];
     this.isRefreshing = false; // Tracks if symbol refresh is active
   }
 
   async initialize(appPaths = []) {
     this.appPaths = appPaths || [];
+    await this.loadDependencies(); // Load dependencies first
 
     // Ensure cache directories exist
     try {
@@ -176,7 +179,7 @@ class SymbolCache {
     let jobsSent = 0;
 
     // Get srcExtractionPath using the new centralized function
-    const { getSrcExtractionPath } = require("./utils/configManager"); // Import inside method
+    const { getSrcExtractionPath } = require("./utils/configManager");
     const enableSrcExtraction = configManager.getConfigValue(
       "enableSrcExtraction",
       false
@@ -201,7 +204,7 @@ class SymbolCache {
         {
           location: vscode.ProgressLocation.Window,
           title: "Refreshing AL Symbol Cache",
-          cancellable: false, // Consider making cancellable later if needed
+          cancellable: true,
         },
         async (progress, token) => {
           progressReporter = progress; // Store for handleWorkerMessage
@@ -213,15 +216,45 @@ class SymbolCache {
               break;
             }
             try {
+              // Check if app version matches dependencies
+              const appDir = path.dirname(appPath);
+              const srcExtractionPath = await getSrcExtractionPath();
+
+              // Skip if app version is not in dependencies
+              const appVersion = this.getAppVersionFromPath(
+                appDir,
+                srcExtractionPath
+              );
+              if (
+                appVersion &&
+                this.dependencies.length > 0 &&
+                !this.dependencies.includes(appVersion)
+              ) {
+                console.log(
+                  `[CacheRefresh] Skipping ${path.basename(
+                    appPath
+                  )} - version ${appVersion} not in dependencies`
+                );
+                skippedCount++;
+                continue;
+              }
+
               const stats = await fs.promises.stat(appPath);
               const currentMtimeMs = stats.mtimeMs;
               const cachedMtimeMs = this.metadata[appPath]?.mtimeMs;
 
               if (cachedMtimeMs && currentMtimeMs === cachedMtimeMs) {
-                // console.log(`[CacheRefresh] Skipping ${path.basename(appPath)} - unchanged.`); // Verbose
+                console.log(
+                  `[CacheRefresh] Skipping ${path.basename(
+                    appPath
+                  )} - unchanged mtime`
+                );
                 skippedCount++;
                 continue;
               }
+
+              // Track job
+              activeRefreshJobs.set(appPath, { mtimeMs: currentMtimeMs });
 
               // Optional delay (consider removing or making very short)
               const config = vscode.workspace.getConfiguration(
@@ -241,7 +274,6 @@ class SymbolCache {
               }
 
               // Track job and send message
-              activeRefreshJobs.set(appPath, { mtimeMs: currentMtimeMs }); // Track before sending
               jobsSent++;
               workerInstance.send({
                 type: "process",
@@ -309,6 +341,60 @@ class SymbolCache {
   getObjectId(objectName) {
     const obj = this.getObjectInfo(objectName);
     return obj ? obj.Id : null;
+  }
+
+  /**
+   * Get app version by checking srcExtractionPath subdirectories
+   * @param {string} appDir - Directory containing the .app file
+   * @param {string} srcExtractionPath - Base path for extracted source files
+   * @returns {string|null} - Version string or null if not found
+   */
+  getAppVersionFromPath(appDir, srcExtractionPath) {
+    if (!srcExtractionPath || !fs.existsSync(srcExtractionPath)) {
+      return null;
+    }
+
+    // Example path structure: srcExtractionPath/21.0.0.0/...
+    const versionDirs = fs.readdirSync(srcExtractionPath).filter(
+      (dir) =>
+        fs.statSync(path.join(srcExtractionPath, dir)).isDirectory() &&
+        /^\d+\.\d+\.\d+\.\d+$/.test(dir) // Only include version-like directories
+    );
+
+    // Find matching version directory
+    for (const version of versionDirs) {
+      if (appDir.includes(version)) {
+        return version;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Load dependencies from app.json in workspace root
+   */
+  async loadDependencies() {
+    try {
+      if (!vscode.workspace.workspaceFolders?.length) {
+        console.log("[SymbolCache] No workspace folders found");
+        return;
+      }
+
+      const rootPath = vscode.workspace.workspaceFolders[0].uri.fsPath;
+      const appJsonPath = path.join(rootPath, "app.json");
+
+      if (!fs.existsSync(appJsonPath)) {
+        console.log("[SymbolCache] No app.json found in workspace root");
+        return;
+      }
+
+      const appJson = readJsonFile(appJsonPath);
+      this.dependencies = appJson.dependencies?.map((dep) => dep.version) || [];
+      console.log("[SymbolCache] Loaded dependencies:", this.dependencies);
+    } catch (error) {
+      console.error("[SymbolCache] Error loading dependencies:", error);
+      this.dependencies = [];
+    }
   }
 }
 
