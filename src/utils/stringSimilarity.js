@@ -4,10 +4,10 @@ const { distance } = require("fastest-levenshtein");
  * Find the most similar field names to the given field
  * @param {string} invalidField - The invalid field name
  * @param {string[]} validFields - Array of valid field names
- * @param {number} limit - Max number of suggestions to return
+ * @param {number} limit - Max number of suggestions to return (default: 4)
  * @returns {string[]} - Array of suggested field names
  */
-function findSimilarNames(invalidField, validFields, limit = 3) {
+function findSimilarNames(invalidField, validFields, limit = 4) {
   if (!invalidField || !validFields || validFields.length === 0) {
     return [];
   }
@@ -35,9 +35,20 @@ function findSimilarNames(invalidField, validFields, limit = 3) {
       0
     );
 
-    const prefixScore = lowerField.startsWith(lowerInvalidField.substring(0, 2))
+    // Calculate exact word match bonus - when all words in the invalid field appear as exact words in the valid field
+    const exactWordMatchBonus = invalidWords.every((word) =>
+      fieldWords.some((fieldWord) => fieldWord === word)
+    )
       ? 2
       : 0;
+
+    // Calculate length penalty - penalize suggestions that are much longer than the original term
+    const lengthDiff = Math.max(
+      0,
+      lowerField.length - lowerInvalidField.length
+    );
+    // Apply a more aggressive length penalty by squaring the ratio
+    const lengthPenalty = Math.pow(lengthDiff / lowerInvalidField.length, 2);
 
     // Calculate Levenshtein distance
     const levenScore = distance(lowerInvalidField, lowerField);
@@ -48,14 +59,19 @@ function findSimilarNames(invalidField, validFields, limit = 3) {
       levenScore / Math.max(lowerInvalidField.length, lowerField.length || 1);
     const normContains = containsScore / 3;
     const normWordMatch = wordMatchScore / (invalidWords.length || 1);
-    const normPrefix = prefixScore / 2;
+    const normExactWordMatch = exactWordMatchBonus / 2;
+
+    // Normalize length penalty (0-1 range, lower is better)
+    // Cap the penalty at 1.0 to avoid extreme penalties
+    const normLengthPenalty = Math.min(1, lengthPenalty);
 
     // Calculate weighted average (weights sum to 1.0)
     const finalScore =
-      0.59 * normLeven + // Levenshtein similarity (50% weight)
-      0.2 * normContains + // Contains score (20% weight)
-      0.2 * normWordMatch + // Word match score (20% weight)
-      0.01 * normPrefix; // Prefix score (10% weight)
+      0.4 * normLeven + // Levenshtein similarity (40% weight)
+      0.15 * normContains + // Contains score (15% weight)
+      0.15 * normWordMatch + // Word match score (15% weight)
+      0.2 * normExactWordMatch - // Exact word match bonus (20% weight)
+      0.2 * normLengthPenalty; // Length penalty (20% weight, subtracted)
 
     return {
       field,
@@ -63,7 +79,8 @@ function findSimilarNames(invalidField, validFields, limit = 3) {
       normLeven,
       normContains,
       normWordMatch,
-      normPrefix,
+      normExactWordMatch,
+      normLengthPenalty,
       levenScore,
     };
   });
@@ -72,7 +89,7 @@ function findSimilarNames(invalidField, validFields, limit = 3) {
   similarities.sort((a, b) => b.score - a.score);
 
   // Get the minimum required number of suggestions
-  const minRequired = Math.max(limit, 3);
+  const minRequired = Math.max(limit, 4);
   const numToTake = Math.min(minRequired, similarities.length);
   console.log(
     "Similarity scores:",
@@ -82,7 +99,8 @@ function findSimilarNames(invalidField, validFields, limit = 3) {
       leven: s.normLeven.toFixed(3),
       contains: s.normContains.toFixed(3),
       words: s.normWordMatch.toFixed(3),
-      prefix: s.normPrefix.toFixed(3),
+      exactMatch: s.normExactWordMatch.toFixed(3),
+      lengthPenalty: s.normLengthPenalty.toFixed(3),
     }))
   );
 

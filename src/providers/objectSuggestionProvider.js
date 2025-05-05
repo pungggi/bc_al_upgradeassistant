@@ -15,33 +15,72 @@ function extractObjectInfo(document, range) {
 
   // Get the line text
   const lineText = document.lineAt(range.start.line).text;
+  console.log("Analyzing line:", lineText);
 
-  // Pattern for variable declarations like "var: Type 'Name';" or "var: Type Name;"
-  const varDeclPattern =
-    /^\s*(\w+)\s*:\s*([A-Z][\w]*(?: [A-Z][\w]*)?)\s+(?:(["'])([^"']+)["']|([^\s";]+))\s*;/;
-  const match = lineText.match(varDeclPattern);
+  // First, try to match a variable declaration with a quoted object name
+  // Pattern: "var: Type "Name";" or "var: Type 'Name';"
+  const quotedPattern =
+    /^(\s*\w+\s*:\s*)([A-Z][\w]*)\s+(["'])([^"']+)(["'])\s*;/;
+  let match = lineText.match(quotedPattern);
 
-  if (!match) {
-    return null;
+  if (match) {
+    // We have a variable with a quoted object name
+    const [, prefix, objType, openQuote, objectName, closeQuote] = match;
+    console.log("Matched quoted pattern:", {
+      prefix,
+      objType,
+      openQuote,
+      objectName,
+      closeQuote,
+    });
+
+    // Find the position of the object name in the line
+    const prefixLength = prefix.length + objType.length + 1; // +1 for the space after type
+    const startPos = prefixLength + openQuote.length;
+    const endPos = startPos + objectName.length;
+
+    return {
+      variableName: match[0].split(":")[0].trim(),
+      objectType: objType,
+      incorrectName: objectName,
+      quoteChar: openQuote,
+      isQuoted: true,
+      range: new vscode.Range(
+        new vscode.Position(range.start.line, startPos),
+        new vscode.Position(range.start.line, endPos)
+      ),
+    };
   }
 
-  const [, varName, objType, , quotedName, unquotedName] = match; // Skip full match at index 0
-  const incorrectName = quotedName || unquotedName;
-  const startPos = lineText.indexOf(incorrectName);
+  // If no match with quotes, try to match a variable declaration with an unquoted object name
+  // Pattern: "var: Type Name;"
+  const unquotedPattern = /^(\s*\w+\s*:\s*)([A-Z][\w]*)\s+([A-Za-z0-9_]+)\s*;/;
+  match = lineText.match(unquotedPattern);
 
-  if (startPos === -1) {
-    return null;
+  if (match) {
+    // We have a variable with an unquoted object name
+    const [, prefix, objType, objectName] = match;
+    console.log("Matched unquoted pattern:", { prefix, objType, objectName });
+
+    // Find the position of the object name in the line
+    const prefixLength = prefix.length + objType.length + 1; // +1 for the space after type
+    const startPos = prefixLength;
+    const endPos = startPos + objectName.length;
+
+    return {
+      variableName: match[0].split(":")[0].trim(),
+      objectType: objType,
+      incorrectName: objectName,
+      isQuoted: false,
+      range: new vscode.Range(
+        new vscode.Position(range.start.line, startPos),
+        new vscode.Position(range.start.line, endPos)
+      ),
+    };
   }
 
-  return {
-    variableName: varName,
-    objectType: objType,
-    incorrectName: incorrectName,
-    range: new vscode.Range(
-      new vscode.Position(range.start.line, startPos),
-      new vscode.Position(range.start.line, startPos + incorrectName.length)
-    ),
-  };
+  console.log("No pattern matched for line:", lineText);
+  return null;
 }
 
 /**
@@ -109,7 +148,12 @@ class ObjectSuggestionActionProvider {
         continue;
       }
 
-      const { objectType, incorrectName, range: replacementRange } = objectInfo;
+      const {
+        objectType,
+        incorrectName,
+        isQuoted,
+        range: replacementRange,
+      } = objectInfo;
 
       // Get all symbols from cache
       const allSymbols = Object.values(symbolCache.symbols);
@@ -212,10 +256,18 @@ class ObjectSuggestionActionProvider {
         // Create the edit to replace the object name
         const edit = new vscode.WorkspaceEdit();
 
-        // Determine if we need to add quotes
-        const needsQuotes =
-          suggestion.includes(" ") || suggestion.includes("-");
-        const replacement = needsQuotes ? `"${suggestion}"` : suggestion;
+        // Create the appropriate replacement based on whether the original was quoted
+        let replacement;
+
+        if (isQuoted) {
+          // If the original was quoted, preserve the same quote style
+          replacement = suggestion;
+        } else {
+          // If the original was not quoted, only add quotes if needed
+          const needsQuotes =
+            suggestion.includes(" ") || suggestion.includes("-");
+          replacement = needsQuotes ? `"${suggestion}"` : suggestion;
+        }
 
         edit.replace(document.uri, replacementRange, replacement);
         action.edit = edit;
