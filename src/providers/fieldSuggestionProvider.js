@@ -1,6 +1,7 @@
 const vscode = require("vscode");
 const fieldCollector = require("../utils/fieldCollector");
 const stringSimilarity = require("../utils/stringSimilarity");
+const { logger } = require("../utils/logger");
 
 /**
  * Extract information about the invalid field reference
@@ -76,8 +77,8 @@ function extractFieldInfo(document, range) {
 
   // Try to extract from the error message itself as a last resort
   const document_error_message = document.getText(range);
-  console.log(
-    `Error context: ${errorContext}, Error message: ${document_error_message}`
+  logger.info(
+    `[FieldSuggestion] Error context: ${errorContext}, Error message: ${document_error_message}`
   );
 
   return null;
@@ -105,16 +106,16 @@ class FieldSuggestionActionProvider {
     }
 
     // Debug: Log diagnostic information to help troubleshoot
-    console.log(
-      `Found ${context.diagnostics.length} diagnostics at line ${
-        range.start.line + 1
-      }`
+    logger.info(
+      `[FieldSuggestion] Found ${
+        context.diagnostics.length
+      } diagnostics at line ${range.start.line + 1}`
     );
     context.diagnostics.forEach((d, idx) => {
-      console.log(
-        `Diagnostic ${idx + 1}: ${d.message}, code: ${d.code}, severity: ${
-          d.severity
-        }`
+      logger.info(
+        `[FieldSuggestion] Diagnostic ${idx + 1}: ${d.message}, code: ${
+          d.code
+        }, severity: ${d.severity}`
       );
     });
 
@@ -134,7 +135,9 @@ class FieldSuggestionActionProvider {
     });
 
     if (matchingDiagnostics.length === 0) {
-      console.log("No matching diagnostics found for field suggestion");
+      logger.info(
+        "[FieldSuggestion] No matching diagnostics found for field suggestion"
+      );
       return [];
     }
 
@@ -145,7 +148,9 @@ class FieldSuggestionActionProvider {
       const fieldInfo = extractFieldInfo(document, diagnostic.range);
 
       if (!fieldInfo) {
-        console.log("Could not extract field info from diagnostic");
+        logger.info(
+          "[FieldSuggestion] Could not extract field info from diagnostic"
+        );
         continue;
       }
 
@@ -153,13 +158,22 @@ class FieldSuggestionActionProvider {
 
       // Try to determine the table type for this record
       // Make sure to properly await the Promise
+      logger.verbose(
+        `[FieldSuggestion] Trying to guess table type for record variable: '${recordVariableName}'`
+      );
       const tableType = await fieldCollector.guessTableType(
         document.getText(),
         recordVariableName
       );
+      logger.info(
+        `[FieldSuggestion] Guessed table type: '${tableType}' for record variable: '${recordVariableName}'`
+      );
 
       if (!tableType) {
         // Add action to manually trigger suggestion
+        logger.verbose(
+          `[FieldSuggestion] No table type found for record variable: '${recordVariableName}'`
+        );
         const manualAction = new vscode.CodeAction(
           `Find similar fields for '${fieldName}'...`,
           vscode.CodeActionKind.QuickFix
@@ -175,22 +189,32 @@ class FieldSuggestionActionProvider {
       }
 
       // Get all fields for this table
-      const validFields = await fieldCollector.getFieldsForTable(tableType);
+      logger.info(`[FieldSuggestion] Getting fields for table: '${tableType}'`);
+      // Remove await since getFieldsForTable is now synchronous
+      const validFields = fieldCollector.getFieldsForTable(tableType);
+      logger.info(
+        `[FieldSuggestion] Found ${
+          validFields ? validFields.length : 0
+        } fields for table '${tableType}'`
+      );
 
       if (!validFields || validFields.length === 0) {
-        console.log(`No fields found for table '${tableType}'`);
+        logger.verbose(
+          `[FieldSuggestion] No fields found for table '${tableType}'`
+        );
         continue;
       }
 
-      console.log("Finding similar field names:", {
-        fieldName,
-        availableFields: validFields,
-      });
+      logger.verbose(
+        `[FieldSuggestion] Finding similar field names for '${fieldName}'`
+      );
       const suggestions = stringSimilarity.findSimilarNames(
         fieldName,
         validFields
       );
-      console.log("Found field suggestions:", suggestions);
+      logger.verbose(
+        `[FieldSuggestion] Found field suggestions: ${suggestions.join(", ")}`
+      );
 
       // Use fieldInfo.range instead of diagnostic.range for more accurate replacement
       const replacementRange = fieldInfo.range || diagnostic.range;

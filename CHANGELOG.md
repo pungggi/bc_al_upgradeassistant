@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.127]
+
+### Changed
+
+- Enhance field and objectname suggestions
+
 ## [0.0.117]
 
 ### Changed

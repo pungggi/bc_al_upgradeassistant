@@ -2,7 +2,7 @@
   "name": "bc-al-upgradeassistant",
   "displayName": "BC/AL Upgrade Assistant",
   "description": "Assists you in upgrading old or obsolete code and more",
-  "version": "0.0.126",
+  "version": "0.0.127",
   "icon": "media/icon.png",
   "publisher": "ngSoftware",
   "engines": {
@@ -21,6 +21,11 @@
       {
         "command": "bc-al-upgradeassistant.refreshSymbolCache",
         "title": "Refresh Symbol Cache",
+        "category": "BC/AL Upgrade Assistant"
+      },
+      {
+        "command": "bc-al-upgradeassistant.refreshFieldCache",
+        "title": "Refresh Field Cache",
         "category": "BC/AL Upgrade Assistant"
       },
       {

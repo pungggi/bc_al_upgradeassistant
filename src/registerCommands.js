@@ -3,7 +3,10 @@ const { extractObjectsFromPath } = require("./utils/objectExtractor");
 const path = require("path");
 const claude = require("./claude");
 const configManager = require("./utils/configManager");
-const { initializeSymbolCache } = require("./utils/cacheHelper"); // Import from new location
+const {
+  initializeSymbolCache,
+  initializeFieldCache,
+} = require("./utils/cacheHelper"); // Import from new location
 const { registerCommandOnce } = require("./utils/commandHelper");
 const { EXTENSION_ID } = require("./constants");
 const { registerClipboardMonitor } = require("./clipboardMonitor");
@@ -11,6 +14,7 @@ const { suggestFieldNames } = require("./commands/fieldSuggestionCommand");
 
 function registerCommands(context) {
   registerRefreshSymbolCacheCommand(context);
+  registerRefreshFieldCacheCommand(context);
   registerSplitCalObjectsByPathCommand(context);
   registerPromptClaudeCommand(context);
   registerModelCommands(context);
@@ -46,14 +50,63 @@ function registerRefreshSymbolCacheCommand(context) {
     `${EXTENSION_ID}.refreshSymbolCache`,
     async () => {
       try {
-        // const extension = require("./extension"); // No longer needed
-        const processed = await initializeSymbolCache(true); // Call directly
-        vscode.window.showInformationMessage(
-          `Symbol cache refreshed successfully. Processed ${processed} app files for symbols.`
+        // Show progress notification
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "Refreshing caches",
+            cancellable: false,
+          },
+          async (progress) => {
+            // First refresh symbol cache
+            progress.report({ message: "Refreshing symbol cache..." });
+            const processed = await initializeSymbolCache(true);
+
+            // Then refresh field cache with force refresh enabled
+            progress.report({ message: "Refreshing field cache..." });
+            await initializeFieldCache(context, true);
+
+            vscode.window.showInformationMessage(
+              `Caches refreshed successfully. Processed ${processed} app files for symbols and updated field definitions from workspace and dependencies.`
+            );
+          }
         );
       } catch (error) {
         vscode.window.showErrorMessage(
-          `Error refreshing symbol cache: ${error.message}`
+          `Error refreshing caches: ${error.message}`
+        );
+      }
+    }
+  );
+}
+
+function registerRefreshFieldCacheCommand(context) {
+  registerCommandOnce(
+    context,
+    `${EXTENSION_ID}.refreshFieldCache`,
+    async () => {
+      try {
+        // Show progress notification
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "Refreshing field cache",
+            cancellable: false,
+          },
+          async (progress) => {
+            progress.report({ message: "Scanning workspace folders..." });
+
+            // Force refresh the field cache
+            await initializeFieldCache(context, true);
+
+            vscode.window.showInformationMessage(
+              "Field cache refreshed successfully. All workspace tables and fields have been updated."
+            );
+          }
+        );
+      } catch (error) {
+        vscode.window.showErrorMessage(
+          `Error refreshing field cache: ${error.message}`
         );
       }
     }

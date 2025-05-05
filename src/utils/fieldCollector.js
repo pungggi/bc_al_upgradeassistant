@@ -99,6 +99,50 @@ function findTableTypeInVariableDeclarations(documentText, variableName) {
     return name;
   }
 
+  // First check for global variables at the end of the file
+  // This is a common pattern in AL where global variables are defined after procedures
+  let foundGlobalVar = false;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    const lowerLine = line.toLowerCase();
+
+    // Look for the variable name in the line
+    if (lowerLine.includes(lowerVarName) && lowerLine.includes("record")) {
+      foundGlobalVar = true;
+
+      // Extract the table name
+      const colonPos = line.indexOf(":");
+      if (colonPos !== -1) {
+        // Check if variable name is before the colon
+        const varPart = line.substring(0, colonPos).trim();
+        if (varPart.toLowerCase() === lowerVarName) {
+          // Extract text after 'record'
+          const afterColon = line.substring(colonPos + 1).trim();
+          const recordPos = afterColon.toLowerCase().indexOf("record");
+          if (recordPos !== -1) {
+            const tableText = afterColon
+              .substring(recordPos + "record".length)
+              .trim();
+            if (tableText) {
+              logger.info(
+                `[FieldCollector] Found global variable '${variableName}' with table type '${cleanTableName(
+                  tableText.split(/[;]/)[0]
+                )}'`
+              );
+              return cleanTableName(tableText.split(/[;]/)[0]);
+            }
+          }
+        }
+      }
+    }
+
+    // If we've found a global var and processed it, or if we've reached a procedure end,
+    // we can stop searching backwards
+    if (foundGlobalVar || lowerLine.includes("end;")) {
+      break;
+    }
+  }
+
   // Process variable declarations (var sections)
   let inVarSection = false;
   for (const line of lines) {
@@ -240,43 +284,100 @@ async function guessTableType(documentText, variableName) {
     return null;
   }
 
-  // First try to find it in variable declarations
+  logger.info(
+    `[FieldCollector] Guessing table type for variable: ${variableName}`
+  );
+
+  // First try to find it in variable declarations - prioritize this over variable name matching
   const tableFromVar = findTableTypeInVariableDeclarations(
     documentText,
     variableName
   );
   if (tableFromVar) {
+    logger.info(
+      `[FieldCollector] Found table type '${tableFromVar}' in variable declarations`
+    );
     return tableFromVar;
   }
 
-  // Only continue with page-based detection if variable name is "Rec"
-  // or couldn't be found in variable declarations
-  if (variableName.toLowerCase() === "rec" || !tableFromVar) {
-    // If we're in a page extension, try to find the extended page's source table
-    const extendedPage = findExtendedPage(documentText);
-    if (extendedPage) {
-      // First check our cache
-      const sourceTable = findSourceTableForPage(extendedPage);
-      if (sourceTable) {
-        return sourceTable;
-      }
-
-      // Removed workspace search - rely on cache populated by worker
-      // const workspaceSourceTable = await findSourceTableFromWorkspace(extendedPage);
-      // if (workspaceSourceTable) {
-      //   return workspaceSourceTable;
-      // }
-    }
-
-    // As a last resort, look for SourceTable property in the current document
-    const sourceTableMatch = documentText.match(
-      /SourceTable\s*=\s*["']([^"']+)["']/i
+  // Check if the variable name itself is a table name (common pattern in AL)
+  // For example, if the variable is "AmagnoSetup", it might be a record of table "AmagnoSetup"
+  // This is now a fallback after checking variable declarations
+  if (tableFieldsCache[variableName]) {
+    logger.info(
+      `[FieldCollector] Variable name '${variableName}' matches a known table name`
     );
-    if (sourceTableMatch && sourceTableMatch[1]) {
-      return sourceTableMatch[1];
+    return variableName;
+  }
+
+  // Try to infer from common naming patterns
+  // For example, "CustomerRec" likely refers to "Customer" table
+  if (variableName.toLowerCase().endsWith("rec")) {
+    const possibleTableName = variableName.substring(
+      0,
+      variableName.length - 3
+    );
+    if (tableFieldsCache[possibleTableName]) {
+      logger.info(
+        `[FieldCollector] Inferred table '${possibleTableName}' from variable name pattern '${variableName}'`
+      );
+      return possibleTableName;
     }
   }
 
+  // Continue with page-based detection
+  // If we're in a page extension, try to find the extended page's source table
+  const extendedPage = findExtendedPage(documentText);
+  if (extendedPage) {
+    // First check our cache
+    const sourceTable = findSourceTableForPage(extendedPage);
+    if (sourceTable) {
+      logger.info(
+        `[FieldCollector] Found source table '${sourceTable}' for extended page '${extendedPage}'`
+      );
+      return sourceTable;
+    }
+  }
+
+  // Look for SourceTable property in the current document
+  const sourceTableMatch = documentText.match(
+    /SourceTable\s*=\s*["']([^"']+)["']/i
+  );
+  if (sourceTableMatch && sourceTableMatch[1]) {
+    logger.info(
+      `[FieldCollector] Found SourceTable property with value '${sourceTableMatch[1]}'`
+    );
+    return sourceTableMatch[1];
+  }
+
+  // If the variable name is "Rec", try to infer from the object name
+  if (variableName.toLowerCase() === "rec") {
+    // Try to extract object name from the document
+    const objectMatch = documentText.match(
+      /\b(page|pageextension|table|tableextension)\s+\d+\s+["']([^"']+)["']/i
+    );
+    if (objectMatch && objectMatch[2]) {
+      const objectName = objectMatch[2];
+      // If object name contains the word "Card" or "List", it might be related to a table
+      // E.g., "Customer Card" -> "Customer"
+      if (objectName.includes("Card") || objectName.includes("List")) {
+        const parts = objectName.split(/\s+/);
+        if (parts.length > 1) {
+          const possibleTableName = parts[0];
+          if (tableFieldsCache[possibleTableName]) {
+            logger.info(
+              `[FieldCollector] Inferred table '${possibleTableName}' from object name '${objectName}'`
+            );
+            return possibleTableName;
+          }
+        }
+      }
+    }
+  }
+
+  logger.info(
+    `[FieldCollector] Could not determine table type for variable '${variableName}'`
+  );
   return null;
 }
 

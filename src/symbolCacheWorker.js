@@ -27,10 +27,12 @@ function extractFieldsFromTableContent(content) {
 
     // Extract table name
     let tableName = null;
+    let isExtension = false;
     let tableMatch = content.match(/table\s+(\d+)\s+["']([^"']+)["']/i);
 
     if (tableMatch) {
       tableName = tableMatch[2];
+      logger.verbose(`[Worker] Found table: ${tableName}`);
     } else {
       // Try tableextension
       tableMatch = content.match(
@@ -38,24 +40,42 @@ function extractFieldsFromTableContent(content) {
       );
       if (tableMatch) {
         tableName = tableMatch[3]; // Use the base table name
+        isExtension = true;
+        logger.verbose(`[Worker] Found table extension for: ${tableName}`);
       }
     }
 
     if (!tableName) {
+      logger.verbose(`[Worker] No table name found in content`);
       return null;
     }
 
     // Extract field definitions
     const fields = [];
 
-    // Match field definitions
-    const fieldRegex = /field\s*\(\s*\d+\s*;\s*["']([^"']+)["']/gi;
+    // Match field definitions - handle both quoted and unquoted field names
+    // This regex matches field(id; "Name") and field(id; Name) patterns
+    const fieldRegex =
+      /field\s*\(\s*\d+\s*;\s*(["']([^"']+)["']|([a-z0-9_]+))/gi;
     let match;
     while ((match = fieldRegex.exec(content)) !== null) {
-      fields.push(match[1]);
+      // The field name will be in group 2 if quoted, or group 3 if unquoted
+      const fieldName = match[2] || match[3];
+      if (fieldName) {
+        fields.push(fieldName);
+        logger.verbose(
+          `[Worker] Found field: ${fieldName} in table: ${tableName}`
+        );
+      }
     }
 
-    return { tableName, fields };
+    logger.info(
+      `[Worker] Extracted ${fields.length} fields from ${
+        isExtension ? "table extension" : "table"
+      }: ${tableName}`
+    );
+
+    return { tableName, fields, isExtension };
   } catch (error) {
     // Log error within worker context if needed
     logger.error(`[Worker] Error extracting fields from content:`, error);
@@ -108,13 +128,23 @@ function extractSourceTableFromPageContent(content) {
  * @param {object} options - Options containing paths, appName, etc.
  */
 async function _updateFieldsCacheInternal(options) {
-  logger.info("[Worker] Starting _updateFieldsCacheInternal...");
-  const { srcExtractionPath, globalStoragePath, appName, logLevel } = options;
+  const {
+    srcExtractionPath,
+    globalStoragePath,
+    appName,
+    logLevel,
+    workspaceFolders = [],
+    forceRefresh = false,
+  } = options;
 
   // Update log level if provided
   if (logLevel) {
     logger.setLogLevel(logLevel);
   }
+
+  logger.info(`[Worker] Starting _updateFieldsCacheInternal: ${appName}`);
+  logger.info(`[Worker] Force refresh: ${forceRefresh}`);
+  logger.info(`[Worker] Workspace folders count: ${workspaceFolders.length}`);
 
   if (!srcExtractionPath || !globalStoragePath || !appName) {
     logger.error("[Worker] Missing required options for field cache update.");
@@ -167,16 +197,32 @@ async function _updateFieldsCacheInternal(options) {
 
   const processedFiles = new Set(); // Keep track of files found in this run
 
-  // 2. Scan srcExtractionPath (using async methods)
+  // 2. Scan directories (using async methods)
   try {
-    logger.info(`[Worker] Scanning ${srcExtractionPath}...`);
-    const scanDirectory = async (dir) => {
+    // Define a more robust scan function that handles workspace files specially
+    const scanDirectory = async (dir, isWorkspaceDir = false) => {
       try {
+        logger.info(
+          `[Worker] Scanning ${dir}${isWorkspaceDir ? " (workspace)" : ""}...`
+        );
         const entries = await fsPromises.readdir(dir, { withFileTypes: true });
         for (const entry of entries) {
           const fullPath = path.join(dir, entry.name);
+
+          // Skip node_modules, .git, and .alpackages directories
+          if (
+            entry.isDirectory() &&
+            (entry.name === "node_modules" ||
+              entry.name === ".git" ||
+              entry.name === ".alpackages")
+          ) {
+            logger.verbose(`[Worker] Skipping directory: ${entry.name}`);
+            continue;
+          }
+
           if (entry.isDirectory()) {
-            await scanDirectory(fullPath);
+            // Pass down the isWorkspaceDir flag to subdirectories
+            await scanDirectory(fullPath, isWorkspaceDir);
           } else if (
             entry.isFile() &&
             entry.name.toLowerCase().endsWith(".al")
@@ -187,10 +233,21 @@ async function _updateFieldsCacheInternal(options) {
               const currentMtime = stats.mtimeMs;
               const storedMtime = metadata[fullPath];
 
-              // 3. Compare timestamps and parse if needed
-              if (!storedMtime || currentMtime > storedMtime) {
+              // Process file if:
+              // 1. It's a workspace file (always prioritize workspace files)
+              // 2. Force refresh is enabled
+              // 3. File is new (no stored mtime)
+              // 4. File has been modified (current mtime > stored mtime)
+              if (
+                isWorkspaceDir ||
+                forceRefresh ||
+                !storedMtime ||
+                currentMtime > storedMtime
+              ) {
                 logger.verbose(
-                  `[Worker] Processing modified/new file: ${entry.name}`
+                  `[Worker] Processing ${
+                    isWorkspaceDir ? "workspace" : "modified/new"
+                  } file: ${entry.name}`
                 );
                 const content = await fsPromises.readFile(fullPath, "utf8");
 
@@ -199,15 +256,80 @@ async function _updateFieldsCacheInternal(options) {
                 if (tableResult && tableResult.tableName) {
                   // If table already in cache, combine the fields (handle extensions)
                   if (tableFieldsCache[tableResult.tableName]) {
-                    tableFieldsCache[tableResult.tableName] = [
-                      ...new Set([
-                        ...tableFieldsCache[tableResult.tableName],
-                        ...(tableResult.fields || []), // Ensure fields array exists
-                      ]),
-                    ];
+                    // For workspace files, we want to ensure their fields take precedence
+                    if (isWorkspaceDir) {
+                      // For workspace files, add fields at the end to give them precedence
+                      // when there are duplicates (Set will keep only unique values)
+                      const existingFields =
+                        tableFieldsCache[tableResult.tableName];
+                      const newFields = tableResult.fields || [];
+
+                      // Log the fields we're adding for debugging
+                      if (newFields.length > 0) {
+                        logger.info(
+                          `[Worker] Adding ${
+                            newFields.length
+                          } fields from workspace ${
+                            tableResult.isExtension
+                              ? "table extension"
+                              : "table"
+                          } '${tableResult.tableName}'`
+                        );
+                      }
+
+                      // Create a new array with existing fields first, then new fields
+                      // This ensures new fields will replace existing ones with the same name
+                      tableFieldsCache[tableResult.tableName] = [
+                        ...new Set([...existingFields, ...newFields]),
+                      ];
+
+                      logger.info(
+                        `[Worker] Updated fields for table '${
+                          tableResult.tableName
+                        }' from workspace, now has ${
+                          tableFieldsCache[tableResult.tableName].length
+                        } fields`
+                      );
+                    } else {
+                      // For non-workspace files, only add fields if they don't already exist
+                      const existingFields =
+                        tableFieldsCache[tableResult.tableName];
+                      const newFields = tableResult.fields || [];
+
+                      // Add fields that don't already exist
+                      const combinedFields = [
+                        ...existingFields,
+                        ...newFields.filter(
+                          (field) => !existingFields.includes(field)
+                        ),
+                      ];
+
+                      tableFieldsCache[tableResult.tableName] = [
+                        ...new Set(combinedFields),
+                      ];
+
+                      logger.verbose(
+                        `[Worker] Updated fields for table '${
+                          tableResult.tableName
+                        }' from dependency, now has ${
+                          tableFieldsCache[tableResult.tableName].length
+                        } fields`
+                      );
+                    }
                   } else {
+                    // Table doesn't exist in cache yet, add it with its fields
                     tableFieldsCache[tableResult.tableName] =
                       tableResult.fields || [];
+
+                    logger.info(
+                      `[Worker] Added new table '${
+                        tableResult.tableName
+                      }' with ${
+                        tableFieldsCache[tableResult.tableName].length
+                      } fields from ${
+                        isWorkspaceDir ? "workspace" : "dependency"
+                      }`
+                    );
                   }
                 }
 
@@ -219,6 +341,10 @@ async function _updateFieldsCacheInternal(options) {
                   if (pageResult.sourceTable !== null) {
                     pageSourceTableCache[pageResult.pageName] =
                       pageResult.sourceTable;
+
+                    logger.verbose(
+                      `[Worker] Set source table for page '${pageResult.pageName}' to '${pageResult.sourceTable}'`
+                    );
                   } else if (
                     !Object.prototype.hasOwnProperty.call(
                       pageSourceTableCache,
@@ -227,6 +353,10 @@ async function _updateFieldsCacheInternal(options) {
                   ) {
                     // If page has no source table and isn't in cache, add it with null
                     pageSourceTableCache[pageResult.pageName] = null;
+
+                    logger.verbose(
+                      `[Worker] Added page '${pageResult.pageName}' with no source table`
+                    );
                   }
                 }
 
@@ -245,12 +375,23 @@ async function _updateFieldsCacheInternal(options) {
         }
       } catch (scanErr) {
         logger.error(`[Worker] Error scanning directory ${dir}:`, scanErr);
-        // Decide if we should stop or continue
+        // Continue with other directories even if one fails
       }
     };
 
-    await scanDirectory(srcExtractionPath);
-    logger.info("[Worker] Finished scanning.");
+    // First scan workspace folders (higher priority)
+    if (workspaceFolders && workspaceFolders.length > 0) {
+      logger.info(
+        `[Worker] Scanning ${workspaceFolders.length} workspace folders first...`
+      );
+      for (const workspaceFolder of workspaceFolders) {
+        await scanDirectory(workspaceFolder, true); // true indicates it's a workspace directory
+      }
+    }
+
+    // Then scan srcExtractionPath (dependency files)
+    await scanDirectory(srcExtractionPath, false);
+    logger.info("[Worker] Finished scanning all directories.");
 
     // 4. Identify and remove deleted files from cache/metadata
     let deletedCount = 0;
@@ -301,12 +442,33 @@ async function _updateFieldsCacheInternal(options) {
     }
 
     // 6. Send updated data back to main thread
+    // Log summary of what we're sending back
+    const tableCount = Object.keys(tableFieldsCache).length;
+    const pageCount = Object.keys(pageSourceTableCache).length;
+    const totalFieldCount = Object.values(tableFieldsCache).reduce(
+      (sum, fields) => sum + fields.length,
+      0
+    );
+
+    logger.info(
+      `[Worker] Field cache summary: ${tableCount} tables, ${pageCount} pages, ${totalFieldCount} total fields`
+    );
+
+    // Log some sample tables and their field counts for verification
+    const sampleTables = Object.keys(tableFieldsCache).slice(0, 5);
+    for (const tableName of sampleTables) {
+      logger.info(
+        `[Worker] Sample table '${tableName}' has ${tableFieldsCache[tableName].length} fields`
+      );
+    }
+
     process.send({
       type: "fieldCacheData",
       tableFieldsCache,
       pageSourceTableCache,
-      metadata, // Send metadata back too, maybe useful for main thread
+      metadata,
     });
+
     logger.info("[Worker] Sent updated fieldCacheData to main thread.");
   } catch (err) {
     logger.error("[Worker] Error during field cache update process:", err);
@@ -836,10 +998,39 @@ process.on("message", async (message) => {
       }
 
       logger.info("[Worker] Received updateFieldCache message");
+
+      // Check if workspaceFolders is provided in the options
+      if (message.options && message.options.workspaceFolders) {
+        logger.info(
+          `[Worker] Workspace folders provided: ${message.options.workspaceFolders.length}`
+        );
+      } else {
+        logger.info(
+          "[Worker] No workspace folders provided, using only srcExtractionPath"
+        );
+      }
+
       await _updateFieldsCacheInternal(message.options);
       // Potentially send completion message or exit differently?
       // For now, let's assume it completes and stays alive for other tasks.
       // process.exit(0); // Might not want to exit if worker handles multiple tasks
+    } else if (message.type === "refreshFieldCache") {
+      // Special message type for forcing a full refresh
+      if (message.options && message.options.logLevel) {
+        logger.setLogLevel(message.options.logLevel);
+      }
+
+      logger.info(
+        "[Worker] Received refreshFieldCache message - forcing full refresh"
+      );
+
+      // Set forceRefresh flag in options
+      const refreshOptions = {
+        ...message.options,
+        forceRefresh: true,
+      };
+
+      await _updateFieldsCacheInternal(refreshOptions);
     }
   } catch (error) {
     logger.error("Unhandled error in worker:", error);

@@ -155,9 +155,12 @@ async function updateSymbolCacheForFile(filePath) {
 /**
  * Initializes the field cache by loading persisted data and triggering a background update.
  * @param {vscode.ExtensionContext} context - Extension context
+ * @param {boolean} forceRefresh - Whether to force a full refresh of the cache
  */
-async function initializeFieldCache(context) {
-  logger.info("[Cache] Initializing field cache...");
+async function initializeFieldCache(context, forceRefresh = false) {
+  logger.info(
+    `[Cache] Initializing field cache... (forceRefresh: ${forceRefresh})`
+  );
   const globalStoragePath = context.globalStorageUri.fsPath;
   const metadataFilePath = path.join(
     globalStoragePath,
@@ -173,38 +176,44 @@ async function initializeFieldCache(context) {
   let loadedTableCache = {};
   let loadedPageCache = {};
 
-  // 1. Load existing cache and metadata
+  // 1. Load existing cache and metadata (unless force refresh is enabled)
   try {
     await fs.promises.mkdir(globalStoragePath, { recursive: true }); // Ensure directory exists
 
-    if (fs.existsSync(metadataFilePath)) {
-      loadedMetadata = JSON.parse(
-        await fs.promises.readFile(metadataFilePath, "utf8")
-      );
+    if (!forceRefresh) {
+      if (fs.existsSync(metadataFilePath)) {
+        loadedMetadata = JSON.parse(
+          await fs.promises.readFile(metadataFilePath, "utf8")
+        );
+        logger.info(
+          `[Cache] Loaded field cache metadata (${
+            Object.keys(loadedMetadata).length
+          } entries).`
+        );
+      }
+      if (fs.existsSync(tableCacheFilePath)) {
+        loadedTableCache = JSON.parse(
+          await fs.promises.readFile(tableCacheFilePath, "utf8")
+        );
+        logger.info(
+          `[Cache] Loaded persisted table field cache (${
+            Object.keys(loadedTableCache).length
+          } tables).`
+        );
+      }
+      if (fs.existsSync(pageCacheFilePath)) {
+        loadedPageCache = JSON.parse(
+          await fs.promises.readFile(pageCacheFilePath, "utf8")
+        );
+        logger.info(
+          `[Cache] Loaded persisted page source table cache (${
+            Object.keys(loadedPageCache).length
+          } pages).`
+        );
+      }
+    } else {
       logger.info(
-        `[Cache] Loaded field cache metadata (${
-          Object.keys(loadedMetadata).length
-        } entries).`
-      );
-    }
-    if (fs.existsSync(tableCacheFilePath)) {
-      loadedTableCache = JSON.parse(
-        await fs.promises.readFile(tableCacheFilePath, "utf8")
-      );
-      logger.info(
-        `[Cache] Loaded persisted table field cache (${
-          Object.keys(loadedTableCache).length
-        } tables).`
-      );
-    }
-    if (fs.existsSync(pageCacheFilePath)) {
-      loadedPageCache = JSON.parse(
-        await fs.promises.readFile(pageCacheFilePath, "utf8")
-      );
-      logger.info(
-        `[Cache] Loaded persisted page source table cache (${
-          Object.keys(loadedPageCache).length
-        } pages).`
+        "[Cache] Force refresh enabled, skipping loading of persisted cache"
       );
     }
 
@@ -223,32 +232,45 @@ async function initializeFieldCache(context) {
   try {
     const config = vscode.workspace.getConfiguration("bc-al-upgradeassistant");
     const srcExtractionPath = config.get("srcExtractionPath", "");
-    let appName = "UnknownApp"; // Default app name
 
-    // Find app.json in the root of the first workspace folder
+    // Try to determine app name from app.json
+    let appName = "UnknownApp";
+
+    // Get workspace folders for scanning
+    const workspaceFolders = [];
+
+    // Find app.json and collect workspace folders
     if (
       vscode.workspace.workspaceFolders &&
       vscode.workspace.workspaceFolders.length > 0
     ) {
-      const rootPath = vscode.workspace.workspaceFolders[0].uri.fsPath;
-      const appJsonPath = path.join(rootPath, "app.json");
-      if (fs.existsSync(appJsonPath)) {
-        try {
-          const appJson = readJsonFile(appJsonPath);
-          appName = appJson?.name ?? appName;
-        } catch (appJsonErr) {
-          logger.error(
-            `[Cache] Error reading app.json at ${appJsonPath}:`,
-            appJsonErr
-          );
+      // Add all workspace folders to the list
+      for (const folder of vscode.workspace.workspaceFolders) {
+        workspaceFolders.push(folder.uri.fsPath);
+
+        // Try to find app.json in each workspace folder
+        const appJsonPath = path.join(folder.uri.fsPath, "app.json");
+        if (fs.existsSync(appJsonPath) && appName === "UnknownApp") {
+          try {
+            const appJson = readJsonFile(appJsonPath);
+            if (appJson?.name) {
+              appName = appJson.name;
+              logger.info(`[Cache] Found app name in app.json: ${appName}`);
+            }
+          } catch (appJsonErr) {
+            logger.error(
+              `[Cache] Error reading app.json at ${appJsonPath}:`,
+              appJsonErr
+            );
+          }
         }
-      } else {
-        logger.warn(
-          `[Cache] app.json not found in workspace root: ${rootPath}`
-        );
+      }
+
+      if (appName === "UnknownApp") {
+        logger.warn("[Cache] Could not find app name in any app.json file");
       }
     } else {
-      logger.warn("[Cache] No workspace folder found to determine app name.");
+      logger.warn("[Cache] No workspace folders found");
     }
 
     if (!srcExtractionPath) {
@@ -265,17 +287,27 @@ async function initializeFieldCache(context) {
       srcExtractionPath,
       globalStoragePath,
       appName,
-      logLevel, // Pass the log level to the worker
+      logLevel,
+      workspaceFolders,
+      forceRefresh,
     };
 
     // Get worker instance and send message
-    const worker = getSymbolCacheWorker(); // Need to ensure this function exists and returns the worker process
+    const worker = getSymbolCacheWorker();
     if (worker) {
-      logger.info("[Cache] Sending updateFieldCache message to worker.");
-      worker.send({ type: "updateFieldCache", options: workerOptions });
+      // Determine message type based on forceRefresh flag
+      const messageType = forceRefresh
+        ? "refreshFieldCache"
+        : "updateFieldCache";
+      logger.info(`[Cache] Sending ${messageType} message to worker.`);
+      logger.info(
+        `[Cache] Worker options: srcExtractionPath=${srcExtractionPath}, appName=${appName}, workspaceFolders=${workspaceFolders.length}`
+      );
 
-      // Add message handler for worker responses *here* or ensure it's handled elsewhere
-      // Example: worker.on('message', handleWorkerFieldCacheMessage);
+      worker.send({
+        type: messageType,
+        options: workerOptions,
+      });
     } else {
       logger.error(
         "[Cache] Could not get symbol cache worker instance to update field cache."
