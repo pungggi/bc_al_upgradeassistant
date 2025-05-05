@@ -10,8 +10,8 @@ const mkdir = util.promisify(fs.mkdir);
 const readdir = util.promisify(fs.readdir);
 const rmdir = util.promisify(fs.rmdir);
 
-// Import the logger
-const { logger } = require("./utils/logger");
+// Import the worker-specific logger that doesn't depend on vscode
+const { logger } = require("./utils/workerLogger");
 
 /**
  * Parse AL table content to extract field names
