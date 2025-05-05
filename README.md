@@ -12,8 +12,6 @@ A Visual Studio Code extension to assist in upgrading from older NAV or BC Versi
 - Migrate obsolete code. (like NoSeriesManagement, Codeunit 1 and more)
 - AI-powered custom prompts. Create .al Files directly from the response.
 
-A tutorial of how to use those features will be released.
-
 Any [feedback](https://ngsoftware.canny.io/requests) is welcome.
 
 ## Requirements
