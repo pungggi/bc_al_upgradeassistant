@@ -7,6 +7,8 @@ A Visual Studio Code extension to assist in upgrading from older NAV or BC Versi
 - Documentation Reference Management. Keep track of your progress and notes.
 - Navigate to and from Referenced Migration files (.txt)
 - Suggests available events to subscribe to
+- Automatically generates event subscriber code for Integration Events
+- Automatically generates event subscriber code for Record Triggers
 - Migrate obsolete code. (like NoSeriesManagement, Codeunit 1 and more)
 - AI-powered custom prompts. Create .al Files directly from the response.
 
@@ -172,6 +174,73 @@ To use this feature enable source extraction in settings:
 ## Field Name Suggestion
 
 When an unknown or misspelled field is used, the extension will show quick fix suggestions. Similar field names are detected using string similarity, allowing you to easily replace the invalid field with a valid one.
+
+## Integration Event Action Provider
+
+The Integration Event Action Provider automatically generates event subscriber code for integration events in AL. This saves time and reduces errors when implementing event-based communication between different modules or extensions.
+
+### How it works
+
+1. When your cursor is on a line that calls an integration event (e.g., `OnBeforePostDocument(SalesHeader, IsHandled);`)
+2. The provider detects this is a call to an integration event defined in the same file
+3. It offers a code action (via the lightbulb menu) to "Generate Event Subscriber for '[EventName]'"
+4. When selected, it generates the complete event subscriber code and copies it to your clipboard
+
+### Example
+
+If you have a codeunit with an integration event like:
+
+```al
+[IntegrationEvent(false, false)]
+local procedure OnBeforePostDocument(var SalesHeader: Record "Sales Header"; var IsHandled: Boolean)
+begin
+end;
+```
+
+And you place your cursor on a line that calls this event:
+
+```al
+OnBeforePostDocument(SalesHeader, IsHandled);
+```
+
+The provider will generate and copy to your clipboard:
+
+```al
+[EventSubscriber(ObjectType::Codeunit, Codeunit::"Sales-Post", 'OnBeforePostDocument', '', false, false)]
+local procedure SubscribeOnBeforePostDocument(var Sender: Codeunit "Sales-Post"; var SalesHeader: Record "Sales Header"; var IsHandled: Boolean)
+begin
+end;
+```
+
+You can then paste this code into your subscriber codeunit and implement your custom logic.
+
+## Record Trigger Action Provider
+
+Similar to the Integration Event Action Provider, the Record Trigger Action Provider automatically generates event subscriber code for record triggers (Insert, Modify, Delete, Rename) in AL.
+
+### How it works
+
+1. When your cursor is on a line that calls a record trigger (e.g., `SalesHeader.Insert();`)
+2. The provider detects this is a call to a record trigger
+3. It offers a code action to "Copy subscriber info to clipboard"
+4. When selected, it generates the appropriate event subscriber code and copies it to your clipboard
+
+### Example
+
+If you have code that inserts a record:
+
+```al
+SalesHeader.Insert();
+```
+
+The provider will generate and copy to your clipboard:
+
+```al
+[EventSubscriber(ObjectType::Table, Database::"Sales Header", OnBeforeInsertEvent, '', false, false)]
+local procedure Tab_SalesHeader_OnBeforeInsert(var Rec: Record "Sales Header")
+begin
+end;
+```
 
 ## Commands
 
