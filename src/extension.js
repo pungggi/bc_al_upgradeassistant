@@ -50,11 +50,11 @@ async function activate(context) {
     registerfileEvents(context);
 
     // Then proceed with other registrations
-    logger.info("Registering commands...");
-    registerCommands(context);
-
     logger.info("Registering views...");
     const { fileReferenceProvider } = registerViews(context);
+
+    logger.info("Registering commands...");
+    registerCommands(context, fileReferenceProvider);
 
     // Initialize symbol cache
     // Initialize symbol cache (this likely sets up the worker)
