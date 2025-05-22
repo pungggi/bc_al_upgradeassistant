@@ -1,3 +1,5 @@
+const { getObjectDefinition } = require('../al-parser-lib/alparser.js');
+
 /**
  * AL Layout Parsing Utilities
  */
@@ -22,6 +24,22 @@ function unquotePath(str) {
  * @returns {{ label: string, path: string }[]} An array of layout objects.
  */
 function extractReportLayouts(documentText) {
+  const alObject = getObjectDefinition(documentText);
+  if (!alObject || alObject.Type !== 'Report') {
+    return [];
+  }
+
+  // Note: getObjectDefinition from al-parser-lib is used for initial object type confirmation.
+  // The actual layout properties below are extracted using regular expressions.
+  //
+  // TODO: Future Enhancement with al-parser-lib
+  // The following regex-based parsing is a fallback.
+  // If al-parser-lib is enhanced to provide detailed property extraction,
+  // replace this section. For example, if a function like
+  // `alParser.getReportProperties(documentText)` becomes available
+  // that returns an object/map of all properties, it should be used here
+  // to directly access 'RDLCLayout', 'WordLayout', 'ExcelLayout', etc.
+
   const layouts = [];
   const layoutProperties = [
     { name: "RDLCLayout", label: "RDLC Layout" },
@@ -54,6 +72,23 @@ function extractReportLayouts(documentText) {
  * @returns {{ label: string, path: string }[]} An array of layout objects.
  */
 function extractReportExtensionLayouts(documentText) {
+  const alObject = getObjectDefinition(documentText);
+  if (!alObject || alObject.Type !== 'ReportExtension') {
+    return [];
+  }
+
+  // Note: getObjectDefinition from al-parser-lib is used for initial object type confirmation.
+  // The actual rendering layouts below are extracted using regular expressions.
+  //
+  // TODO: Future Enhancement with al-parser-lib
+  // The following regex-based parsing is a fallback.
+  // If al-parser-lib is enhanced to parse the full AL syntax tree,
+  // replace this section. For example, if a function like
+  // `alParser.getReportExtensionLayouts(documentText)` becomes available
+  // that returns a structured representation of the 'rendering' block
+  // (e.g., an array of { name, layoutFile, caption } objects),
+  // it should be used here.
+
   const layouts = [];
   // First, try to find the 'rendering' block.
   // This regex captures the content inside the rendering { ... } block.

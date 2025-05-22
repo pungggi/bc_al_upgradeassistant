@@ -9,8 +9,7 @@ const {
 describe('AL Layout Parser', () => {
   describe('extractReportLayouts', () => {
     it('should find RDLCLayout with single quotes', () => {
-      const alContent = `
-report 50100 MyReport
+      const alContent = `report 50100 MyReport
 {
     DefaultLayout = RDLC;
     RDLCLayout = 'src/layouts/MyReport.rdl';
@@ -20,8 +19,7 @@ report 50100 MyReport
     });
 
     it('should find RDLCLayout with double quotes', () => {
-      const alContent = `
-report 50101 AnotherReport
+      const alContent = `report 50101 AnotherReport
 {
     RDLCLayout = "src/layouts/AnotherReport.rdl";
 }`;
@@ -30,8 +28,7 @@ report 50101 AnotherReport
     });
 
     it('should find WordLayout', () => {
-      const alContent = `
-report 50102 WordReport
+      const alContent = `report 50102 WordReport
 {
     DefaultLayout = Word;
     WordLayout = 'src/layouts/WordReport.docx';
@@ -41,8 +38,7 @@ report 50102 WordReport
     });
 
     it('should find ExcelLayout', () => {
-      const alContent = `
-report 50103 ExcelReport
+      const alContent = `report 50103 ExcelReport
 {
     DefaultLayout = Excel;
     ExcelLayout = 'src/layouts/ExcelReport.xlsx';
@@ -52,13 +48,12 @@ report 50103 ExcelReport
     });
 
     it('should find multiple layout properties', () => {
-      const alContent = `
-report 50104 MultiReport
+      const alContent = `report 50104 MultiReport
 {
     DefaultLayout = RDLC;
     RDLCLayout = './src/layouts/MyReport.rdl';
     WordLayout = "./src/layouts/MyReport.docx";
-    ExcelLayout = 'src/layouts/ExcelReport.xlsx'; // Added ExcelLayout
+    ExcelLayout = 'src/layouts/ExcelReport.xlsx';
 }`;
       const layouts = extractReportLayouts(alContent);
       assert.deepStrictEqual(layouts, [
@@ -68,9 +63,8 @@ report 50104 MultiReport
       ], 'Test Case 5 Failed');
     });
 
-    it('should return an empty array if no layout properties', () => {
-      const alContent = `
-report 50105 NoLayoutReport
+    it('should return an empty array if no layout properties in a report object', () => {
+      const alContent = `report 50105 NoLayoutReport
 {
     Caption = 'No Layouts Here';
 }`;
@@ -78,9 +72,8 @@ report 50105 NoLayoutReport
       assert.deepStrictEqual(layouts, [], 'Test Case 6 Failed');
     });
 
-    it('should find layout property with unusual spacing', () => {
-      const alContent = `
-report 50106 SpacedReport
+    it('should find layout property with unusual spacing in a report object', () => {
+      const alContent = `report 50106 SpacedReport
 {
     RDLCLayout   =   'src/layouts/SpacedReport.rdl' ;
 }`;
@@ -88,9 +81,8 @@ report 50106 SpacedReport
       assert.deepStrictEqual(layouts, [{ label: 'RDLC Layout', path: 'src/layouts/SpacedReport.rdl' }], 'Test Case 7 Failed');
     });
 
-    it('should not find commented out layout property (single line comment)', () => {
-      const alContent = `
-report 50107 CommentedReport
+    it('should not find commented out layout property (single line comment) in a report object', () => {
+      const alContent = `report 50107 CommentedReport
 {
     // RDLCLayout = 'src/layouts/Commented.rdl';
     WordLayout = 'src/layouts/Actual.docx';
@@ -99,9 +91,8 @@ report 50107 CommentedReport
       assert.deepStrictEqual(layouts, [{ label: 'Word Layout', path: 'src/layouts/Actual.docx' }], 'Test Case 8 Failed');
     });
     
-    it('should not find commented out layout property (block comment)', () => {
-      const alContent = `
-report 50108 CommentedReportBlock
+    it('should not find commented out layout property (block comment) in a report object', () => {
+      const alContent = `report 50108 CommentedReportBlock
 {
     /*
     RDLCLayout = 'src/layouts/Commented.rdl';
@@ -109,17 +100,12 @@ report 50108 CommentedReportBlock
     */
     ExcelLayout = 'src/layouts/RealLayout.xlsx';
 }`;
-      // Current regex doesn't explicitly handle block comments, it relies on line-by-line matching.
-      // If a property within a block comment matches the line pattern, it might be picked up.
-      // This test assumes simple line matching; robust comment skipping needs more advanced parsing.
-      // For now, the regex `^\\s*${prop.name}\\s*=\\s*['"]([^'"]+)['"]\\s*;` is per line.
       const layouts = extractReportLayouts(alContent);
-      assert.deepStrictEqual(layouts, [{ label: 'Excel Layout', path: 'src/layouts/RealLayout.xlsx' }], 'Test Case 9 Failed - Block comments might need specific handling if regex is too simple');
+      assert.deepStrictEqual(layouts, [{ label: 'Excel Layout', path: 'src/layouts/RealLayout.xlsx' }], 'Test Case 9 Failed');
     });
 
-    it('should handle layout properties mixed with other properties', () => {
-        const alContent = `
-report 50109 MixedPropsReport
+    it('should handle layout properties mixed with other properties in a report object', () => {
+        const alContent = `report 50109 MixedPropsReport
 {
     Caption = 'Mixed Properties Report';
     RDLCLayout = 'src/layouts/MixedReport.rdl';
@@ -132,12 +118,33 @@ report 50109 MixedPropsReport
             { label: 'Word Layout', path: 'src/layouts/MixedWord.docx' }
         ], 'Test Case 10 Failed');
     });
+
+    it('should return empty array if object type is not Report (e.g., Table)', () => {
+      const alContent = `table 50100 MyTable
+{
+    fields
+    {
+        field(1; MyField; Integer) { }
+    }
+    // RDLCLayout = 'src/layouts/TableReport.rdl'; // This would be ignored
+}`;
+      const layouts = extractReportLayouts(alContent);
+      assert.deepStrictEqual(layouts, [], 'Test Case New-A Failed: Incorrect object type');
+    });
+
+    it('should return empty array if no valid AL object definition found', () => {
+      const alContent = `This is not a valid AL object.
+{
+    RDLCLayout = 'src/layouts/InvalidObject.rdl';
+}`;
+      const layouts = extractReportLayouts(alContent);
+      assert.deepStrictEqual(layouts, [], 'Test Case New-B Failed: Invalid object definition');
+    });
   });
 
   describe('extractReportExtensionLayouts', () => {
     it('should find a single layout in rendering block', () => {
-      const alContent = `
-reportextension 50100 MyReportExt extends MyReport
+      const alContent = `reportextension 50100 MyReportExt extends MyReport
 {
     rendering
     {
@@ -154,8 +161,7 @@ reportextension 50100 MyReportExt extends MyReport
     });
 
     it('should find multiple layout blocks', () => {
-      const alContent = `
-reportextension 50101 MultiLayoutExt extends AnotherReport
+      const alContent = `reportextension 50101 MultiLayoutExt extends AnotherReport
 {
     rendering
     {
@@ -169,7 +175,6 @@ reportextension 50101 MultiLayoutExt extends AnotherReport
         {
             Type = Word;
             LayoutFile = 'src/layouts/ExtReport1.docx';
-            // Caption defined by default name
         }
     }
 }`;
@@ -181,8 +186,7 @@ reportextension 50101 MultiLayoutExt extends AnotherReport
     });
 
     it('should handle layout with only LayoutFile (no Caption)', () => {
-      const alContent = `
-reportextension 50102 NoCaptionExt extends ReportX
+      const alContent = `reportextension 50102 NoCaptionExt extends ReportX
 {
     rendering
     {
@@ -197,9 +201,8 @@ reportextension 50102 NoCaptionExt extends ReportX
       assert.deepStrictEqual(layouts, [{ label: 'Layout: SimpleLayout', path: 'src/layouts/SimpleExcel.xlsx' }], 'Test Case 13 Failed');
     });
     
-    it('should return empty array for empty rendering block', () => {
-      const alContent = `
-reportextension 50103 EmptyRenderExt extends ReportY
+    it('should return empty array for empty rendering block in a reportextension', () => {
+      const alContent = `reportextension 50103 EmptyRenderExt extends ReportY
 {
     rendering
     {
@@ -210,9 +213,8 @@ reportextension 50103 EmptyRenderExt extends ReportY
       assert.deepStrictEqual(layouts, [], 'Test Case 14 Failed');
     });
 
-    it('should return empty array if no rendering block', () => {
-      const alContent = `
-reportextension 50104 NoRenderExt extends ReportZ
+    it('should return empty array if no rendering block in a reportextension', () => {
+      const alContent = `reportextension 50104 NoRenderExt extends ReportZ
 {
     dataset { }
 }`;
@@ -220,9 +222,8 @@ reportextension 50104 NoRenderExt extends ReportZ
       assert.deepStrictEqual(layouts, [], 'Test Case 15 Failed');
     });
 
-    it('should handle single and double quotes for paths and names', () => {
-      const alContent = `
-reportextension 50105 QuoteMixExt extends ReportQ
+    it('should handle single and double quotes for paths and names in a reportextension', () => {
+      const alContent = `reportextension 50105 QuoteMixExt extends ReportQ
 {
     rendering
     {
@@ -245,9 +246,8 @@ reportextension 50105 QuoteMixExt extends ReportQ
       ], 'Test Case 16 Failed');
     });
 
-    it('should handle unusual spacing in layout definitions', () => {
-      const alContent = `
-reportextension 50106 SpacedExt extends ReportS
+    it('should handle unusual spacing in layout definitions in a reportextension', () => {
+      const alContent = `reportextension 50106 SpacedExt extends ReportS
 {
     rendering
     {
@@ -262,9 +262,8 @@ reportextension 50106 SpacedExt extends ReportS
       assert.deepStrictEqual(layouts, [{ label: 'Spaced Out Caption (SpacedLayoutName)', path: 'src/layouts/SpacedLayout.rdl' }], 'Test Case 17 Failed');
     });
 
-    it('should not find commented out rendering block', () => {
-      const alContent = `
-reportextension 50107 CommentedRenderExt extends ReportC
+    it('should not find commented out rendering block in a reportextension', () => {
+      const alContent = `reportextension 50107 CommentedRenderExt extends ReportC
 {
     /*
     rendering
@@ -280,9 +279,8 @@ reportextension 50107 CommentedRenderExt extends ReportC
       assert.deepStrictEqual(layouts, [], 'Test Case 18 Failed');
     });
     
-    it('should not find commented out layout block within rendering', () => {
-      const alContent = `
-reportextension 50108 CommentedLayoutExt extends ReportCL
+    it('should not find commented out layout block within rendering in a reportextension', () => {
+      const alContent = `reportextension 50108 CommentedLayoutExt extends ReportCL
 {
     rendering
     {
@@ -299,6 +297,28 @@ reportextension 50108 CommentedLayoutExt extends ReportCL
 }`;
       const layouts = extractReportExtensionLayouts(alContent);
       assert.deepStrictEqual(layouts, [{ label: 'This one is visible (VisibleLayout)', path: 'src/layouts/Visible.rdl' }], 'Test Case 19 Failed');
+    });
+
+    it('should return empty array if object type is not ReportExtension (e.g., PageExtension)', () => {
+      const alContent = `pageextension 50100 MyPageExt extends MyPage
+{
+    layout
+    {
+        // addfirst(Content) { field(MyField; Rec.MyField) {} }
+    }
+    // rendering { layout('Hidden') { LayoutFile = 'test.rdl'; } } // This would be ignored
+}`;
+      const layouts = extractReportExtensionLayouts(alContent);
+      assert.deepStrictEqual(layouts, [], 'Test Case New-C Failed: Incorrect object type');
+    });
+
+    it('should return empty array if no valid AL object definition found for reportextension', () => {
+      const alContent = `This is not a valid AL object for reportextension.
+{
+    rendering { layout('A') { LayoutFile = 'invalid.rdl'; } }
+}`;
+      const layouts = extractReportExtensionLayouts(alContent);
+      assert.deepStrictEqual(layouts, [], 'Test Case New-D Failed: Invalid object definition');
     });
   });
 
