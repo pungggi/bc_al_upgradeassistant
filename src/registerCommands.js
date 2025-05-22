@@ -6,14 +6,16 @@ const configManager = require("./utils/configManager");
 const {
   initializeSymbolCache,
   initializeFieldCache,
-} = require("./utils/cacheHelper"); // Import from new location
+} = require("./utils/cacheHelper");
 const { registerCommandOnce } = require("./utils/commandHelper");
 const { EXTENSION_ID } = require("./constants");
 const { registerClipboardMonitor } = require("./clipboardMonitor");
 const { suggestFieldNames } = require("./commands/fieldSuggestionCommand");
-const { openLayoutFileExternally } = require("../commands/openLayoutFileExternally"); // Added import
+const {
+  openLayoutFileExternally,
+} = require("./commands/openLayoutFileExternally");
 
-function registerOpenLayoutFileExternallyCommand(context) { // Added function
+function registerOpenLayoutFileExternallyCommand(context) {
   registerCommandOnce(
     context,
     "bc-al-upgradeassistant.openLayoutFileExternally",
@@ -22,7 +24,7 @@ function registerOpenLayoutFileExternallyCommand(context) { // Added function
 }
 
 function registerCommands(context) {
-  registerOpenLayoutFileExternallyCommand(context); // Added call
+  registerOpenLayoutFileExternallyCommand(context);
   registerRefreshSymbolCacheCommand(context);
   registerRefreshFieldCacheCommand(context);
   registerSplitCalObjectsByPathCommand(context);
