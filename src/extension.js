@@ -12,7 +12,7 @@ const {
   initializeSymbolCache,
   initializeFieldCache,
 } = require("./utils/cacheHelper"); // Import from new location
-const ExtendedObjectHoverProvider = require("./hover/extendedObjectHoverProvider");
+
 const { EXTENSION_ID } = require("./constants");
 const { registerViews } = require("./views/registerViews");
 const {
@@ -28,6 +28,7 @@ const {
   ObjectSuggestionActionProvider,
 } = require("./providers/objectSuggestionProvider");
 const { logger } = require("./utils/logger");
+const ALObjectHoverProvider = require("./hover/alObjectHoverProvider");
 
 let globalStatusBarItems = {};
 
@@ -80,12 +81,15 @@ async function activate(context) {
 
     modelHelper.initializeModels();
 
-    // Register the CodeLens provider for AL files
+    // Register the AL Object Hover provider for AL files
     context.subscriptions.push(
-      vscode.languages.registerCodeLensProvider(
+      vscode.languages.registerHoverProvider(
         { scheme: "file", language: "al" },
-        new ExtendedObjectHoverProvider()
+        new ALObjectHoverProvider()
       )
+    );
+    logger.info(
+      "[Extension Activation] ALObjectHoverProvider registered successfully"
     );
 
     // Register the Object Suggestion provider for AL files

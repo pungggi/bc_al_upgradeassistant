@@ -36,7 +36,7 @@ async function handleAlFileChange(
   try {
     // Extract object information from the AL file
     const objectTypeRegex =
-      /\b(table|tableextension|page|pageextension|report|reportextension|codeunit|query|xmlport|enum|enumextension|profile|interface)\b\s+(\d+)\s+["']([^"']+)["']/i;
+      /\b(table|tableextension|page|pageextension|report|reportextension|codeunit|query|xmlport|enum|enumextension|profile|interface)\b\s+(\d+)\s+(["']([^"']+)["']|[^\s\{]+)/i;
     const objectMatch = newContent.match(objectTypeRegex);
     if (!objectMatch) {
       console.warn(`Could not extract object info from ${filePath}`);
