@@ -1,3 +1,4 @@
+/* eslint-env mocha */
 const assert = require("assert");
 const {
   extractReportLayouts,
@@ -193,7 +194,7 @@ describe("AL Layout Parser", () => {
         layout(RDLCLayout)
         {
             Type = RDLC;
-            LayoutFile = '.\_Base\report\terwet.rdl';
+            LayoutFile = './_Base/report/terwet.rdl';
             Caption = 'Test RDLC Layout';
         }
         layout(WordLayout)

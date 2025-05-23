@@ -17,7 +17,7 @@ class ALObjectHoverProvider {
    * @param {vscode.CancellationToken} token - Cancellation token
    * @returns {vscode.Hover | null} - The hover information
    */
-  async provideHover(document, position, token) {
+  async provideHover(document, position) {
     try {
       logger.info(
         `[Hover] Providing hover for ${document.uri.fsPath} at line ${

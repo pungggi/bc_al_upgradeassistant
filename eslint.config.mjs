@@ -9,4 +9,13 @@ export default [
   { files: ["**/*.js"], languageOptions: { sourceType: "commonjs" } },
   { languageOptions: { globals: globals.node } },
   pluginJs.configs.recommended,
+  {
+    files: ["test/**/*.js"],
+    languageOptions: {
+      globals: {
+        describe: "readonly",
+        it: "readonly",
+      },
+    },
+  },
 ];

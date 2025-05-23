@@ -9,7 +9,7 @@ const testReportWithRendering = `report 50100 "Test Report"
         layout(RDLCLayout)
         {
             Type = RDLC;
-            LayoutFile = '.\_Base\report\terwet.rdl';
+            LayoutFile = './_Base\report\terwet.rdl';
             Caption = 'Test RDLC Layout';
         }
         layout(WordLayout)
