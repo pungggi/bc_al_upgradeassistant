@@ -321,10 +321,9 @@ class LayoutPropertiesActionProvider {
    * Provide code actions for layout properties transformation
    * @param {vscode.TextDocument} document - The document
    * @param {vscode.Range} range - The range
-   * @param {vscode.CodeActionContext} context - The context
    * @returns {vscode.CodeAction[]} - The code actions
    */
-  async provideCodeActions(document, range, context) {
+  async provideCodeActions(document, range) {
     // Only process AL files
     if (document.languageId !== "al") {
       return [];
