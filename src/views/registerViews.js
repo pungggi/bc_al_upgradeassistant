@@ -395,4 +395,4 @@ function registerViews(context) {
   return { fileReferenceProvider };
 }
 
-module.exports = { registerViews, fileReferenceProvider };
+module.exports = { registerViews };
