@@ -27,6 +27,9 @@ const {
 const {
   ObjectSuggestionActionProvider,
 } = require("./providers/objectSuggestionProvider");
+const {
+  LayoutPropertiesActionProvider,
+} = require("./providers/layoutPropertiesActionProvider");
 const { logger } = require("./utils/logger");
 const ALObjectHoverProvider = require("./hover/alObjectHoverProvider");
 
@@ -1230,6 +1233,17 @@ async function activate(context) {
 
       // Field cache initialization is now handled by initializeFieldCache called earlier
     }
+
+    // Register layout properties transformation provider
+    context.subscriptions.push(
+      vscode.languages.registerCodeActionsProvider(
+        { scheme: "file", language: "al" },
+        new LayoutPropertiesActionProvider(),
+        {
+          providedCodeActionKinds: [vscode.CodeActionKind.RefactorRewrite],
+        }
+      )
+    );
 
     logger.info(`${EXTENSION_ID} extension activated successfully`);
   } catch (error) {
