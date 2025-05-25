@@ -194,6 +194,12 @@
         "title": "Show All Tasks",
         "category": "BC/AL Upgrade Assistant",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.popoutReferencesView",
+        "title": "Pop Out References View",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(link-external)"
       }
     ],
     "menus": {
@@ -234,6 +240,11 @@
           "command": "bc-al-upgradeassistant.clearTaskFilters",
           "when": "view == bc-al-references || view == bc-al-file-info",
           "group": "navigation@3"
+        },
+        {
+          "command": "bc-al-upgradeassistant.popoutReferencesView",
+          "when": "view == bc-al-references || view == bc-al-file-info",
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
@@ -851,10 +862,11 @@
     "webpack-obfuscator": "^3.5.1"
   },
   "dependencies": {
+    "@vscode/codicons": "^0.0.36",
     "axios": "^1.6.0",
+    "fastest-levenshtein": "^1.0.16",
     "glob": "^7.2.3",
     "jszip": "^3.10.0",
-    "fastest-levenshtein": "^1.0.16",
     "xml2js": "^0.6.2"
   }
 }
