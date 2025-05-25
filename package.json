@@ -176,6 +176,24 @@
         "command": "bc-al-upgradeassistant.setTaskReferenceDescription",
         "title": "Set Description for All References with this Task ID",
         "icon": "$(edit)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.filterDoneTasks",
+        "title": "Show Done Tasks",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(check)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.filterNotDoneTasks",
+        "title": "Show Not Done Tasks",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(circle-outline)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.clearTaskFilters",
+        "title": "Show All Tasks",
+        "category": "BC/AL Upgrade Assistant",
+        "icon": "$(clear-all)"
       }
     ],
     "menus": {
@@ -201,6 +219,21 @@
           "command": "bc-al-upgradeassistant.refreshReferenceView",
           "when": "view == bc-al-references || view == bc-al-file-info",
           "group": "navigation"
+        },
+        {
+          "command": "bc-al-upgradeassistant.filterDoneTasks",
+          "when": "view == bc-al-references || view == bc-al-file-info",
+          "group": "navigation@1"
+        },
+        {
+          "command": "bc-al-upgradeassistant.filterNotDoneTasks",
+          "when": "view == bc-al-references || view == bc-al-file-info",
+          "group": "navigation@2"
+        },
+        {
+          "command": "bc-al-upgradeassistant.clearTaskFilters",
+          "when": "view == bc-al-references || view == bc-al-file-info",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [

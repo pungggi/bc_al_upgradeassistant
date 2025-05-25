@@ -23,7 +23,7 @@ function registerOpenLayoutFileExternallyCommand(context) {
   );
 }
 
-function registerCommands(context) {
+function registerCommands(context, fileReferenceProvider) {
   registerOpenLayoutFileExternallyCommand(context);
   registerRefreshSymbolCacheCommand(context);
   registerRefreshFieldCacheCommand(context);
@@ -54,6 +54,39 @@ function registerCommands(context) {
       }
     }
   );
+
+  // Register filter commands
+  if (fileReferenceProvider) {
+    registerCommandOnce(
+      context,
+      "bc-al-upgradeassistant.filterDoneTasks",
+      () => {
+        fileReferenceProvider.setFilterMode('done');
+      }
+    );
+
+    registerCommandOnce(
+      context,
+      "bc-al-upgradeassistant.filterNotDoneTasks",
+      () => {
+        fileReferenceProvider.setFilterMode('notDone');
+      }
+    );
+
+    registerCommandOnce(
+      context,
+      "bc-al-upgradeassistant.clearTaskFilters",
+      () => {
+        fileReferenceProvider.setFilterMode('all');
+      }
+    );
+  } else {
+    console.error("FileReferenceProvider not available for registering filter commands.");
+    const errorMessage = "Filter commands are unavailable as the File Reference Provider could not be initialized.";
+    registerCommandOnce(context, "bc-al-upgradeassistant.filterDoneTasks", () => vscode.window.showErrorMessage(errorMessage));
+    registerCommandOnce(context, "bc-al-upgradeassistant.filterNotDoneTasks", () => vscode.window.showErrorMessage(errorMessage));
+    registerCommandOnce(context, "bc-al-upgradeassistant.clearTaskFilters", () => vscode.window.showErrorMessage(errorMessage));
+  }
 }
 
 function registerRefreshSymbolCacheCommand(context) {

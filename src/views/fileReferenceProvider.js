@@ -13,6 +13,7 @@ class FileReferenceProvider {
 
     // Store expanded state
     this.expandedState = new Map();
+    this.filterMode = 'all'; // Initialize filterMode
 
     // Load expanded state from storage
     this.storageLoaded = false;
@@ -332,6 +333,7 @@ class FileReferenceProvider {
         fileContent,
         filePath
       );
+      const filteredDocRefs = this._applyFilter(documentationRefs);
 
       // Check for reference file
       if (fs.existsSync(referenceFilePath)) {
@@ -366,8 +368,8 @@ class FileReferenceProvider {
       result.push(new ReferencedObjectsGroup(referencedObjects));
 
       // Add documentation references after referenced objects
-      if (documentationRefs.length > 0) {
-        result.push(new DocumentationRefsItem(documentationRefs, filePath));
+      if (filteredDocRefs.length > 0) {
+        result.push(new DocumentationRefsItem(filteredDocRefs, filePath));
       }
 
       this.updateDecorations();
@@ -448,19 +450,23 @@ class FileReferenceProvider {
           if (fs.existsSync(migFile)) {
             const content = fs.readFileSync(migFile, "utf8");
             const docRefs = this._findDocumentationReferences(content, migFile);
-            if (docRefs.length > 0) {
+            const filteredDocRefsForMig = this._applyFilter(docRefs);
+            if (filteredDocRefsForMig.length > 0) {
               migrationFileRefs.push({
                 file: migFile,
-                refs: docRefs,
+                refs: filteredDocRefsForMig,
               });
             }
           }
         }
 
         // Create migration files node with documentation references
-        result.push(
-          new EnhancedMigrationFilesItem(migrationFiles, migrationFileRefs)
-        );
+        if (migrationFileRefs.length > 0) {
+            result.push(
+              new EnhancedMigrationFilesItem(migrationFiles, migrationFileRefs)
+            );
+        }
+
       }
 
       return result;
@@ -2130,6 +2136,35 @@ class FileReferenceProvider {
     }
   }
 
+  _applyFilter(docRefs) {
+    if (!docRefs || docRefs.length === 0) return [];
+    if (this.filterMode === 'all') {
+        return docRefs;
+    }
+    return docRefs.filter(ref => {
+        if (!ref) return false;
+        const isDone = ref.done === true && (ref.notImplemented === false || ref.notImplemented === undefined);
+        const isNotImplemented = ref.notImplemented === true;
+
+        if (this.filterMode === 'done') {
+            return isDone;
+        }
+        if (this.filterMode === 'notDone') {
+            return !isDone && !isNotImplemented;
+        }
+        return true; // Default for 'all' or unexpected filterMode
+    });
+  }
+
+  setFilterMode(mode) {
+    if (['all', 'done', 'notDone'].includes(mode)) {
+      this.filterMode = mode;
+      this.refresh(); // Triggers _onDidChangeTreeData.fire(null)
+    } else {
+      console.warn(`Invalid filter mode: ${mode}`);
+    }
+  }
+
   updateDecorations() {
     if (!this.currentEditor) {
       return;
@@ -2416,53 +2451,53 @@ class DocumentationRefsItem extends TreeItem {
     const groups = [];
 
     // If only one type of documentation ID or just a few references, return flat list
+    // This needs to use this.docRefs which are already filtered.
+    if (this.docRefs.length === 0) return []; // No references, no children
+
     if (this.distinctIds.length <= 1 && this.docRefs.length <= 3) {
       return this.docRefs.map((ref) => {
         return new DocumentationRefItem(ref, this.filePath);
       });
     }
-
-    // Add procedure references group if we have any
-    if (this.proceduresWithRefs.length > 0) {
-      groups.push(
-        new ProceduresGroupItem(
-          this.proceduresWithRefs,
-          this.docRefs,
-          this.filePath
-        )
-      );
+    
+    // Procedures
+    const proceduresToShow = this.proceduresWithRefs.filter(proc =>
+        this.docRefs.some(ref => ref.lineNumber >= proc.startLine && ref.lineNumber <= proc.endLine)
+    );
+    if (proceduresToShow.length > 0) {
+        groups.push(new ProceduresGroupItem(proceduresToShow, this.docRefs, this.filePath));
     }
 
-    // Add trigger references group if we have any
-    if (this.triggersWithRefs.length > 0) {
-      groups.push(
-        new TriggersGroupItem(
-          this.triggersWithRefs,
-          this.docRefs,
-          this.filePath
-        )
-      );
+    // Triggers
+    const triggersToShow = this.triggersWithRefs.filter(trigger =>
+        this.docRefs.some(ref => ref.lineNumber >= trigger.startLine && ref.lineNumber <= trigger.endLine)
+    );
+    if (triggersToShow.length > 0) {
+        groups.push(new TriggersGroupItem(triggersToShow, this.docRefs, this.filePath));
     }
 
-    // Add action references group if we have any
-    if (this.actionsWithRefs.length > 0) {
-      groups.push(
-        new ActionsGroupItem(this.actionsWithRefs, this.docRefs, this.filePath)
-      );
+    // Actions
+    const actionsToShow = this.actionsWithRefs.filter(action =>
+        this.docRefs.some(ref => ref.lineNumber >= action.startLine && ref.lineNumber <= action.endLine)
+    );
+    if (actionsToShow.length > 0) {
+        groups.push(new ActionsGroupItem(actionsToShow, this.docRefs, this.filePath));
     }
 
-    // Add field references group if we have any
-    if (this.fieldsWithRefs.length > 0) {
-      groups.push(
-        new FieldsGroupItem(this.fieldsWithRefs, this.docRefs, this.filePath)
-      );
+    // Fields
+    const fieldsToShow = this.fieldsWithRefs.filter(field =>
+        this.docRefs.some(ref => ref.lineNumber >= field.startLine && ref.lineNumber <= field.endLine)
+    );
+    if (fieldsToShow.length > 0) {
+        groups.push(new FieldsGroupItem(fieldsToShow, this.docRefs, this.filePath));
     }
+
 
     // If we have task IDs, group by task ID
     if (this.distinctTaskIds.length > 0) {
       // Group references by task ID
       this.distinctTaskIds.forEach((taskId) => {
-        const refsWithTaskId = this.docRefs.filter(
+        const refsWithTaskId = this.docRefs.filter( // this.docRefs is already filtered
           (ref) => ref.taskId === taskId
         );
         if (refsWithTaskId.length > 0) {
@@ -2477,7 +2512,7 @@ class DocumentationRefsItem extends TreeItem {
       });
 
       // Add references without task ID under regular documentation ID groups
-      const refsWithoutTaskId = this.docRefs.filter(
+      const refsWithoutTaskId = this.docRefs.filter( // this.docRefs is already filtered
         (ref) => !ref.taskId || ref.taskId.trim().length === 0
       );
       if (refsWithoutTaskId.length > 0) {
@@ -2486,10 +2521,12 @@ class DocumentationRefsItem extends TreeItem {
         ];
 
         distinctIdsWithoutTask.forEach((id) => {
-          const refsForId = refsWithoutTaskId.filter((ref) => ref.id === id);
-          groups.push(
-            new DocumentationRefGroupItem(id, refsForId, this.filePath)
-          );
+          const refsForId = refsWithoutTaskId.filter((ref) => ref.id === id); // refsWithoutTaskId is from filtered this.docRefs
+          if (refsForId.length > 0) { // Ensure group is not empty
+            groups.push(
+              new DocumentationRefGroupItem(id, refsForId, this.filePath)
+            );
+          }
         });
       }
 
@@ -2498,9 +2535,15 @@ class DocumentationRefsItem extends TreeItem {
 
     // Otherwise, group by documentation ID
     return this.distinctIds.map((id) => {
-      const refsForId = this.docRefs.filter((ref) => ref.id === id);
-      return new DocumentationRefGroupItem(id, refsForId, this.filePath);
-    });
+      const refsForId = this.docRefs.filter((ref) => ref.id === id); // this.docRefs is already filtered
+      // We must ensure that we only return groups that will have children.
+      // However, DocumentationRefGroupItem itself doesn't filter its children further based on content,
+      // it just displays all refsForId. So, if refsForId is not empty, the group is valid.
+      if (refsForId.length > 0) {
+        return new DocumentationRefGroupItem(id, refsForId, this.filePath);
+      }
+      return null; // Should be filtered out by a subsequent .filter(item => item !== null) if necessary
+    }).filter(item => item !== null); // Filter out null groups
   }
 }
 
