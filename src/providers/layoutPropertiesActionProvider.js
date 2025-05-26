@@ -23,7 +23,8 @@ function extractLayoutProperties(document, range) {
     const line = lines[i];
 
     // Check for report or reportextension declaration
-    const reportPattern = /^\s*(report|reportextension)\s+(\d+)\s+"([^"]+)"(?:\s+extends\s+"[^"]+")?\s*$/;
+    const reportPattern =
+      /^\s*(report|reportextension)\s+(\d+)\s+"([^"]+)"(?:\s+extends\s+"[^"]+")?\s*$/;
     const reportMatch = line.match(reportPattern);
 
     if (reportMatch) {
@@ -113,7 +114,9 @@ function extractLayoutProperties(document, range) {
               report.requestpageStartLine = k;
               report.requestpageEndLine = k;
               break;
-            } else if (/^\s*requestpage\s*(?:\{|\/\/\s?.*)?\s*$/.test(lines[k])) {
+            } else if (
+              /^\s*requestpage\s*(?:\{|\/\/\s?.*)?\s*$/.test(lines[k])
+            ) {
               // Multi-line requestpage section
               requestpageKeywordLine = k;
               report.requestpageStartLine = k;
@@ -356,7 +359,9 @@ function extractLayoutProperties(document, range) {
 
   // Filter reports that have layout properties or DefaultLayout properties
   const reportsWithLayoutProperties = allReports.filter(
-    (report) => report.layoutProperties.length > 0 || report.defaultLayoutProperties.length > 0
+    (report) =>
+      report.layoutProperties.length > 0 ||
+      report.defaultLayoutProperties.length > 0
   );
 
   if (reportsWithLayoutProperties.length === 0) {
@@ -416,11 +421,19 @@ function findEndOfPropertiesSection(layoutInfo, document) {
   const lines = document.getText().split("\n");
 
   // Start looking after the report declaration
-  for (let i = layoutInfo.reportStartLine + 1; i < layoutInfo.reportEndLine; i++) {
+  for (
+    let i = layoutInfo.reportStartLine + 1;
+    i < layoutInfo.reportEndLine;
+    i++
+  ) {
     const line = lines[i].trim();
 
     // Check if we've reached a section (dataset, requestpage, rendering, etc.)
-    if (/^(dataset|requestpage|rendering|labels|trigger|procedure)\s*(?:\{|\/\/\s?.*)?\s*$/.test(line)) {
+    if (
+      /^(dataset|requestpage|rendering|labels|trigger|procedure)\s*(?:\{|\/\/\s?.*)?\s*$/.test(
+        line
+      )
+    ) {
       return i; // Insert before this section
     }
   }
@@ -435,7 +448,8 @@ function findEndOfPropertiesSection(layoutInfo, document) {
  * @returns {string} - The DefaultRenderingLayout property line.
  */
 function generateDefaultRenderingLayoutLine(layoutInfo) {
-  const { layoutProperties, defaultLayoutProperties, baseIndentation } = layoutInfo;
+  const { layoutProperties, defaultLayoutProperties, baseIndentation } =
+    layoutInfo;
   const indent = baseIndentation;
 
   if (layoutProperties.length > 0) {
@@ -445,15 +459,23 @@ function generateDefaultRenderingLayoutLine(layoutInfo) {
     if (defaultLayoutProperties.length > 0) {
       const defaultLayoutValue = defaultLayoutProperties[0].value.trim();
 
-      if (defaultLayoutValue && defaultLayoutValue !== ";" && defaultLayoutValue !== "") {
+      if (
+        defaultLayoutValue &&
+        defaultLayoutValue !== ";" &&
+        defaultLayoutValue !== ""
+      ) {
         // Map the DefaultLayout value to the corresponding layout property
         if (defaultLayoutValue.toLowerCase() === "word") {
-          const wordLayout = layoutProperties.find((prop) => prop.type === "Word");
+          const wordLayout = layoutProperties.find(
+            (prop) => prop.type === "Word"
+          );
           if (wordLayout) {
             chosenLayoutNameAsIdentifier = wordLayout.originalProperty;
           }
         } else if (defaultLayoutValue.toLowerCase() === "rdlc") {
-          const rdlcLayout = layoutProperties.find((prop) => prop.type === "RDLC");
+          const rdlcLayout = layoutProperties.find(
+            (prop) => prop.type === "RDLC"
+          );
           if (rdlcLayout) {
             chosenLayoutNameAsIdentifier = rdlcLayout.originalProperty;
           }
@@ -543,7 +565,8 @@ class LayoutPropertiesActionProvider {
       Object.assign(layoutInfo, fullLayoutInfo);
     }
 
-    const totalLayoutCount = layoutInfo.layoutProperties.length + layoutInfo.defaultLayoutProperties.length;
+    layoutInfo.layoutProperties.length +
+      layoutInfo.defaultLayoutProperties.length;
     logger.info(
       `[LayoutProperties] Found ${layoutInfo.layoutProperties.length} layout properties and ${layoutInfo.defaultLayoutProperties.length} DefaultLayout properties in report ${layoutInfo.reportId}`
     );
@@ -566,7 +589,7 @@ class LayoutPropertiesActionProvider {
     // Collect all properties to remove (layout properties + DefaultLayout properties)
     const allPropertiesToRemove = [
       ...layoutInfo.layoutProperties,
-      ...layoutInfo.defaultLayoutProperties
+      ...layoutInfo.defaultLayoutProperties,
     ];
 
     // Sort all properties by line number (descending) to replace from bottom to top
@@ -585,8 +608,9 @@ class LayoutPropertiesActionProvider {
 
     // Only proceed if we have layout properties to convert to rendering syntax
     if (layoutInfo.layoutProperties.length > 0) {
-      const firstProperty = layoutInfo.layoutProperties.reduce((first, current) =>
-        current.lineNumber < first.lineNumber ? current : first
+      const firstProperty = layoutInfo.layoutProperties.reduce(
+        (first, current) =>
+          current.lineNumber < first.lineNumber ? current : first
       );
       const firstPropertyLine = firstProperty.lineNumber;
 
@@ -621,7 +645,10 @@ class LayoutPropertiesActionProvider {
       } else {
         // No requestpage or dataset: place rendering block after properties section
         // Find the end of properties section (before any other sections or end of report)
-        renderingBlockActualInsertLine = findEndOfPropertiesSection(layoutInfo, document);
+        renderingBlockActualInsertLine = findEndOfPropertiesSection(
+          layoutInfo,
+          document
+        );
       }
 
       edit.insert(
