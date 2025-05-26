@@ -22,20 +22,24 @@ function extractLayoutProperties(document, range) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Check for report declaration
-    const reportPattern = /^\s*report\s+(\d+)\s+"([^"]+)"\s*$/;
+    // Check for report or reportextension declaration
+    const reportPattern = /^\s*(report|reportextension)\s+(\d+)\s+"([^"]+)"(?:\s+extends\s+"[^"]+")?\s*$/;
     const reportMatch = line.match(reportPattern);
 
     if (reportMatch) {
       const report = {
-        reportId: reportMatch[1],
-        reportName: reportMatch[2],
+        reportType: reportMatch[1], // 'report' or 'reportextension'
+        reportId: reportMatch[2],
+        reportName: reportMatch[3],
         reportStartLine: i,
         reportEndLine: -1,
         layoutProperties: [],
         baseIndentation: null,
         datasetStartLine: -1,
         datasetEndLine: -1,
+        requestpageStartLine: -1,
+        requestpageEndLine: -1,
+        defaultLayoutProperties: [],
       };
 
       // Find the matching closing brace
@@ -77,8 +81,15 @@ function extractLayoutProperties(document, range) {
         ) {
           const lineTrimmed = lines[k].trim();
           if (lineTrimmed.startsWith("dataset")) {
-            // Ensure it's a declaration, not in a comment or string
-            if (/^\s*dataset\s*(?:\{|\/\/\s?.*)?\s*$/.test(lines[k])) {
+            // Check for both single-line and multi-line dataset sections
+            if (/^\s*dataset\s*\{.*\}\s*$/.test(lines[k])) {
+              // Single-line dataset section like "dataset { }"
+              datasetKeywordLine = k;
+              report.datasetStartLine = k;
+              report.datasetEndLine = k;
+              break;
+            } else if (/^\s*dataset\s*(?:\{|\/\/\s?.*)?\s*$/.test(lines[k])) {
+              // Multi-line dataset section
               datasetKeywordLine = k;
               report.datasetStartLine = k;
               break;
@@ -86,7 +97,32 @@ function extractLayoutProperties(document, range) {
           }
         }
 
-        if (datasetKeywordLine !== -1) {
+        // Find requestpage section and its end
+        let requestpageKeywordLine = -1;
+        for (
+          let k = report.reportStartLine + 1;
+          k < report.reportEndLine;
+          k++
+        ) {
+          const lineTrimmed = lines[k].trim();
+          if (lineTrimmed.startsWith("requestpage")) {
+            // Check for both single-line and multi-line requestpage sections
+            if (/^\s*requestpage\s*\{.*\}\s*$/.test(lines[k])) {
+              // Single-line requestpage section like "requestpage { }"
+              requestpageKeywordLine = k;
+              report.requestpageStartLine = k;
+              report.requestpageEndLine = k;
+              break;
+            } else if (/^\s*requestpage\s*(?:\{|\/\/\s?.*)?\s*$/.test(lines[k])) {
+              // Multi-line requestpage section
+              requestpageKeywordLine = k;
+              report.requestpageStartLine = k;
+              break;
+            }
+          }
+        }
+
+        if (datasetKeywordLine !== -1 && report.datasetEndLine === -1) {
           let braceCount = 0;
           let foundDatasetOpenBrace = false;
           for (let k = datasetKeywordLine; k < report.reportEndLine; k++) {
@@ -173,6 +209,95 @@ function extractLayoutProperties(document, range) {
             report.datasetEndLine = -1;
           }
         }
+
+        // Find requestpage section end
+        if (requestpageKeywordLine !== -1 && report.requestpageEndLine === -1) {
+          let braceCount = 0;
+          let foundRequestpageOpenBrace = false;
+          for (let k = requestpageKeywordLine; k < report.reportEndLine; k++) {
+            const lineContent = lines[k];
+            let inLineComment = false;
+            let inString = false;
+            let stringChar = "";
+
+            for (
+              let charIndex = 0;
+              charIndex < lineContent.length;
+              charIndex++
+            ) {
+              const char = lineContent[charIndex];
+
+              if (inLineComment) continue;
+
+              if (
+                char === "/" &&
+                charIndex + 1 < lineContent.length &&
+                lineContent[charIndex + 1] === "/"
+              ) {
+                inLineComment = true;
+                continue;
+              }
+
+              if (inString) {
+                if (char === stringChar) {
+                  // Check for escaped quote: '' within a string in AL
+                  if (
+                    stringChar === "'" &&
+                    charIndex + 1 < lineContent.length &&
+                    lineContent[charIndex + 1] === "'"
+                  ) {
+                    charIndex++; // Skip next quote
+                  } else {
+                    inString = false;
+                  }
+                }
+                continue;
+              } else if (char === "'" || char === '"') {
+                inString = true;
+                stringChar = char;
+                continue;
+              }
+
+              if (char === "{") {
+                if (k >= requestpageKeywordLine) {
+                  // Only count braces at or after requestpage keyword line
+                  braceCount++;
+                  foundRequestpageOpenBrace = true;
+                }
+              } else if (char === "}") {
+                if (foundRequestpageOpenBrace) {
+                  braceCount--;
+                  if (braceCount === 0) {
+                    report.requestpageEndLine = k;
+                    break;
+                  }
+                }
+              }
+            }
+            if (
+              foundRequestpageOpenBrace &&
+              braceCount === 0 &&
+              report.requestpageEndLine !== -1
+            ) {
+              break;
+            }
+            if (
+              !foundRequestpageOpenBrace &&
+              k > requestpageKeywordLine + 5 &&
+              /^\s*(dataset|rendering|labels|trigger|procedure)\s*(?:\{|\/\/\s?.*)?\s*$/.test(
+                lines[k].trim()
+              )
+            ) {
+              report.requestpageStartLine = -1; // Invalidate if other block starts before requestpage's {
+              break;
+            }
+          }
+          if (braceCount !== 0) {
+            // Malformed requestpage block
+            report.requestpageStartLine = -1;
+            report.requestpageEndLine = -1;
+          }
+        }
       }
       allReports.push(report);
     }
@@ -212,12 +337,26 @@ function extractLayoutProperties(document, range) {
           fullLine: line,
         });
       }
+
+      // Match DefaultLayout property (old syntax to be removed)
+      const defaultLayoutMatch = line.match(
+        /^(\s*)(DefaultLayout)\s*=\s*([^;]*)(;?)\s*$/
+      );
+      if (defaultLayoutMatch) {
+        report.defaultLayoutProperties.push({
+          originalProperty: "DefaultLayout",
+          value: defaultLayoutMatch[3].trim(),
+          lineNumber: i,
+          indentation: defaultLayoutMatch[1],
+          fullLine: line,
+        });
+      }
     }
   }
 
-  // Filter reports that have layout properties
+  // Filter reports that have layout properties or DefaultLayout properties
   const reportsWithLayoutProperties = allReports.filter(
-    (report) => report.layoutProperties.length > 0
+    (report) => report.layoutProperties.length > 0 || report.defaultLayoutProperties.length > 0
   );
 
   if (reportsWithLayoutProperties.length === 0) {
@@ -229,14 +368,18 @@ function extractLayoutProperties(document, range) {
   const firstReport = reportsWithLayoutProperties[0];
 
   return {
+    reportType: firstReport.reportType,
     reportId: firstReport.reportId,
     reportName: firstReport.reportName,
     reportStartLine: firstReport.reportStartLine,
     reportEndLine: firstReport.reportEndLine,
     layoutProperties: firstReport.layoutProperties,
+    defaultLayoutProperties: firstReport.defaultLayoutProperties,
     baseIndentation: firstReport.baseIndentation,
     datasetStartLine: firstReport.datasetStartLine,
     datasetEndLine: firstReport.datasetEndLine,
+    requestpageStartLine: firstReport.requestpageStartLine,
+    requestpageEndLine: firstReport.requestpageEndLine,
     allReports: reportsWithLayoutProperties, // Include all reports for potential future use
   };
 }
@@ -264,23 +407,71 @@ function getBaseIndentation(lines, reportStartLine) {
 }
 
 /**
+ * Find the end of the properties section (before dataset, requestpage, or other sections)
+ * @param {Object} layoutInfo - The layout properties information
+ * @param {vscode.TextDocument} document - The document
+ * @returns {number} - The line number where to insert the rendering block
+ */
+function findEndOfPropertiesSection(layoutInfo, document) {
+  const lines = document.getText().split("\n");
+
+  // Start looking after the report declaration
+  for (let i = layoutInfo.reportStartLine + 1; i < layoutInfo.reportEndLine; i++) {
+    const line = lines[i].trim();
+
+    // Check if we've reached a section (dataset, requestpage, rendering, etc.)
+    if (/^(dataset|requestpage|rendering|labels|trigger|procedure)\s*(?:\{|\/\/\s?.*)?\s*$/.test(line)) {
+      return i; // Insert before this section
+    }
+  }
+
+  // If no sections found, insert before the closing brace of the report
+  return layoutInfo.reportEndLine;
+}
+
+/**
  * Generates the DefaultRenderingLayout property line.
  * @param {Object} layoutInfo - The layout properties information.
  * @returns {string} - The DefaultRenderingLayout property line.
  */
 function generateDefaultRenderingLayoutLine(layoutInfo) {
-  const { layoutProperties, baseIndentation } = layoutInfo;
+  const { layoutProperties, defaultLayoutProperties, baseIndentation } = layoutInfo;
   const indent = baseIndentation;
 
   if (layoutProperties.length > 0) {
     let chosenLayoutNameAsIdentifier = "";
-    const rdlcLayout = layoutProperties.find((prop) => prop.type === "RDLC");
-    if (rdlcLayout) {
-      chosenLayoutNameAsIdentifier = rdlcLayout.originalProperty; // e.g., "RDLCLayout"
-    } else {
-      // If no RDLC, pick the first available layout property's original name
-      chosenLayoutNameAsIdentifier = layoutProperties[0].originalProperty;
+
+    // Check if there's a DefaultLayout property with a specific value
+    if (defaultLayoutProperties.length > 0) {
+      const defaultLayoutValue = defaultLayoutProperties[0].value.trim();
+
+      if (defaultLayoutValue && defaultLayoutValue !== ";" && defaultLayoutValue !== "") {
+        // Map the DefaultLayout value to the corresponding layout property
+        if (defaultLayoutValue.toLowerCase() === "word") {
+          const wordLayout = layoutProperties.find((prop) => prop.type === "Word");
+          if (wordLayout) {
+            chosenLayoutNameAsIdentifier = wordLayout.originalProperty;
+          }
+        } else if (defaultLayoutValue.toLowerCase() === "rdlc") {
+          const rdlcLayout = layoutProperties.find((prop) => prop.type === "RDLC");
+          if (rdlcLayout) {
+            chosenLayoutNameAsIdentifier = rdlcLayout.originalProperty;
+          }
+        }
+      }
     }
+
+    // Fallback logic if no specific DefaultLayout value or mapping failed
+    if (!chosenLayoutNameAsIdentifier) {
+      const rdlcLayout = layoutProperties.find((prop) => prop.type === "RDLC");
+      if (rdlcLayout) {
+        chosenLayoutNameAsIdentifier = rdlcLayout.originalProperty; // e.g., "RDLCLayout"
+      } else {
+        // If no RDLC, pick the first available layout property's original name
+        chosenLayoutNameAsIdentifier = layoutProperties[0].originalProperty;
+      }
+    }
+
     return `${indent}DefaultRenderingLayout = ${chosenLayoutNameAsIdentifier};`;
   }
   return ""; // Should ideally not be reached if action is available
@@ -292,7 +483,7 @@ function generateDefaultRenderingLayoutLine(layoutInfo) {
  * @returns {string} - The rendering block string.
  */
 function generateRenderingBlockItself(layoutInfo) {
-  const { layoutProperties, baseIndentation } = layoutInfo;
+  const { layoutProperties, baseIndentation, reportName } = layoutInfo;
   const indent = baseIndentation;
   const layoutIndent = indent + "  ";
   const propertyIndent = layoutIndent + "  ";
@@ -304,6 +495,7 @@ function generateRenderingBlockItself(layoutInfo) {
     renderingBlock += `${layoutIndent}{\n`;
     renderingBlock += `${propertyIndent}Type = ${prop.type};\n`;
     renderingBlock += `${propertyIndent}LayoutFile = '${prop.path}';\n`;
+    renderingBlock += `${propertyIndent}Caption = '${reportName}';\n`;
     renderingBlock += `${layoutIndent}}`;
     if (index < layoutProperties.length - 1) {
       renderingBlock += "\n";
@@ -351,8 +543,9 @@ class LayoutPropertiesActionProvider {
       Object.assign(layoutInfo, fullLayoutInfo);
     }
 
+    const totalLayoutCount = layoutInfo.layoutProperties.length + layoutInfo.defaultLayoutProperties.length;
     logger.info(
-      `[LayoutProperties] Found ${layoutInfo.layoutProperties.length} layout properties in report ${layoutInfo.reportId}`
+      `[LayoutProperties] Found ${layoutInfo.layoutProperties.length} layout properties and ${layoutInfo.defaultLayoutProperties.length} DefaultLayout properties in report ${layoutInfo.reportId}`
     );
 
     const actions = [];
@@ -370,12 +563,18 @@ class LayoutPropertiesActionProvider {
     // Create the edit to replace old layout properties with new rendering block
     const edit = new vscode.WorkspaceEdit();
 
-    // Sort layout properties by line number (descending) to replace from bottom to top
-    const sortedProperties = [...layoutInfo.layoutProperties].sort(
+    // Collect all properties to remove (layout properties + DefaultLayout properties)
+    const allPropertiesToRemove = [
+      ...layoutInfo.layoutProperties,
+      ...layoutInfo.defaultLayoutProperties
+    ];
+
+    // Sort all properties by line number (descending) to replace from bottom to top
+    const sortedProperties = allPropertiesToRemove.sort(
       (a, b) => b.lineNumber - a.lineNumber
     );
 
-    // Remove old layout property lines
+    // Remove old property lines (both layout properties and DefaultLayout)
     for (const prop of sortedProperties) {
       const lineRange = new vscode.Range(
         new vscode.Position(prop.lineNumber, 0),
@@ -384,53 +583,53 @@ class LayoutPropertiesActionProvider {
       edit.delete(document.uri, lineRange);
     }
 
-    const firstProperty = layoutInfo.layoutProperties.reduce((first, current) =>
-      current.lineNumber < first.lineNumber ? current : first
-    );
-    const firstPropertyLine = firstProperty.lineNumber;
+    // Only proceed if we have layout properties to convert to rendering syntax
+    if (layoutInfo.layoutProperties.length > 0) {
+      const firstProperty = layoutInfo.layoutProperties.reduce((first, current) =>
+        current.lineNumber < first.lineNumber ? current : first
+      );
+      const firstPropertyLine = firstProperty.lineNumber;
 
-    const defaultLayoutLineText =
-      generateDefaultRenderingLayoutLine(layoutInfo);
-    const renderingBlockItselfText = generateRenderingBlockItself(layoutInfo);
+      const defaultLayoutLineText =
+        generateDefaultRenderingLayoutLine(layoutInfo);
+      const renderingBlockItselfText = generateRenderingBlockItself(layoutInfo);
 
-    // Insert DefaultRenderingLayout at the original first property's line
-    edit.insert(
-      document.uri,
-      new vscode.Position(firstPropertyLine, 0),
-      defaultLayoutLineText + "\n\n" // Add two newlines for spacing before rendering block or next content
-    );
+      // Insert DefaultRenderingLayout at the original first property's line (in properties section)
+      edit.insert(
+        document.uri,
+        new vscode.Position(firstPropertyLine, 0),
+        defaultLayoutLineText + "\n"
+      );
 
-    let renderingBlockActualInsertLine;
+      // Determine where to place the rendering block - always after requestpage/dataset sections
+      let renderingBlockActualInsertLine;
 
-    if (
-      layoutInfo.datasetEndLine !== undefined &&
-      layoutInfo.datasetEndLine !== -1 &&
-      layoutInfo.datasetEndLine < layoutInfo.reportEndLine
-    ) {
-      // Dataset exists, try to place rendering block after it
-      const intendedRenderingBlockInsertLine = layoutInfo.datasetEndLine + 1;
-
-      if (firstPropertyLine < intendedRenderingBlockInsertLine) {
-        // DefaultRenderingLayout (at firstPropertyLine) is placed before dataset's end.
-        // So, rendering block goes after dataset.
-        renderingBlockActualInsertLine = intendedRenderingBlockInsertLine;
+      if (
+        layoutInfo.requestpageEndLine !== undefined &&
+        layoutInfo.requestpageEndLine !== -1 &&
+        layoutInfo.requestpageEndLine < layoutInfo.reportEndLine
+      ) {
+        // Requestpage exists, place rendering block after it
+        renderingBlockActualInsertLine = layoutInfo.requestpageEndLine + 1;
+      } else if (
+        layoutInfo.datasetEndLine !== undefined &&
+        layoutInfo.datasetEndLine !== -1 &&
+        layoutInfo.datasetEndLine < layoutInfo.reportEndLine
+      ) {
+        // No requestpage but dataset exists, place rendering block after dataset
+        renderingBlockActualInsertLine = layoutInfo.datasetEndLine + 1;
       } else {
-        // DefaultRenderingLayout (at firstPropertyLine) is already after dataset's end.
-        // So, rendering block goes right after DefaultRenderingLayout.
-        // DefaultRenderingLayout is 1 line, followed by "\n\n" (2 newlines).
-        // So, the rendering block starts on the line 2 lines below DefaultRenderingLayout's text line.
-        renderingBlockActualInsertLine = firstPropertyLine + 2;
+        // No requestpage or dataset: place rendering block after properties section
+        // Find the end of properties section (before any other sections or end of report)
+        renderingBlockActualInsertLine = findEndOfPropertiesSection(layoutInfo, document);
       }
-    } else {
-      // No dataset: rendering block goes right after DefaultRenderingLayout
-      renderingBlockActualInsertLine = firstPropertyLine + 2; // After DefaultRenderingLayout (1 line) and 2 newlines
-    }
 
-    edit.insert(
-      document.uri,
-      new vscode.Position(renderingBlockActualInsertLine, 0),
-      renderingBlockItselfText + "\n"
-    );
+      edit.insert(
+        document.uri,
+        new vscode.Position(renderingBlockActualInsertLine, 0),
+        "\n" + renderingBlockItselfText + "\n"
+      );
+    }
 
     action.edit = edit;
     actions.push(action);
