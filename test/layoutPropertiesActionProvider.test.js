@@ -1,0 +1,209 @@
+// Mock vscode module first
+const vscode = {
+  CodeAction: class {
+    constructor(title, kind) {
+      this.title = title;
+      this.kind = kind;
+      this.isPreferred = false;
+      this.edit = null;
+    }
+  },
+  CodeActionKind: {
+    RefactorRewrite: 'refactor.rewrite'
+  },
+  WorkspaceEdit: class {
+    constructor() {
+      this.edits = [];
+    }
+    delete(uri, range) {
+      this.edits.push({ type: 'delete', uri, range });
+    }
+    insert(uri, position, text) {
+      this.edits.push({ type: 'insert', uri, position, text });
+    }
+  },
+  Range: class {
+    constructor(start, end) {
+      this.start = start;
+      this.end = end;
+    }
+  },
+  Position: class {
+    constructor(line, character) {
+      this.line = line;
+      this.character = character;
+    }
+  }
+};
+
+// Mock document
+function createMockDocument(content) {
+  const lines = content.split('\n');
+  return {
+    languageId: 'al',
+    lineCount: lines.length,
+    getText: () => content,
+    uri: { path: 'test.al' }
+  };
+}
+
+// Mock range
+function createMockRange() {
+  return new vscode.Range(new vscode.Position(0, 0), new vscode.Position(100, 0));
+}
+
+// Test cases
+async function runTests() {
+  console.log('Running LayoutPropertiesActionProvider tests...\n');
+
+  // Import here after mocking
+  const { LayoutPropertiesActionProvider } = require('../src/providers/layoutPropertiesActionProvider');
+  const provider = new LayoutPropertiesActionProvider();
+
+  // Test 1: Report with DefaultLayout, RDLCLayout, WordLayout, dataset, and requestpage
+  console.log('Test 1: Report with old syntax, dataset, and requestpage');
+  const testContent1 = `report 50200 "Test Report with Old Syntax"
+{
+    UsageCategory = ReportsAndAnalysis;
+    ApplicationArea = All;
+    DefaultLayout = ;
+    RDLCLayout = 'src/layouts/TestReport.rdl';
+    WordLayout = 'src/layouts/TestReport.docx';
+
+    dataset
+    {
+        dataitem(Customer; Customer)
+        {
+            column(No; "No.")
+            {
+            }
+        }
+    }
+
+    requestpage
+    {
+        layout
+        {
+            area(content)
+            {
+                group(Options)
+                {
+                    field(ShowDetails; ShowDetailsVar)
+                    {
+                        ApplicationArea = All;
+                    }
+                }
+            }
+        }
+    }
+}`;
+
+  const doc1 = createMockDocument(testContent1);
+  const range1 = createMockRange();
+  const actions1 = await provider.provideCodeActions(doc1, range1);
+
+  console.log(`  Found ${actions1.length} actions`);
+  if (actions1.length > 0) {
+    console.log(`  Action title: ${actions1[0].title}`);
+    console.log(`  Number of edits: ${actions1[0].edit.edits.length}`);
+
+    // Count deletions and insertions
+    const deletions = actions1[0].edit.edits.filter(e => e.type === 'delete').length;
+    const insertions = actions1[0].edit.edits.filter(e => e.type === 'insert').length;
+    console.log(`  Deletions: ${deletions} (should be 3: DefaultLayout, RDLCLayout, WordLayout)`);
+    console.log(`  Insertions: ${insertions} (should be 2: DefaultRenderingLayout + rendering block)`);
+  }
+  console.log('');
+
+  // Test 2: Report with only DefaultLayout property
+  console.log('Test 2: Report with only DefaultLayout property');
+  const testContent2 = `report 50202 "Test Report Only DefaultLayout"
+{
+    UsageCategory = ReportsAndAnalysis;
+    ApplicationArea = All;
+    DefaultLayout = ;
+
+    dataset
+    {
+        dataitem(Customer; Customer)
+        {
+            column(No; "No.")
+            {
+            }
+        }
+    }
+}`;
+
+  const doc2 = createMockDocument(testContent2);
+  const range2 = createMockRange();
+  const actions2 = await provider.provideCodeActions(doc2, range2);
+
+  console.log(`  Found ${actions2.length} actions`);
+  if (actions2.length > 0) {
+    console.log(`  Action title: ${actions2[0].title}`);
+    const deletions = actions2[0].edit.edits.filter(e => e.type === 'delete').length;
+    const insertions = actions2[0].edit.edits.filter(e => e.type === 'insert').length;
+    console.log(`  Deletions: ${deletions} (should be 1: DefaultLayout only)`);
+    console.log(`  Insertions: ${insertions} (should be 0: no rendering block since no layout properties)`);
+  }
+  console.log('');
+
+  // Test 3: Report without requestpage
+  console.log('Test 3: Report without requestpage (dataset only)');
+  const testContent3 = `report 50201 "Test Report No Requestpage"
+{
+    UsageCategory = ReportsAndAnalysis;
+    ApplicationArea = All;
+    DefaultLayout = ;
+    RDLCLayout = 'src/layouts/TestReport.rdl';
+
+    dataset
+    {
+        dataitem(Customer; Customer)
+        {
+            column(No; "No.")
+            {
+            }
+        }
+    }
+}`;
+
+  const doc3 = createMockDocument(testContent3);
+  const range3 = createMockRange();
+  const actions3 = await provider.provideCodeActions(doc3, range3);
+
+  console.log(`  Found ${actions3.length} actions`);
+  if (actions3.length > 0) {
+    console.log(`  Action title: ${actions3[0].title}`);
+    const deletions = actions3[0].edit.edits.filter(e => e.type === 'delete').length;
+    const insertions = actions3[0].edit.edits.filter(e => e.type === 'insert').length;
+    console.log(`  Deletions: ${deletions} (should be 2: DefaultLayout, RDLCLayout)`);
+    console.log(`  Insertions: ${insertions} (should be 2: DefaultRenderingLayout + rendering block)`);
+  }
+  console.log('');
+
+  console.log('Tests completed!');
+}
+
+// Mock the logger
+global.logger = {
+  info: (msg) => console.log(`[INFO] ${msg}`),
+  verbose: (msg) => console.log(`[VERBOSE] ${msg}`),
+  error: (msg) => console.log(`[ERROR] ${msg}`)
+};
+
+// Mock vscode globally
+global.vscode = vscode;
+
+// Mock the require for vscode module
+const Module = require('module');
+const originalRequire = Module.prototype.require;
+Module.prototype.require = function(id) {
+  if (id === 'vscode') {
+    return vscode;
+  }
+  return originalRequire.apply(this, arguments);
+};
+
+// Run tests
+runTests().catch(console.error);
