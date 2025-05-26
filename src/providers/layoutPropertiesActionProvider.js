@@ -22,14 +22,15 @@ function extractLayoutProperties(document, range) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Check for report declaration
-    const reportPattern = /^\s*report\s+(\d+)\s+"([^"]+)"\s*$/;
+    // Check for report or reportextension declaration
+    const reportPattern = /^\s*(report|reportextension)\s+(\d+)\s+"([^"]+)"(?:\s+extends\s+"[^"]+")?\s*$/;
     const reportMatch = line.match(reportPattern);
 
     if (reportMatch) {
       const report = {
-        reportId: reportMatch[1],
-        reportName: reportMatch[2],
+        reportType: reportMatch[1], // 'report' or 'reportextension'
+        reportId: reportMatch[2],
+        reportName: reportMatch[3],
         reportStartLine: i,
         reportEndLine: -1,
         layoutProperties: [],
@@ -353,6 +354,7 @@ function extractLayoutProperties(document, range) {
   const firstReport = reportsWithLayoutProperties[0];
 
   return {
+    reportType: firstReport.reportType,
     reportId: firstReport.reportId,
     reportName: firstReport.reportName,
     reportStartLine: firstReport.reportStartLine,
@@ -419,7 +421,7 @@ function generateDefaultRenderingLayoutLine(layoutInfo) {
  * @returns {string} - The rendering block string.
  */
 function generateRenderingBlockItself(layoutInfo) {
-  const { layoutProperties, baseIndentation } = layoutInfo;
+  const { layoutProperties, baseIndentation, reportName } = layoutInfo;
   const indent = baseIndentation;
   const layoutIndent = indent + "  ";
   const propertyIndent = layoutIndent + "  ";
@@ -431,6 +433,7 @@ function generateRenderingBlockItself(layoutInfo) {
     renderingBlock += `${layoutIndent}{\n`;
     renderingBlock += `${propertyIndent}Type = ${prop.type};\n`;
     renderingBlock += `${propertyIndent}LayoutFile = '${prop.path}';\n`;
+    renderingBlock += `${propertyIndent}Caption = '${reportName}';\n`;
     renderingBlock += `${layoutIndent}}`;
     if (index < layoutProperties.length - 1) {
       renderingBlock += "\n";

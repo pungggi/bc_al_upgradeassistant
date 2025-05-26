@@ -112,6 +112,14 @@ async function runTests() {
     const insertions = actions1[0].edit.edits.filter(e => e.type === 'insert').length;
     console.log(`  Deletions: ${deletions} (should be 3: DefaultLayout, RDLCLayout, WordLayout)`);
     console.log(`  Insertions: ${insertions} (should be 2: DefaultRenderingLayout + rendering block)`);
+
+    // Check if Caption is included in rendering block
+    const renderingBlockInsertion = actions1[0].edit.edits.find(e => e.type === 'insert' && e.text.includes('rendering'));
+    if (renderingBlockInsertion && renderingBlockInsertion.text.includes("Caption = 'Test Report with Old Syntax'")) {
+      console.log(`  ✅ Caption property correctly added with report name`);
+    } else {
+      console.log(`  ❌ Caption property missing or incorrect`);
+    }
   }
   console.log('');
 
@@ -179,6 +187,53 @@ async function runTests() {
     const insertions = actions3[0].edit.edits.filter(e => e.type === 'insert').length;
     console.log(`  Deletions: ${deletions} (should be 2: DefaultLayout, RDLCLayout)`);
     console.log(`  Insertions: ${insertions} (should be 2: DefaultRenderingLayout + rendering block)`);
+
+    // Check if Caption is included in rendering block
+    const renderingBlockInsertion = actions3[0].edit.edits.find(e => e.type === 'insert' && e.text.includes('rendering'));
+    if (renderingBlockInsertion && renderingBlockInsertion.text.includes("Caption = 'Test Report No Requestpage'")) {
+      console.log(`  ✅ Caption property correctly added with report name`);
+    } else {
+      console.log(`  ❌ Caption property missing or incorrect`);
+    }
+  }
+  console.log('');
+
+  // Test 4: Report extension
+  console.log('Test 4: Report extension with layout properties');
+  const testContent4 = `reportextension 50203 "Test Report Extension" extends "Customer List"
+{
+    DefaultLayout = ;
+    RDLCLayout = 'src/layouts/TestReportExt.rdl';
+
+    rendering
+    {
+        layout(ExistingLayout)
+        {
+            Type = Word;
+            LayoutFile = 'existing.docx';
+        }
+    }
+}`;
+
+  const doc4 = createMockDocument(testContent4);
+  const range4 = createMockRange();
+  const actions4 = await provider.provideCodeActions(doc4, range4);
+
+  console.log(`  Found ${actions4.length} actions`);
+  if (actions4.length > 0) {
+    console.log(`  Action title: ${actions4[0].title}`);
+    const deletions = actions4[0].edit.edits.filter(e => e.type === 'delete').length;
+    const insertions = actions4[0].edit.edits.filter(e => e.type === 'insert').length;
+    console.log(`  Deletions: ${deletions} (should be 2: DefaultLayout, RDLCLayout)`);
+    console.log(`  Insertions: ${insertions} (should be 2: DefaultRenderingLayout + rendering block)`);
+
+    // Check if Caption is included in rendering block
+    const renderingBlockInsertion = actions4[0].edit.edits.find(e => e.type === 'insert' && e.text.includes('rendering'));
+    if (renderingBlockInsertion && renderingBlockInsertion.text.includes("Caption = 'Test Report Extension'")) {
+      console.log(`  ✅ Caption property correctly added with reportextension name`);
+    } else {
+      console.log(`  ❌ Caption property missing or incorrect`);
+    }
   }
   console.log('');
 
