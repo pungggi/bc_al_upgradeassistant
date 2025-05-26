@@ -81,8 +81,15 @@ function extractLayoutProperties(document, range) {
         ) {
           const lineTrimmed = lines[k].trim();
           if (lineTrimmed.startsWith("dataset")) {
-            // Ensure it's a declaration, not in a comment or string
-            if (/^\s*dataset\s*(?:\{|\/\/\s?.*)?\s*$/.test(lines[k])) {
+            // Check for both single-line and multi-line dataset sections
+            if (/^\s*dataset\s*\{.*\}\s*$/.test(lines[k])) {
+              // Single-line dataset section like "dataset { }"
+              datasetKeywordLine = k;
+              report.datasetStartLine = k;
+              report.datasetEndLine = k;
+              break;
+            } else if (/^\s*dataset\s*(?:\{|\/\/\s?.*)?\s*$/.test(lines[k])) {
+              // Multi-line dataset section
               datasetKeywordLine = k;
               report.datasetStartLine = k;
               break;
@@ -99,8 +106,15 @@ function extractLayoutProperties(document, range) {
         ) {
           const lineTrimmed = lines[k].trim();
           if (lineTrimmed.startsWith("requestpage")) {
-            // Ensure it's a declaration, not in a comment or string
-            if (/^\s*requestpage\s*(?:\{|\/\/\s?.*)?\s*$/.test(lines[k])) {
+            // Check for both single-line and multi-line requestpage sections
+            if (/^\s*requestpage\s*\{.*\}\s*$/.test(lines[k])) {
+              // Single-line requestpage section like "requestpage { }"
+              requestpageKeywordLine = k;
+              report.requestpageStartLine = k;
+              report.requestpageEndLine = k;
+              break;
+            } else if (/^\s*requestpage\s*(?:\{|\/\/\s?.*)?\s*$/.test(lines[k])) {
+              // Multi-line requestpage section
               requestpageKeywordLine = k;
               report.requestpageStartLine = k;
               break;
@@ -108,7 +122,7 @@ function extractLayoutProperties(document, range) {
           }
         }
 
-        if (datasetKeywordLine !== -1) {
+        if (datasetKeywordLine !== -1 && report.datasetEndLine === -1) {
           let braceCount = 0;
           let foundDatasetOpenBrace = false;
           for (let k = datasetKeywordLine; k < report.reportEndLine; k++) {
@@ -197,7 +211,7 @@ function extractLayoutProperties(document, range) {
         }
 
         // Find requestpage section end
-        if (requestpageKeywordLine !== -1) {
+        if (requestpageKeywordLine !== -1 && report.requestpageEndLine === -1) {
           let braceCount = 0;
           let foundRequestpageOpenBrace = false;
           for (let k = requestpageKeywordLine; k < report.reportEndLine; k++) {
@@ -393,23 +407,71 @@ function getBaseIndentation(lines, reportStartLine) {
 }
 
 /**
+ * Find the end of the properties section (before dataset, requestpage, or other sections)
+ * @param {Object} layoutInfo - The layout properties information
+ * @param {vscode.TextDocument} document - The document
+ * @returns {number} - The line number where to insert the rendering block
+ */
+function findEndOfPropertiesSection(layoutInfo, document) {
+  const lines = document.getText().split("\n");
+
+  // Start looking after the report declaration
+  for (let i = layoutInfo.reportStartLine + 1; i < layoutInfo.reportEndLine; i++) {
+    const line = lines[i].trim();
+
+    // Check if we've reached a section (dataset, requestpage, rendering, etc.)
+    if (/^(dataset|requestpage|rendering|labels|trigger|procedure)\s*(?:\{|\/\/\s?.*)?\s*$/.test(line)) {
+      return i; // Insert before this section
+    }
+  }
+
+  // If no sections found, insert before the closing brace of the report
+  return layoutInfo.reportEndLine;
+}
+
+/**
  * Generates the DefaultRenderingLayout property line.
  * @param {Object} layoutInfo - The layout properties information.
  * @returns {string} - The DefaultRenderingLayout property line.
  */
 function generateDefaultRenderingLayoutLine(layoutInfo) {
-  const { layoutProperties, baseIndentation } = layoutInfo;
+  const { layoutProperties, defaultLayoutProperties, baseIndentation } = layoutInfo;
   const indent = baseIndentation;
 
   if (layoutProperties.length > 0) {
     let chosenLayoutNameAsIdentifier = "";
-    const rdlcLayout = layoutProperties.find((prop) => prop.type === "RDLC");
-    if (rdlcLayout) {
-      chosenLayoutNameAsIdentifier = rdlcLayout.originalProperty; // e.g., "RDLCLayout"
-    } else {
-      // If no RDLC, pick the first available layout property's original name
-      chosenLayoutNameAsIdentifier = layoutProperties[0].originalProperty;
+
+    // Check if there's a DefaultLayout property with a specific value
+    if (defaultLayoutProperties.length > 0) {
+      const defaultLayoutValue = defaultLayoutProperties[0].value.trim();
+
+      if (defaultLayoutValue && defaultLayoutValue !== ";" && defaultLayoutValue !== "") {
+        // Map the DefaultLayout value to the corresponding layout property
+        if (defaultLayoutValue.toLowerCase() === "word") {
+          const wordLayout = layoutProperties.find((prop) => prop.type === "Word");
+          if (wordLayout) {
+            chosenLayoutNameAsIdentifier = wordLayout.originalProperty;
+          }
+        } else if (defaultLayoutValue.toLowerCase() === "rdlc") {
+          const rdlcLayout = layoutProperties.find((prop) => prop.type === "RDLC");
+          if (rdlcLayout) {
+            chosenLayoutNameAsIdentifier = rdlcLayout.originalProperty;
+          }
+        }
+      }
     }
+
+    // Fallback logic if no specific DefaultLayout value or mapping failed
+    if (!chosenLayoutNameAsIdentifier) {
+      const rdlcLayout = layoutProperties.find((prop) => prop.type === "RDLC");
+      if (rdlcLayout) {
+        chosenLayoutNameAsIdentifier = rdlcLayout.originalProperty; // e.g., "RDLCLayout"
+      } else {
+        // If no RDLC, pick the first available layout property's original name
+        chosenLayoutNameAsIdentifier = layoutProperties[0].originalProperty;
+      }
+    }
+
     return `${indent}DefaultRenderingLayout = ${chosenLayoutNameAsIdentifier};`;
   }
   return ""; // Should ideally not be reached if action is available
@@ -532,59 +594,40 @@ class LayoutPropertiesActionProvider {
         generateDefaultRenderingLayoutLine(layoutInfo);
       const renderingBlockItselfText = generateRenderingBlockItself(layoutInfo);
 
-      // Insert DefaultRenderingLayout at the original first property's line
+      // Insert DefaultRenderingLayout at the original first property's line (in properties section)
       edit.insert(
         document.uri,
         new vscode.Position(firstPropertyLine, 0),
-        defaultLayoutLineText + "\n\n" // Add two newlines for spacing before rendering block or next content
+        defaultLayoutLineText + "\n"
       );
 
+      // Determine where to place the rendering block - always after requestpage/dataset sections
       let renderingBlockActualInsertLine;
 
-      // Determine where to place the rendering block based on requestpage and dataset sections
       if (
         layoutInfo.requestpageEndLine !== undefined &&
         layoutInfo.requestpageEndLine !== -1 &&
         layoutInfo.requestpageEndLine < layoutInfo.reportEndLine
       ) {
         // Requestpage exists, place rendering block after it
-        const intendedRenderingBlockInsertLine = layoutInfo.requestpageEndLine + 1;
-
-        if (firstPropertyLine < intendedRenderingBlockInsertLine) {
-          // DefaultRenderingLayout (at firstPropertyLine) is placed before requestpage's end.
-          // So, rendering block goes after requestpage.
-          renderingBlockActualInsertLine = intendedRenderingBlockInsertLine;
-        } else {
-          // DefaultRenderingLayout (at firstPropertyLine) is already after requestpage's end.
-          // So, rendering block goes right after DefaultRenderingLayout.
-          renderingBlockActualInsertLine = firstPropertyLine + 2;
-        }
+        renderingBlockActualInsertLine = layoutInfo.requestpageEndLine + 1;
       } else if (
         layoutInfo.datasetEndLine !== undefined &&
         layoutInfo.datasetEndLine !== -1 &&
         layoutInfo.datasetEndLine < layoutInfo.reportEndLine
       ) {
         // No requestpage but dataset exists, place rendering block after dataset
-        const intendedRenderingBlockInsertLine = layoutInfo.datasetEndLine + 1;
-
-        if (firstPropertyLine < intendedRenderingBlockInsertLine) {
-          // DefaultRenderingLayout (at firstPropertyLine) is placed before dataset's end.
-          // So, rendering block goes after dataset.
-          renderingBlockActualInsertLine = intendedRenderingBlockInsertLine;
-        } else {
-          // DefaultRenderingLayout (at firstPropertyLine) is already after dataset's end.
-          // So, rendering block goes right after DefaultRenderingLayout.
-          renderingBlockActualInsertLine = firstPropertyLine + 2;
-        }
+        renderingBlockActualInsertLine = layoutInfo.datasetEndLine + 1;
       } else {
-        // No requestpage or dataset: rendering block goes right after DefaultRenderingLayout
-        renderingBlockActualInsertLine = firstPropertyLine + 2; // After DefaultRenderingLayout (1 line) and 2 newlines
+        // No requestpage or dataset: place rendering block after properties section
+        // Find the end of properties section (before any other sections or end of report)
+        renderingBlockActualInsertLine = findEndOfPropertiesSection(layoutInfo, document);
       }
 
       edit.insert(
         document.uri,
         new vscode.Position(renderingBlockActualInsertLine, 0),
-        renderingBlockItselfText + "\n"
+        "\n" + renderingBlockItselfText + "\n"
       );
     }
 

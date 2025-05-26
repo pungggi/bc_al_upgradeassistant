@@ -237,6 +237,57 @@ async function runTests() {
   }
   console.log('');
 
+  // Test 5: Report with DefaultLayout = Word (specific value)
+  console.log('Test 5: Report with DefaultLayout = Word');
+  const testContent5 = `report 50004 "PTEY Conf. of Compliance"
+{
+    UsageCategory = ReportsAndAnalysis;
+    ApplicationArea = All;
+    DefaultLayout = Word;
+    RDLCLayout = './QA/Rep/Rep_ConfofCompliance.rdlc';
+    WordLayout = './QA/Rep/Rep_ConfofCompliance.docx';
+
+    dataset { }
+    requestpage { }
+}`;
+
+  const doc5 = createMockDocument(testContent5);
+  const range5 = createMockRange();
+  const actions5 = await provider.provideCodeActions(doc5, range5);
+
+  console.log(`  Found ${actions5.length} actions`);
+  if (actions5.length > 0) {
+    console.log(`  Action title: ${actions5[0].title}`);
+    const deletions = actions5[0].edit.edits.filter(e => e.type === 'delete').length;
+    const insertions = actions5[0].edit.edits.filter(e => e.type === 'insert').length;
+    console.log(`  Deletions: ${deletions} (should be 3: DefaultLayout, RDLCLayout, WordLayout)`);
+    console.log(`  Insertions: ${insertions} (should be 2: DefaultRenderingLayout + rendering block)`);
+
+    // Check if DefaultRenderingLayout is set to WordLayout (not RDLCLayout)
+    const defaultRenderingInsertion = actions5[0].edit.edits.find(e => e.type === 'insert' && e.text.includes('DefaultRenderingLayout'));
+    if (defaultRenderingInsertion && defaultRenderingInsertion.text.includes('DefaultRenderingLayout = WordLayout')) {
+      console.log(`  ✅ DefaultRenderingLayout correctly set to WordLayout (respecting DefaultLayout = Word)`);
+    } else {
+      console.log(`  ❌ DefaultRenderingLayout should be WordLayout, not RDLCLayout`);
+      if (defaultRenderingInsertion) {
+        console.log(`    Found: ${defaultRenderingInsertion.text.trim()}`);
+      }
+    }
+
+    // Check rendering block placement (should be after requestpage)
+    const renderingBlockInsertion = actions5[0].edit.edits.find(e => e.type === 'insert' && e.text.includes('rendering'));
+    if (renderingBlockInsertion) {
+      console.log(`  Rendering block insertion at line: ${renderingBlockInsertion.position.line}`);
+      // In our test, requestpage is at line 9 (0-indexed), so rendering should be at line 10 (after requestpage)
+      if (renderingBlockInsertion.position.line === 10) {
+        console.log(`  ✅ Rendering block correctly placed after requestpage section`);
+      } else {
+        console.log(`  ❌ Rendering block placed at wrong position (should be at line 10, after requestpage at line 9)`);
+      }
+    }
+  }
+  console.log('');
+
   console.log('Tests completed!');
 }
 
