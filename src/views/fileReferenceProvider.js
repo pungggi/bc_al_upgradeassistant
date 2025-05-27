@@ -2165,6 +2165,15 @@ class FileReferenceProvider {
     }
   }
 
+  /**
+   * Set expanded state for an item (for webview compatibility)
+   */
+  setItemExpandedState(itemId, expanded) {
+    // This is handled by the tree view automatically in VS Code
+    // For webview, we don't need to persist this state
+    // The webview will handle its own expand/collapse state
+  }
+
   updateDecorations() {
     if (!this.currentEditor) {
       return;
@@ -2459,7 +2468,7 @@ class DocumentationRefsItem extends TreeItem {
         return new DocumentationRefItem(ref, this.filePath);
       });
     }
-    
+
     // Procedures
     const proceduresToShow = this.proceduresWithRefs.filter(proc =>
         this.docRefs.some(ref => ref.lineNumber >= proc.startLine && ref.lineNumber <= proc.endLine)

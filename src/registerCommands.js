@@ -80,6 +80,17 @@ function registerCommands(context, fileReferenceProvider) {
         fileReferenceProvider.setFilterMode('all');
       }
     );
+
+    // Register popout command
+    registerCommandOnce(
+      context,
+      "bc-al-upgradeassistant.popoutReferencesView",
+      () => {
+        const ReferencesWebviewProvider = require('./views/referencesWebviewProvider');
+        const webviewProvider = new ReferencesWebviewProvider(fileReferenceProvider, context);
+        webviewProvider.createWebview();
+      }
+    );
   } else {
     console.error("FileReferenceProvider not available for registering filter commands.");
     const errorMessage = "Filter commands are unavailable as the File Reference Provider could not be initialized.";
