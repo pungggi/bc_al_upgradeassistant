@@ -30,6 +30,9 @@ const {
 const {
   LayoutPropertiesActionProvider,
 } = require("./providers/layoutPropertiesActionProvider");
+const {
+  Codeunit1TransformationProvider,
+} = require("./providers/codeunit1TransformationProvider");
 const { logger } = require("./utils/logger");
 const ALObjectHoverProvider = require("./hover/alObjectHoverProvider");
 
@@ -1241,6 +1244,20 @@ async function activate(context) {
         new LayoutPropertiesActionProvider(),
         {
           providedCodeActionKinds: [vscode.CodeActionKind.RefactorRewrite],
+        }
+      )
+    );
+
+    // Register Codeunit 1 transformation provider
+    context.subscriptions.push(
+      vscode.languages.registerCodeActionsProvider(
+        { scheme: "file", language: "al" },
+        new Codeunit1TransformationProvider(),
+        {
+          providedCodeActionKinds: [
+            vscode.CodeActionKind.RefactorRewrite,
+            vscode.CodeActionKind.QuickFix
+          ],
         }
       )
     );

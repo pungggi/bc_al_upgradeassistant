@@ -55,6 +55,127 @@ function registerCommands(context, fileReferenceProvider) {
     }
   );
 
+  // Command to transform Codeunit 1 method calls
+  registerCommandOnce(
+    context,
+    "bc-al-upgradeassistant.transformCodeunit1Method",
+    async (args) => {
+      if (!args || !args.document || !args.mapping) {
+        vscode.window.showWarningMessage("Invalid transformation arguments.");
+        return;
+      }
+
+      const { document, range, lineText, methodName, mapping } = args;
+      const editor = vscode.window.activeTextEditor;
+
+      if (!editor || editor.document !== document) {
+        vscode.window.showWarningMessage("Document is not active in editor.");
+        return;
+      }
+
+      // Generate the transformed call
+      const paramMatch = lineText.match(new RegExp(`${methodName}\\s*\\(([^)]*)\\)`));
+      const parameters = paramMatch ? paramMatch[1] : '';
+      const newCall = `${mapping.newCodeunit}.${mapping.newMethod}(${parameters})`;
+
+      // Replace the original method call with the new one
+      const transformedLine = lineText.replace(
+        new RegExp(`${methodName}\\s*\\([^)]*\\)`),
+        newCall
+      );
+
+      // Apply the edit
+      const edit = new vscode.WorkspaceEdit();
+      const line = document.lineAt(range.start.line);
+      edit.replace(document.uri, line.range, transformedLine);
+
+      const success = await vscode.workspace.applyEdit(edit);
+      if (success) {
+        vscode.window.showInformationMessage(
+          `Transformed ${methodName} to ${mapping.newCodeunit}.${mapping.newMethod}`
+        );
+
+        // Show info about variable declaration if needed
+        const varDeclaration = `${mapping.newCodeunit}: Codeunit ${mapping.codeunitId};`;
+        vscode.window.showInformationMessage(
+          `Don't forget to add variable declaration: ${varDeclaration}`,
+          "Copy Variable Declaration"
+        ).then(selection => {
+          if (selection === "Copy Variable Declaration") {
+            vscode.env.clipboard.writeText(varDeclaration);
+            vscode.window.showInformationMessage("Variable declaration copied to clipboard.");
+          }
+        });
+      } else {
+        vscode.window.showErrorMessage("Failed to apply transformation.");
+      }
+    }
+  );
+
+  // Command to copy Codeunit 1 transformation info
+  registerCommandOnce(
+    context,
+    "bc-al-upgradeassistant.copyCodeunit1TransformationInfo",
+    async (args) => {
+      if (!args || !args.mapping) {
+        vscode.window.showWarningMessage("Invalid transformation info.");
+        return;
+      }
+
+      const { methodName, mapping, transformedCall } = args;
+      const varDeclaration = `${mapping.newCodeunit}: Codeunit ${mapping.codeunitId};`;
+
+      const info = `// Codeunit 1 Transformation\n` +
+                  `// Original: ${methodName}()\n` +
+                  `// New: ${transformedCall}\n` +
+                  `// Variable needed: ${varDeclaration}\n` +
+                  `// Codeunit: ${mapping.codeunitId} (${mapping.newCodeunit})`;
+
+      await vscode.env.clipboard.writeText(info);
+      vscode.window.showInformationMessage(
+        `Transformation info for ${methodName} copied to clipboard.`
+      );
+    }
+  );
+
+  // Command to show info for Codeunit 1 methods without direct replacements
+  registerCommandOnce(
+    context,
+    "bc-al-upgradeassistant.showCodeunit1Info",
+    async (args) => {
+      if (!args || !args.mapping) {
+        vscode.window.showWarningMessage("Invalid method info.");
+        return;
+      }
+
+      const { methodName, mapping } = args;
+
+      // Show information message with options
+      const options = ["Copy Info", "Open Documentation"];
+      const selection = await vscode.window.showInformationMessage(
+        `${methodName}: ${mapping.description}`,
+        ...options
+      );
+
+      if (selection === "Copy Info") {
+        const info = `// Codeunit 1 Method: ${methodName}\n` +
+                    `// Status: ${mapping.description}\n` +
+                    `// Note: This method has no direct replacement in Business Central.\n` +
+                    `// Consider using events or alternative implementations.`;
+
+        await vscode.env.clipboard.writeText(info);
+        vscode.window.showInformationMessage(
+          `Info for ${methodName} copied to clipboard.`
+        );
+      } else if (selection === "Open Documentation") {
+        // Open Microsoft documentation
+        vscode.env.openExternal(vscode.Uri.parse(
+          "https://learn.microsoft.com/en-us/dynamics365/business-central/dev-itpro/upgrade/transitioning-from-codeunit1"
+        ));
+      }
+    }
+  );
+
   // Register filter commands
   if (fileReferenceProvider) {
     registerCommandOnce(
