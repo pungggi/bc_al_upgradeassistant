@@ -147,60 +147,88 @@ function extractReportLayouts(documentText) {
  * @returns {{ label: string, path: string }[]} An array of layout objects.
  */
 function extractReportExtensionLayouts(documentText) {
-  const alObject = getObjectDefinition(documentText);
-  if (!alObject || alObject.Type !== "ReportExtension") {
+  // Check if there's a reportextension in the document
+  // Use a more specific approach to find reportextension objects
+  const reportExtensionRegex = /^\s*reportextension\s+\d+\s+"[^"]+"/im;
+  if (!reportExtensionRegex.test(documentText)) {
     return [];
   }
 
-  // Note: getObjectDefinition from al-parser-lib is used for initial object type confirmation.
-  // The actual rendering layouts below are extracted using regular expressions.
+  // Note: Since getObjectDefinition only finds the first object, we need to
+  // parse reportextension objects directly using regex patterns.
+  // This is a more robust approach for documents with multiple objects.
   //
   // TODO: Future Enhancement with al-parser-lib
-  // The following regex-based parsing is a fallback.
-  // If al-parser-lib is enhanced to parse the full AL syntax tree,
-  // replace this section. For example, if a function like
-  // `alParser.getReportExtensionLayouts(documentText)` becomes available
-  // that returns a structured representation of the 'rendering' block
-  // (e.g., an array of { name, layoutFile, caption } objects),
-  // it should be used here.
+  // If al-parser-lib is enhanced to parse multiple objects or provide
+  // object-specific parsing, replace this section.
 
   const layouts = [];
-  // First, try to find the 'rendering' block.
-  // This regex captures the content inside the rendering { ... } block.
-  const renderingBlockRegex = /rendering\s*\{([\s\S]*?)\}/i;
-  const renderingBlockMatch = documentText.match(renderingBlockRegex);
 
-  if (renderingBlockMatch && renderingBlockMatch[1]) {
-    const renderingContent = renderingBlockMatch[1];
+  // Find all reportextension blocks in the document
+  const reportExtensionBlockRegex = /reportextension\s+\d+\s+"[^"]+"\s+extends\s+"[^"]+"\s*\{([\s\S]*?)\n\}/gi;
+  let reportExtMatch;
 
-    // Regex to find individual layout blocks within the rendering content.
-    // layout('MyLayoutName') { ... }
-    // Captures layout name and the content of the layout block.
-    const layoutBlockRegex = /layout\s*\(([^)]+)\)\s*\{([\s\S]*?)\}/gi;
-    let layoutMatch;
+  while ((reportExtMatch = reportExtensionBlockRegex.exec(documentText)) !== null) {
+    const reportExtensionContent = reportExtMatch[1];
 
-    while ((layoutMatch = layoutBlockRegex.exec(renderingContent)) !== null) {
-      const layoutNameInCode = unquotePath(layoutMatch[1].trim());
-      const layoutBlockContent = layoutMatch[2];
+    // Look for rendering blocks within this reportextension
+    // Use a more sophisticated approach to handle nested braces
+    const renderingStart = reportExtensionContent.indexOf('rendering');
+    if (renderingStart !== -1) {
+      const renderingBlockStart = reportExtensionContent.indexOf('{', renderingStart);
+      if (renderingBlockStart !== -1) {
+        // Find the matching closing brace by counting braces
+        let braceCount = 1;
+        let pos = renderingBlockStart + 1;
+        let renderingBlockEnd = -1;
 
-      // Within each layout block, find LayoutFile and optionally Caption.
-      const layoutFileRegex = /LayoutFile\s*=\s*['"]([^'"]+)['"]\s*;/i;
-      const captionRegex = /Caption\s*=\s*['"]([^'"]+)['"]\s*;/i;
-
-      const fileMatch = layoutBlockContent.match(layoutFileRegex);
-      const captionMatch = layoutBlockContent.match(captionRegex);
-
-      if (fileMatch && fileMatch[1]) {
-        let label = `Layout: ${layoutNameInCode}`;
-        if (captionMatch && captionMatch[1]) {
-          label = `${unquotePath(
-            captionMatch[1].trim()
-          )} (${layoutNameInCode})`;
+        while (pos < reportExtensionContent.length && braceCount > 0) {
+          if (reportExtensionContent[pos] === '{') {
+            braceCount++;
+          } else if (reportExtensionContent[pos] === '}') {
+            braceCount--;
+            if (braceCount === 0) {
+              renderingBlockEnd = pos;
+              break;
+            }
+          }
+          pos++;
         }
-        layouts.push({
-          label: label,
-          path: unquotePath(fileMatch[1].trim()),
-        });
+
+        if (renderingBlockEnd !== -1) {
+          const renderingContent = reportExtensionContent.substring(renderingBlockStart + 1, renderingBlockEnd);
+
+          // Regex to find individual layout blocks within the rendering content.
+          // layout('MyLayoutName') { ... }
+          // Captures layout name and the content of the layout block.
+          const layoutBlockRegex = /layout\s*\(([^)]+)\)\s*\{([\s\S]*?)\}/gi;
+          let layoutMatch;
+
+          while ((layoutMatch = layoutBlockRegex.exec(renderingContent)) !== null) {
+            const layoutNameInCode = unquotePath(layoutMatch[1].trim());
+            const layoutBlockContent = layoutMatch[2];
+
+            // Within each layout block, find LayoutFile and optionally Caption.
+            const layoutFileRegex = /LayoutFile\s*=\s*['"]([^'"]+)['"]\s*;/i;
+            const captionRegex = /Caption\s*=\s*['"]([^'"]+)['"]\s*;/i;
+
+            const fileMatch = layoutBlockContent.match(layoutFileRegex);
+            const captionMatch = layoutBlockContent.match(captionRegex);
+
+            if (fileMatch && fileMatch[1]) {
+              let label = `Layout: ${layoutNameInCode}`;
+              if (captionMatch && captionMatch[1]) {
+                label = `${unquotePath(
+                  captionMatch[1].trim()
+                )} (${layoutNameInCode})`;
+              }
+              layouts.push({
+                label: label,
+                path: unquotePath(fileMatch[1].trim()),
+              });
+            }
+          }
+        }
       }
     }
   }
