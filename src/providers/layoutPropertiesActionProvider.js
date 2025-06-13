@@ -516,7 +516,7 @@ function generateRenderingBlockItself(layoutInfo) {
     renderingBlock += `${layoutIndent}layout(${layoutName})\n`;
     renderingBlock += `${layoutIndent}{\n`;
     // Properties in correct order: Caption (with translation comment), LayoutFile, Type
-    renderingBlock += `${propertyIndent}//de-CH=${reportName}\n`;
+    renderingBlock += `${propertyIndent}//de-\n`;
     renderingBlock += `${propertyIndent}Caption = '${reportName}';\n`;
     renderingBlock += `${propertyIndent}LayoutFile = '${prop.path}';\n`;
     renderingBlock += `${propertyIndent}Type = ${prop.type};\n`;
