@@ -91,11 +91,62 @@ function extractReportLayouts(documentText) {
     let braceCount = 1;
     let endIndex = startIndex;
 
-    // Find the matching closing brace
+    // Find the matching closing brace, accounting for braces in comments and strings
     for (let i = startIndex; i < documentText.length && braceCount > 0; i++) {
-      if (documentText[i] === "{") {
+      const char = documentText[i];
+
+      // Track line boundaries for comment parsing
+      if (char === "\n" || char === "\r") {
+        continue;
+      }
+
+      // Check for single-line comment
+      if (
+        char === "/" &&
+        i + 1 < documentText.length &&
+        documentText[i + 1] === "/"
+      ) {
+        // Skip to end of line
+        while (
+          i < documentText.length &&
+          documentText[i] !== "\n" &&
+          documentText[i] !== "\r"
+        ) {
+          i++;
+        }
+        i--; // Adjust for loop increment
+        continue;
+      }
+
+      // Check for string literals
+      if (char === '"' || char === "'") {
+        const stringChar = char;
+        i++; // Move past opening quote
+
+        // Skip until closing quote, handling escaped quotes
+        while (i < documentText.length) {
+          if (documentText[i] === stringChar) {
+            // Check for escaped quote in AL ('' within single-quoted string)
+            if (
+              stringChar === "'" &&
+              i + 1 < documentText.length &&
+              documentText[i + 1] === "'"
+            ) {
+              i += 2; // Skip both quotes
+              continue;
+            } else {
+              break; // Found closing quote
+            }
+          }
+          i++;
+        }
+        continue;
+      }
+
+      // Count braces only if we're not in a comment or string
+      if (char === "{") {
         braceCount++;
-      } else if (documentText[i] === "}") {
+      } else if (char === "}") {
         braceCount--;
       }
       endIndex = i;
@@ -104,34 +155,103 @@ function extractReportLayouts(documentText) {
     if (braceCount === 0) {
       const renderingContent = documentText.substring(startIndex, endIndex);
 
-      // Regex to find individual layout blocks within the rendering content.
+      // Find individual layout blocks within the rendering content using proper brace counting
       // layout('MyLayoutName') { ... } or layout(MyLayoutName) { ... }
-      // Captures layout name and the content of the layout block.
-      const layoutBlockRegex = /layout\s*\(([^)]+)\)\s*\{([\s\S]*?)\}/gi;
+      const layoutStartRegex = /layout\s*\(([^)]+)\)\s*\{/gi;
       let layoutMatch;
 
-      while ((layoutMatch = layoutBlockRegex.exec(renderingContent)) !== null) {
+      while ((layoutMatch = layoutStartRegex.exec(renderingContent)) !== null) {
         const layoutNameInCode = unquotePath(layoutMatch[1].trim());
-        const layoutBlockContent = layoutMatch[2];
 
-        // Within each layout block, find LayoutFile and optionally Caption.
-        const layoutFileRegex = /LayoutFile\s*=\s*['"]([^'"]+)['"]\s*;/i;
-        const captionRegex = /Caption\s*=\s*['"]([^'"]+)['"]\s*;/i;
+        // Find the matching closing brace for this layout block using proper brace counting
+        const layoutStartIndex = layoutMatch.index + layoutMatch[0].length;
+        let layoutBraceCount = 1;
+        let layoutEndIndex = layoutStartIndex;
 
-        const fileMatch = layoutBlockContent.match(layoutFileRegex);
-        const captionMatch = layoutBlockContent.match(captionRegex);
+        for (
+          let i = layoutStartIndex;
+          i < renderingContent.length && layoutBraceCount > 0;
+          i++
+        ) {
+          const char = renderingContent[i];
 
-        if (fileMatch && fileMatch[1]) {
-          let label = `Layout: ${layoutNameInCode}`;
-          if (captionMatch && captionMatch[1]) {
-            label = `${unquotePath(
-              captionMatch[1].trim()
-            )} (${layoutNameInCode})`;
+          // Check for single-line comment
+          if (
+            char === "/" &&
+            i + 1 < renderingContent.length &&
+            renderingContent[i + 1] === "/"
+          ) {
+            // Skip to end of line
+            while (
+              i < renderingContent.length &&
+              renderingContent[i] !== "\n" &&
+              renderingContent[i] !== "\r"
+            ) {
+              i++;
+            }
+            i--; // Adjust for loop increment
+            continue;
           }
-          layouts.push({
-            label: label,
-            path: unquotePath(fileMatch[1].trim()),
-          });
+
+          // Check for string literals
+          if (char === '"' || char === "'") {
+            const stringChar = char;
+            i++; // Move past opening quote
+
+            // Skip until closing quote, handling escaped quotes
+            while (i < renderingContent.length) {
+              if (renderingContent[i] === stringChar) {
+                // Check for escaped quote in AL ('' within single-quoted string)
+                if (
+                  stringChar === "'" &&
+                  i + 1 < renderingContent.length &&
+                  renderingContent[i + 1] === "'"
+                ) {
+                  i += 2; // Skip both quotes
+                  continue;
+                } else {
+                  break; // Found closing quote
+                }
+              }
+              i++;
+            }
+            continue;
+          }
+
+          // Count braces only if we're not in a comment or string
+          if (char === "{") {
+            layoutBraceCount++;
+          } else if (char === "}") {
+            layoutBraceCount--;
+          }
+          layoutEndIndex = i;
+        }
+
+        if (layoutBraceCount === 0) {
+          const layoutBlockContent = renderingContent.substring(
+            layoutStartIndex,
+            layoutEndIndex
+          );
+
+          // Within each layout block, find LayoutFile and optionally Caption.
+          const layoutFileRegex = /LayoutFile\s*=\s*['"]([^'"]+)['"]\s*;/i;
+          const captionRegex = /Caption\s*=\s*['"]([^'"]+)['"]\s*;/i;
+
+          const fileMatch = layoutBlockContent.match(layoutFileRegex);
+          const captionMatch = layoutBlockContent.match(captionRegex);
+
+          if (fileMatch && fileMatch[1]) {
+            let label = `Layout: ${layoutNameInCode}`;
+            if (captionMatch && captionMatch[1]) {
+              label = `${unquotePath(
+                captionMatch[1].trim()
+              )} (${layoutNameInCode})`;
+            }
+            layouts.push({
+              label: label,
+              path: unquotePath(fileMatch[1].trim()),
+            });
+          }
         }
       }
     }
@@ -153,10 +273,10 @@ function extractReportExtensionLayouts(documentText) {
   }
 
   // Note: getObjectDefinition from al-parser-lib is used for initial object type confirmation.
-  // The actual rendering layouts below are extracted using regular expressions.
+  // The actual rendering layouts below are extracted using proper brace counting.
   //
   // TODO: Future Enhancement with al-parser-lib
-  // The following regex-based parsing is a fallback.
+  // The following brace-counting parsing is a robust fallback.
   // If al-parser-lib is enhanced to parse the full AL syntax tree,
   // replace this section. For example, if a function like
   // `alParser.getReportExtensionLayouts(documentText)` becomes available
@@ -165,42 +285,177 @@ function extractReportExtensionLayouts(documentText) {
   // it should be used here.
 
   const layouts = [];
-  // First, try to find the 'rendering' block.
-  // This regex captures the content inside the rendering { ... } block.
-  const renderingBlockRegex = /rendering\s*\{([\s\S]*?)\}/i;
-  const renderingBlockMatch = documentText.match(renderingBlockRegex);
 
-  if (renderingBlockMatch && renderingBlockMatch[1]) {
-    const renderingContent = renderingBlockMatch[1];
+  // Find the rendering block using proper brace counting to handle indented closing braces
+  const renderingStartMatch = documentText.match(/rendering\s*\{/i);
+  if (renderingStartMatch) {
+    const startIndex =
+      renderingStartMatch.index + renderingStartMatch[0].length;
+    let braceCount = 1;
+    let endIndex = startIndex;
 
-    // Regex to find individual layout blocks within the rendering content.
-    // layout('MyLayoutName') { ... }
-    // Captures layout name and the content of the layout block.
-    const layoutBlockRegex = /layout\s*\(([^)]+)\)\s*\{([\s\S]*?)\}/gi;
-    let layoutMatch;
+    // Find the matching closing brace, accounting for braces in comments and strings
+    for (let i = startIndex; i < documentText.length && braceCount > 0; i++) {
+      const char = documentText[i];
 
-    while ((layoutMatch = layoutBlockRegex.exec(renderingContent)) !== null) {
-      const layoutNameInCode = unquotePath(layoutMatch[1].trim());
-      const layoutBlockContent = layoutMatch[2];
+      // Track line boundaries for comment parsing
+      if (char === "\n" || char === "\r") {
+        continue;
+      }
 
-      // Within each layout block, find LayoutFile and optionally Caption.
-      const layoutFileRegex = /LayoutFile\s*=\s*['"]([^'"]+)['"]\s*;/i;
-      const captionRegex = /Caption\s*=\s*['"]([^'"]+)['"]\s*;/i;
-
-      const fileMatch = layoutBlockContent.match(layoutFileRegex);
-      const captionMatch = layoutBlockContent.match(captionRegex);
-
-      if (fileMatch && fileMatch[1]) {
-        let label = `Layout: ${layoutNameInCode}`;
-        if (captionMatch && captionMatch[1]) {
-          label = `${unquotePath(
-            captionMatch[1].trim()
-          )} (${layoutNameInCode})`;
+      // Check for single-line comment
+      if (
+        char === "/" &&
+        i + 1 < documentText.length &&
+        documentText[i + 1] === "/"
+      ) {
+        // Skip to end of line
+        while (
+          i < documentText.length &&
+          documentText[i] !== "\n" &&
+          documentText[i] !== "\r"
+        ) {
+          i++;
         }
-        layouts.push({
-          label: label,
-          path: unquotePath(fileMatch[1].trim()),
-        });
+        i--; // Adjust for loop increment
+        continue;
+      }
+
+      // Check for string literals
+      if (char === '"' || char === "'") {
+        const stringChar = char;
+        i++; // Move past opening quote
+
+        // Skip until closing quote, handling escaped quotes
+        while (i < documentText.length) {
+          if (documentText[i] === stringChar) {
+            // Check for escaped quote in AL ('' within single-quoted string)
+            if (
+              stringChar === "'" &&
+              i + 1 < documentText.length &&
+              documentText[i + 1] === "'"
+            ) {
+              i += 2; // Skip both quotes
+              continue;
+            } else {
+              break; // Found closing quote
+            }
+          }
+          i++;
+        }
+        continue;
+      }
+
+      // Count braces only if we're not in a comment or string
+      if (char === "{") {
+        braceCount++;
+      } else if (char === "}") {
+        braceCount--;
+      }
+      endIndex = i;
+    }
+
+    if (braceCount === 0) {
+      const renderingContent = documentText.substring(startIndex, endIndex);
+
+      // Find individual layout blocks within the rendering content using proper brace counting
+      // layout('MyLayoutName') { ... } or layout(MyLayoutName) { ... }
+      const layoutStartRegex = /layout\s*\(([^)]+)\)\s*\{/gi;
+      let layoutMatch;
+
+      while ((layoutMatch = layoutStartRegex.exec(renderingContent)) !== null) {
+        const layoutNameInCode = unquotePath(layoutMatch[1].trim());
+
+        // Find the matching closing brace for this layout block using proper brace counting
+        const layoutStartIndex = layoutMatch.index + layoutMatch[0].length;
+        let layoutBraceCount = 1;
+        let layoutEndIndex = layoutStartIndex;
+
+        for (
+          let i = layoutStartIndex;
+          i < renderingContent.length && layoutBraceCount > 0;
+          i++
+        ) {
+          const char = renderingContent[i];
+
+          // Check for single-line comment
+          if (
+            char === "/" &&
+            i + 1 < renderingContent.length &&
+            renderingContent[i + 1] === "/"
+          ) {
+            // Skip to end of line
+            while (
+              i < renderingContent.length &&
+              renderingContent[i] !== "\n" &&
+              renderingContent[i] !== "\r"
+            ) {
+              i++;
+            }
+            i--; // Adjust for loop increment
+            continue;
+          }
+
+          // Check for string literals
+          if (char === '"' || char === "'") {
+            const stringChar = char;
+            i++; // Move past opening quote
+
+            // Skip until closing quote, handling escaped quotes
+            while (i < renderingContent.length) {
+              if (renderingContent[i] === stringChar) {
+                // Check for escaped quote in AL ('' within single-quoted string)
+                if (
+                  stringChar === "'" &&
+                  i + 1 < renderingContent.length &&
+                  renderingContent[i + 1] === "'"
+                ) {
+                  i += 2; // Skip both quotes
+                  continue;
+                } else {
+                  break; // Found closing quote
+                }
+              }
+              i++;
+            }
+            continue;
+          }
+
+          // Count braces only if we're not in a comment or string
+          if (char === "{") {
+            layoutBraceCount++;
+          } else if (char === "}") {
+            layoutBraceCount--;
+          }
+          layoutEndIndex = i;
+        }
+
+        if (layoutBraceCount === 0) {
+          const layoutBlockContent = renderingContent.substring(
+            layoutStartIndex,
+            layoutEndIndex
+          );
+
+          // Within each layout block, find LayoutFile and optionally Caption.
+          const layoutFileRegex = /LayoutFile\s*=\s*['"]([^'"]+)['"]\s*;/i;
+          const captionRegex = /Caption\s*=\s*['"]([^'"]+)['"]\s*;/i;
+
+          const fileMatch = layoutBlockContent.match(layoutFileRegex);
+          const captionMatch = layoutBlockContent.match(captionRegex);
+
+          if (fileMatch && fileMatch[1]) {
+            let label = `Layout: ${layoutNameInCode}`;
+            if (captionMatch && captionMatch[1]) {
+              label = `${unquotePath(
+                captionMatch[1].trim()
+              )} (${layoutNameInCode})`;
+            }
+            layouts.push({
+              label: label,
+              path: unquotePath(fileMatch[1].trim()),
+            });
+          }
+        }
       }
     }
   }

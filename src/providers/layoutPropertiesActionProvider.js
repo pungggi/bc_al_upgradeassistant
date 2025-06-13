@@ -515,9 +515,11 @@ function generateRenderingBlockItself(layoutInfo) {
     const layoutName = prop.originalProperty; // Use original property name as layout name
     renderingBlock += `${layoutIndent}layout(${layoutName})\n`;
     renderingBlock += `${layoutIndent}{\n`;
-    renderingBlock += `${propertyIndent}Type = ${prop.type};\n`;
-    renderingBlock += `${propertyIndent}LayoutFile = '${prop.path}';\n`;
+    // Properties in correct order: Caption (with translation comment), LayoutFile, Type
+    renderingBlock += `${propertyIndent}//de-\n`;
     renderingBlock += `${propertyIndent}Caption = '${reportName}';\n`;
+    renderingBlock += `${propertyIndent}LayoutFile = '${prop.path}';\n`;
+    renderingBlock += `${propertyIndent}Type = ${prop.type};\n`;
     renderingBlock += `${layoutIndent}}`;
     if (index < layoutProperties.length - 1) {
       renderingBlock += "\n";
@@ -614,16 +616,18 @@ class LayoutPropertiesActionProvider {
       );
       const firstPropertyLine = firstProperty.lineNumber;
 
-      const defaultLayoutLineText =
-        generateDefaultRenderingLayoutLine(layoutInfo);
       const renderingBlockItselfText = generateRenderingBlockItself(layoutInfo);
 
-      // Insert DefaultRenderingLayout at the original first property's line (in properties section)
-      edit.insert(
-        document.uri,
-        new vscode.Position(firstPropertyLine, 0),
-        defaultLayoutLineText + "\n"
-      );
+      // Insert DefaultRenderingLayout only for reports, not for reportextensions
+      if (layoutInfo.reportType === "report") {
+        const defaultLayoutLineText =
+          generateDefaultRenderingLayoutLine(layoutInfo);
+        edit.insert(
+          document.uri,
+          new vscode.Position(firstPropertyLine, 0),
+          defaultLayoutLineText + "\n"
+        );
+      }
 
       // Determine where to place the rendering block - always after requestpage/dataset sections
       let renderingBlockActualInsertLine;
