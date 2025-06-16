@@ -194,6 +194,21 @@
         "title": "Show All Tasks",
         "category": "BC/AL Upgrade Assistant",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "bc-al-upgradeassistant.transformCodeunit1Method",
+        "title": "Transform Codeunit 1 Method Call",
+        "category": "BC/AL Upgrade Assistant"
+      },
+      {
+        "command": "bc-al-upgradeassistant.copyCodeunit1TransformationInfo",
+        "title": "Copy Codeunit 1 Transformation Info",
+        "category": "BC/AL Upgrade Assistant"
+      },
+      {
+        "command": "bc-al-upgradeassistant.showCodeunit1Info",
+        "title": "Show Codeunit 1 Method Info",
+        "category": "BC/AL Upgrade Assistant"
       }
     ],
     "menus": {
